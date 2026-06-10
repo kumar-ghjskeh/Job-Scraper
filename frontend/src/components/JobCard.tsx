@@ -1,5 +1,7 @@
 import type { Job } from '../lib/types'
 import { Icon } from './Icon'
+import { matchColor } from './ScoreGauge'
+import { CompanyLogo } from './CompanyLogo'
 
 interface Props {
   job: Job
@@ -7,6 +9,7 @@ interface Props {
   onClick: () => void
   onQuickAction: (action: 'saved' | 'applied' | 'ignored') => void
   extraLocations?: string[]
+  resumeMatch?: number
 }
 
 function scoreColor(s: number) {
@@ -41,10 +44,11 @@ function locationPill(label: string): string {
 }
 const isNew = (d: string) => Date.now() - new Date(d).getTime() < 24 * 60 * 60 * 1000
 
-export function JobCard({ job, selected, onClick, onQuickAction, extraLocations = [] }: Props) {
+export function JobCard({ job, selected, onClick, onQuickAction, extraLocations = [], resumeMatch }: Props) {
   const fresh = isNew(job.first_seen_at)
   const sc = scoreColor(job.match_score)
   const saved = job.active_status === 'saved'
+  const rm = resumeMatch ?? job.resume_match
   const risk = job.eligibility_risk
   const h1b = job.sponsors_h1b
 
@@ -57,14 +61,7 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
     <div className={`job-card${selected ? ' selected' : ''}`} onClick={onClick}>
       {/* Top row */}
       <div style={{ display: 'flex', gap: 13, alignItems: 'flex-start' }}>
-        <div style={{
-          width: 46, height: 46, borderRadius: 10, background: 'var(--primary-light)',
-          border: '1px solid var(--primary-mid)', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', fontSize: 18, fontWeight: 800, color: 'var(--primary)',
-          flexShrink: 0, letterSpacing: '-0.02em',
-        }}>
-          {job.company.charAt(0).toUpperCase()}
-        </div>
+        <CompanyLogo company={job.company} size={46} radius={10} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
@@ -76,6 +73,11 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{job.company}</span>
             <span className={`badge tier-${(job.company_priority || 'c').toLowerCase()}`}>{job.company_priority}</span>
+            {rm !== undefined && rm !== null && (
+              <span className="pill" style={{ background: 'transparent', color: matchColor(rm), border: `1px solid ${matchColor(rm)}`, fontWeight: 700, fontSize: 10.5 }}>
+                <Icon name="target" size={10} color={matchColor(rm)} /> Resume {rm}%
+              </span>
+            )}
             {job.ats_platform && <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>via {job.ats_platform}</span>}
           </div>
         </div>

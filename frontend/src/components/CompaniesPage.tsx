@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import type { Company } from '../lib/types'
+import { CompanyLogo } from './CompanyLogo'
+import { Icon } from './Icon'
 
 function priorityColor(p: string): { bg: string; color: string } {
   switch (p) {
@@ -149,90 +151,61 @@ export function CompaniesPage({ onViewJobs }: Props) {
               {grouped[priority].map((co) => {
                 const dot = statusDot(co)
                 const atsStyle = ATS_COLORS[co.ats_platform] || ATS_COLORS.generic
+                const connected = (co.total_active_jobs ?? 0) > 0
                 return (
                   <div key={co.id} style={{
                     background: 'var(--surface)',
                     border: '1px solid var(--border)',
                     borderRadius: 10, padding: '12px 14px',
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>
-                          {co.name}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                          {co.category}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1, minWidth: 0 }}>
+                        <CompanyLogo company={co.name} size={38} radius={9} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{co.name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{co.category}</div>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <div style={{
-                          width: 8, height: 8, borderRadius: '50%', background: dot.color,
-                        }} title={dot.label} />
-                        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{dot.label}</span>
+                      {connected ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: dot.color }} title={dot.label} />
+                          <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{dot.label}</span>
+                        </div>
+                      ) : (
+                        <span className="pill pill-neutral" style={{ flexShrink: 0 }}>Direct search</span>
+                      )}
+                    </div>
+
+                    {connected ? (
+                      <>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                          <span style={{ background: atsStyle.bg, color: atsStyle.color, fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}>{co.ats_platform}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{co.total_active_jobs} total</span>
+                          {(co.viewable_jobs ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--text-primary)', fontWeight: 600 }}>{co.viewable_jobs} USA/relevant</span>}
+                          {(co.entry_level_jobs ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--teal)', fontWeight: 600 }}>{co.entry_level_jobs} entry-lvl</span>}
+                          {(co.new_jobs_today ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>{co.new_jobs_today} new today</span>}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>Last updated: {fmtDate(co.last_scraped_at)}</div>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.5 }}>
+                        Not auto-connected — search openings directly on their careers site.
                       </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                      <span style={{
-                        background: atsStyle.bg, color: atsStyle.color,
-                        fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
-                        textTransform: 'capitalize',
-                      }}>
-                        {co.ats_platform}
-                      </span>
-
-                      {co.total_active_jobs !== undefined && (
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                          {co.total_active_jobs} total
-                        </span>
-                      )}
-                      {co.viewable_jobs !== undefined && co.viewable_jobs > 0 && (
-                        <span style={{ fontSize: 11, color: 'var(--text)', fontWeight: 600 }}>
-                          {co.viewable_jobs} USA/relevant
-                        </span>
-                      )}
-                      {co.entry_level_jobs !== undefined && co.entry_level_jobs > 0 && (
-                        <span style={{ fontSize: 11, color: 'var(--teal)', fontWeight: 600 }}>
-                          {co.entry_level_jobs} entry-lvl
-                        </span>
-                      )}
-                      {co.new_jobs_today !== undefined && co.new_jobs_today > 0 && (
-                        <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
-                          {co.new_jobs_today} new today
-                        </span>
-                      )}
-                    </div>
-
-                    <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 6 }}>
-                      Last scraped: {fmtDate(co.last_scraped_at)}
-                      {co.scrape_error_count > 0 && (
-                        <span style={{ color: 'var(--error)', marginLeft: 6 }}>
-                          {co.scrape_error_count} errors
-                        </span>
-                      )}
-                    </div>
+                    )}
 
                     <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                      {onViewJobs && (co.viewable_jobs ?? co.total_active_jobs ?? 0) > 0 && (
-                        <button
-                          onClick={() => onViewJobs(co.name)}
-                          style={{
-                            background: 'var(--primary)', color: '#fff',
-                            border: 'none', borderRadius: 6, padding: '5px 12px',
-                            fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                          }}
-                        >
-                          View {co.viewable_jobs ?? co.total_active_jobs} Jobs →
+                      {connected && onViewJobs && (co.viewable_jobs ?? co.total_active_jobs ?? 0) > 0 && (
+                        <button onClick={() => onViewJobs(co.name)} className="btn btn-primary" style={{ padding: '5px 12px', fontSize: 12 }}>
+                          View {co.viewable_jobs ?? co.total_active_jobs} Jobs
                         </button>
                       )}
-                      <a
-                        href={co.company_search_url || co.careers_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ fontSize: 11, color: 'var(--primary)' }}
-                      >
-                        Search Jobs
-                      </a>
+                      {(co.company_search_url || co.careers_url) && (
+                        <a href={co.company_search_url || co.careers_url} target="_blank" rel="noopener noreferrer"
+                          className={connected ? '' : 'btn btn-outline'}
+                          style={connected ? { fontSize: 12, color: 'var(--primary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 } : { padding: '5px 12px', fontSize: 12 }}>
+                          Search Jobs <Icon name="external" size={12} color={connected ? 'var(--primary)' : 'var(--primary)'} />
+                        </a>
+                      )}
                     </div>
                   </div>
                 )

@@ -9,6 +9,7 @@ import { ScrapeHealth } from './components/ScrapeHealth'
 import { SummaryCards } from './components/SummaryCards'
 import { TopNav, type Tab } from './components/TopNav'
 import { Icon } from './components/Icon'
+import { ResumeIntel } from './components/ResumeIntel'
 import { groupByCanonical } from './lib/dedupe'
 import { useTheme } from './lib/theme'
 import { api } from './lib/api'
@@ -18,6 +19,7 @@ const PAGE_SIZE = 50
 
 const TAB_LABELS: Partial<Record<Tab, string>> = {
   'all': 'verified USA VLSI jobs',
+  'resume': 'jobs ranked by resume match',
   'entry-level': 'new-grad & entry-level jobs',
   'best': 'high-fit jobs',
   'saved': 'saved jobs',
@@ -48,6 +50,7 @@ function EmptyState({ tab }: { tab: Tab }) {
     'saved': { title: 'No saved jobs', sub: 'Click the bookmark icon on any job to save it for later.' },
     'applied': { title: 'No applied jobs', sub: "Mark jobs as 'Applied' to track your applications here." },
     'all': { title: 'No jobs match your filters', sub: 'Try widening your filters or clearing the search.' },
+    'resume': { title: 'Upload your resume to see matches', sub: 'Use the panel on the left to upload your resume — every job will be ranked by how well it fits you.' },
   }
   const msg = msgs[tab] || { title: 'No results', sub: 'Try changing your filters.' }
   return (
@@ -98,30 +101,6 @@ function ResultsSummary({ tab, loading, total, page, totalPages, analytics }: {
   )
 }
 
-function ResumePlaceholder() {
-  return (
-    <div style={{
-      background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10,
-      padding: '56px 28px', textAlign: 'center', maxWidth: 620, margin: '8px auto',
-    }}>
-      <div style={{
-        width: 60, height: 60, borderRadius: 14, background: 'var(--primary-light)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px',
-      }}>
-        <Icon name="fileText" size={28} color="var(--primary)" />
-      </div>
-      <div style={{ fontSize: 19, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>Resume Matches</div>
-      <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.65, maxWidth: 460, margin: '0 auto 20px' }}>
-        Upload your resume to score every job by how well it fits your skills, see your matched
-        and missing skills per role, and get a recommended resume version to apply with.
-      </div>
-      <button className="btn btn-primary" disabled style={{ padding: '9px 20px' }}>
-        <Icon name="fileText" size={15} color="var(--on-primary)" /> Resume upload — coming soon
-      </button>
-    </div>
-  )
-}
-
 export default function App() {
   const { theme, toggle: toggleTheme } = useTheme()
   const [tab, setTab] = useState<Tab>('all')
@@ -134,9 +113,10 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [matchMap, setMatchMap] = useState<Record<string, { resume_match: number; apply_priority: string }>>({})
   const jobListRef = useRef<HTMLDivElement>(null)
 
-  const NO_FETCH: Tab[] = ['companies', 'health', 'resume']
+  const NO_FETCH: Tab[] = ['companies', 'health']
 
   const loadAnalytics = useCallback(async () => {
     try { setAnalytics(await api.getAnalytics()) } catch { /* non-fatal */ }
@@ -149,6 +129,7 @@ export default function App() {
     try {
       let data: PaginatedResponse<Job>
       switch (tab) {
+        case 'resume':      data = await api.getResumeMatches(page, PAGE_SIZE, !!filters.include_senior); break
         case 'entry-level': data = await api.getEntryLevelJobs(filters, page, PAGE_SIZE); break
         case 'best':        data = await api.getBestJobs(filters, page, PAGE_SIZE); break
         case 'saved':       data = await api.getSavedJobs(page, PAGE_SIZE); break
@@ -159,6 +140,12 @@ export default function App() {
       if (selectedJob) {
         const updated = data.items.find((j) => j.id === selectedJob.id)
         if (updated) setSelectedJob(updated)
+      }
+      // Overlay resume-match badges on cards (other tabs) — one batch call.
+      if (tab !== 'resume' && data.items.length) {
+        api.getMatchBatch(data.items.map((j) => j.id)).then(setMatchMap).catch(() => setMatchMap({}))
+      } else {
+        setMatchMap({})
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load jobs')
@@ -245,13 +232,13 @@ export default function App() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '20px 24px' }}>
             <ScrapeHealth />
           </div>
-        ) : tab === 'resume' ? (
-          <ResumePlaceholder />
         ) : (
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-            {showSidebar && (
+            {tab === 'resume' ? (
+              <ResumeIntel onChanged={() => { loadJobs(); loadAnalytics() }} />
+            ) : showSidebar ? (
               <FilterSidebar filters={filters} onChange={changeFilters} totalCount={paginatedJobs?.total_count ?? 0} />
-            )}
+            ) : null}
 
             <div style={{ flex: 1, minWidth: 0 }} ref={jobListRef}>
               <ResultsSummary
@@ -274,6 +261,7 @@ export default function App() {
                       key={g.job.id}
                       job={g.job}
                       extraLocations={g.extraLocations}
+                      resumeMatch={tab === 'resume' ? g.job.resume_match : matchMap[String(g.job.id)]?.resume_match}
                       selected={selectedJob?.id === g.job.id}
                       onClick={() => setSelectedJob(selectedJob?.id === g.job.id ? null : g.job)}
                       onQuickAction={(action) => handleQuickAction(g.job, action)}

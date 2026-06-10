@@ -96,4 +96,46 @@ export const api = {
     const { data } = await axios.get(`${BASE}/jobs/search-suggestions`, { params: { q } })
     return data.suggestions || []
   },
+
+  // ── Resume intelligence (Phase 3) ──
+  async uploadResume(file: File): Promise<{ ok: boolean; profile: import('./types').ResumeProfile; filename: string }> {
+    const fd = new FormData()
+    fd.append('file', file)
+    const { data } = await axios.post(`${BASE}/resume/upload`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data
+  },
+
+  async getResume(): Promise<{ profile: import('./types').ResumeProfile | null; filename?: string }> {
+    const { data } = await axios.get(`${BASE}/resume`)
+    return data
+  },
+
+  async deleteResume(): Promise<void> {
+    await axios.delete(`${BASE}/resume`)
+  },
+
+  async getResumeMatches(page = 1, limit = 50, includeSenior = false): Promise<PaginatedResponse<Job> & { no_resume?: boolean }> {
+    const { data } = await axios.get(`${BASE}/jobs/resume-matches`, {
+      params: { page, limit, include_senior: includeSenior },
+    })
+    return data
+  },
+
+  async getJobMatch(id: number): Promise<import('./types').JobMatch> {
+    const { data } = await axios.get(`${BASE}/jobs/${id}/match`)
+    return data
+  },
+
+  async getMatchBatch(ids: number[]): Promise<Record<string, { resume_match: number; apply_priority: string }>> {
+    if (!ids.length) return {}
+    const { data } = await axios.post(`${BASE}/jobs/match-batch`, { ids })
+    return data.matches || {}
+  },
+
+  async getSkillGaps(): Promise<{ gaps: import('./types').SkillGap[]; high_match_jobs: number; no_resume?: boolean }> {
+    const { data } = await axios.get(`${BASE}/resume/skill-gaps`)
+    return data
+  },
 }

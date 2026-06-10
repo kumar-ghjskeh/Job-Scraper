@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
-import type { Job } from '../lib/types'
+import type { Job, JobMatch } from '../lib/types'
 import { Icon } from './Icon'
+import { ScoreGauge, matchColor, priorityColor } from './ScoreGauge'
 
 interface Props {
   job: Job | null
@@ -9,7 +10,14 @@ interface Props {
   onUpdate: () => void
 }
 
-type DetailTab = 'overview' | 'score' | 'description' | 'source' | 'notes'
+type DetailTab = 'overview' | 'match' | 'score' | 'description' | 'source' | 'notes'
+
+const TIER_STYLE: Record<string, string> = {
+  'Safe to Add': 'pill-success',
+  'Reword Only': 'pill-primary',
+  'Learn First': 'pill-warning',
+  'Do Not Add': 'pill-danger',
+}
 
 function scoreColor(score: number): string {
   if (score >= 85) return '#057642'
@@ -61,12 +69,34 @@ function ScoreBar({ score, max = 100 }: { score: number; max?: number }) {
 const fmt = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 
+function MiniStat({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div style={{ flex: '1 1 90px', background: 'var(--surface-muted)', borderRadius: 8, padding: '9px 12px', minWidth: 0 }}>
+      <div style={{ fontSize: 18, fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 10.5, color: 'var(--text-secondary)', fontWeight: 600, marginTop: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+    </div>
+  )
+}
+
 export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
   const [detailTab, setDetailTab] = useState<DetailTab>('overview')
   const [notes, setNotes] = useState('')
   const [appStatus, setAppStatus] = useState('')
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [matchData, setMatchData] = useState<JobMatch | null>(null)
+  const [matchLoading, setMatchLoading] = useState(false)
+
+  useEffect(() => {
+    if (!job) { setMatchData(null); return }
+    let cancelled = false
+    setMatchLoading(true); setMatchData(null)
+    api.getJobMatch(job.id)
+      .then((m) => { if (!cancelled) setMatchData(m) })
+      .catch(() => { if (!cancelled) setMatchData(null) })
+      .finally(() => { if (!cancelled) setMatchLoading(false) })
+    return () => { cancelled = true }
+  }, [job?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [lastJobId, setLastJobId] = useState<number | null>(null)
   if (job && job.id !== lastJobId) {
@@ -113,6 +143,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
 
   const DETAIL_TABS: { id: DetailTab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
+    { id: 'match', label: 'Match' },
     { id: 'score', label: 'Score' },
     { id: 'description', label: 'Description' },
     { id: 'source', label: 'Source' },
@@ -176,54 +207,31 @@ export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
           </div>
         </div>
 
-        {/* Score badge row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-          <div style={{
-            background: `${sc}15`, border: `1px solid ${sc}30`,
-            borderRadius: 6, padding: '3px 10px',
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            <span style={{ fontSize: 18, fontWeight: 700, color: sc }}>{job.match_score}</span>
-            <span style={{ fontSize: 12, color: sc, fontWeight: 600 }}>
-              {job.relevance_score_label || 'Relevance Score'}
-            </span>
+        {/* Multi-score summary */}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <ScoreGauge value={job.match_score} label="Excellent Fit" color={sc} />
+            {matchData && <ScoreGauge value={matchData.resume_match} label="Resume Match" color={matchColor(matchData.resume_match)} suffix="%" />}
+            {matchData && <ScoreGauge value={matchData.defensibility} label="Defensibility" color={matchColor(matchData.defensibility)} suffix="%" />}
+            {!matchData && !matchLoading && (
+              <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', maxWidth: 140, lineHeight: 1.45 }}>
+                Upload your resume in <strong style={{ color: 'var(--primary)' }}>Resume Matches</strong> for match &amp; defensibility scores.
+              </div>
+            )}
           </div>
-          {job.is_entry_level && (
-            <span style={{
-              background: '#DCFCE7', color: '#16A34A',
-              fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 4,
-            }}>
-              Entry-Level
-            </span>
-          )}
-          {job.is_candidate_friendly && !job.is_entry_level && (
-            <span style={{
-              background: '#CFFAFE', color: '#0891B2',
-              fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 4,
-            }}>
-              Candidate Friendly
-            </span>
-          )}
-          {job.is_remote_usa && (
-            <span style={{
-              background: 'var(--teal-light)', color: 'var(--teal)',
-              fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 4,
-            }}>
-              Remote USA
-            </span>
-          )}
-          {job.eligibility_risk === 'high' && (
-            <span className="pill pill-danger"><Icon name="shield" size={11} /> Citizenship/Clearance</span>
-          )}
-          {job.eligibility_risk === 'medium' && (
-            <span className="pill pill-warning"><Icon name="shield" size={11} /> Eligibility — review</span>
-          )}
-          {job.sponsors_h1b === true && (
-            <span className="pill pill-teal"><Icon name="passport" size={11} /> Sponsors H1B</span>
-          )}
-          {job.sponsors_h1b === false && (
-            <span className="pill pill-warning"><Icon name="passport" size={11} /> No H1B sponsorship</span>
-          )}
+          <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+            {matchData && (
+              <span className={`pill ${matchData.apply_priority === 'High' ? 'pill-gold' : matchData.apply_priority === 'Medium' ? 'pill-primary' : 'pill-neutral'}`} style={{ fontWeight: 700 }}>
+                <Icon name="bolt" size={11} /> {matchData.apply_priority} priority
+              </span>
+            )}
+            {(job.is_entry_level || job.is_candidate_friendly) && <span className="pill pill-teal">Candidate Friendly</span>}
+            {job.is_remote_usa && <span className="pill pill-success">Remote USA</span>}
+            {job.sponsors_h1b === true && <span className="pill pill-teal"><Icon name="passport" size={11} /> Sponsors H1B</span>}
+            {job.sponsors_h1b === false && <span className="pill pill-warning"><Icon name="passport" size={11} /> No H1B sponsorship</span>}
+            {job.eligibility_risk === 'high' && <span className="pill pill-danger"><Icon name="shield" size={11} /> Citizenship/Clearance</span>}
+            {job.eligibility_risk === 'medium' && <span className="pill pill-warning"><Icon name="shield" size={11} /> Eligibility — review</span>}
+          </div>
         </div>
 
         {/* Action buttons */}
@@ -330,6 +338,109 @@ export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
             )}
             {job.applied_at && (
               <MetaRow label="Applied On" value={fmt(job.applied_at)} />
+            )}
+          </div>
+        )}
+
+        {detailTab === 'match' && (
+          <div>
+            {matchLoading && (
+              <div style={{ color: 'var(--text-tertiary)', fontSize: 12.5, textAlign: 'center', padding: '20px 0' }}>Computing your match…</div>
+            )}
+            {!matchLoading && !matchData && (
+              <div style={{ textAlign: 'center', padding: '24px 8px' }}>
+                <Icon name="fileText" size={30} color="var(--text-tertiary)" />
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginTop: 12 }}>No resume uploaded</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.6 }}>
+                  Upload your resume in the <strong style={{ color: 'var(--primary)' }}>Resume Matches</strong> tab to see your match score, matched/missing skills, matching projects, safe tailoring advice, and interview prep for this job.
+                </div>
+              </div>
+            )}
+            {matchData && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <MiniStat label="Resume Match" value={`${matchData.resume_match}%`} color={matchColor(matchData.resume_match)} />
+                  <MiniStat label="Defensibility" value={`${matchData.defensibility}%`} color={matchColor(matchData.defensibility)} />
+                  <MiniStat label="Priority" value={matchData.apply_priority} color={priorityColor(matchData.apply_priority)} />
+                </div>
+
+                <div style={{ background: 'var(--primary-light)', border: '1px solid var(--primary-mid)', borderRadius: 8, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recommended resume version</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary)', marginTop: 2 }}>{matchData.recommended_resume}</div>
+                </div>
+
+                {matchData.why_matches.length > 0 && (
+                  <div>
+                    <div className="section-header">Why this job matches</div>
+                    <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                      {matchData.why_matches.map((w, i) => <li key={i}>{w}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <div className="section-header" style={{ color: 'var(--success)' }}>Matched · {matchData.matched_skills.length}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {matchData.matched_skills.length ? matchData.matched_skills.map((s) => (
+                        <span key={s} className="pill pill-success"><Icon name="check" size={10} /> {s}</span>
+                      )) : <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>—</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="section-header" style={{ color: 'var(--warning)' }}>Missing · {matchData.missing_skills.length}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {matchData.missing_skills.length ? matchData.missing_skills.map((s) => (
+                        <span key={s} className="pill pill-warning">{s}</span>
+                      )) : <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>none</span>}
+                    </div>
+                  </div>
+                </div>
+
+                {matchData.matched_projects.length > 0 && (
+                  <div>
+                    <div className="section-header">Your matching projects</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {matchData.matched_projects.map((p, i) => (
+                        <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', background: 'var(--surface-muted)', borderRadius: 6, padding: '7px 10px', display: 'flex', gap: 7, alignItems: 'flex-start' }}>
+                          <Icon name="checkCircle" size={13} color="var(--success)" /> <span>{p}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {matchData.tailoring_suggestions.length > 0 && (
+                  <div>
+                    <div className="section-header">Safe resume tailoring</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {matchData.tailoring_suggestions.map((s, i) => (
+                        <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: 'var(--surface-muted)', borderRadius: 6, padding: '7px 10px' }}>
+                          <span className={`pill ${TIER_STYLE[s.tier] || 'pill-neutral'}`} style={{ flexShrink: 0 }}>{s.tier}</span>
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                            <strong style={{ color: 'var(--text-primary)' }}>{s.skill}</strong> — {s.rationale}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <div className="section-header">Interview prep · likely technical topics</div>
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                    {matchData.interview_prep.technical_topics.map((t, i) => <li key={i}>{t}</li>)}
+                  </ul>
+                  {matchData.interview_prep.resume_defense.length > 0 && (
+                    <>
+                      <div className="section-header" style={{ marginTop: 12 }}>Interview prep · defend your resume</div>
+                      <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                        {matchData.interview_prep.resume_defense.map((t, i) => <li key={i}>{t}</li>)}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}

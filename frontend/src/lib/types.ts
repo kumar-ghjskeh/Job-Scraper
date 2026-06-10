@@ -79,7 +79,53 @@ export interface Job {
   source_reliability?: string      // 'High' | 'Medium' | 'Low'
   location_label?: string          // Onsite | Hybrid | Remote - USA | Multi-location USA | …
   posted_date_known?: boolean
+
+  // Resume match summary (Phase 3 — present on Resume Matches tab items)
+  resume_match?: number
+  defensibility?: number
+  apply_priority?: string          // High | Medium | Low
+  matched_skills?: string[]
+  missing_skills?: string[]
 }
+
+export interface ResumeProfile {
+  name: string
+  education: string
+  degree: string
+  grad_date: string
+  years_experience: number
+  role_focus: string
+  hdls: string[]
+  methodologies: string[]
+  tools: string[]
+  protocols: string[]
+  concepts: string[]
+  languages: string[]
+  projects: string[]
+  project_signals: string[]
+  all_skills: string[]
+}
+
+export interface TailoringSuggestion {
+  skill: string
+  tier: 'Safe to Add' | 'Reword Only' | 'Learn First' | 'Do Not Add'
+  rationale: string
+}
+
+export interface JobMatch {
+  resume_match: number
+  defensibility: number
+  apply_priority: string
+  matched_skills: string[]
+  missing_skills: string[]
+  matched_projects: string[]
+  recommended_resume: string
+  why_matches: string[]
+  tailoring_suggestions: TailoringSuggestion[]
+  interview_prep: { technical_topics: string[]; resume_defense: string[] }
+}
+
+export interface SkillGap { skill: string; count: number }
 
 export interface PaginatedResponse<T> {
   items: T[]

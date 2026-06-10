@@ -13,6 +13,11 @@ notion-client>=2.2.1
 aiosmtplib>=3.0.0
 beautifulsoup4>=4.12.0
 
+# Resume parsing (Phase 3)
+pymupdf>=1.23.0
+python-docx>=1.1.0
+python-multipart>=0.0.9
+
 # Production database driver (Render/Heroku Postgres). Harmless locally.
 psycopg2-binary>=2.9.9
 

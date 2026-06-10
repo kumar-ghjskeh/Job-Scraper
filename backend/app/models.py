@@ -178,6 +178,17 @@ class JobPosting(SQLModel, table=True):
     ignored_at: Optional[datetime] = None
 
 
+class ResumeProfile(SQLModel, table=True):
+    """Single-row store for the user's parsed resume profile (personal tool).
+    Only the extracted profile is kept — the raw file is discarded after parse."""
+    __tablename__ = "resume_profile"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    filename: str = ""
+    profile_json: str = ""  # JSON of ResumeProfileData
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class ScrapeRun(SQLModel, table=True):
     __tablename__ = "scrape_runs"
 

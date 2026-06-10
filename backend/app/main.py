@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlmodel import Session, col, func, select
 
 from .config import settings
 from .database import get_session, init_db
-from .models import ActiveStatus, Company, JobPosting, ScrapeError, ScrapeRun
+from .models import ActiveStatus, Company, JobPosting, ResumeProfile, ScrapeError, ScrapeRun
 from .scheduler import create_scheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -669,6 +670,152 @@ def search_suggestions(q: str, session: SessionDep, limit: int = 8):
     return {
         "suggestions": list(dict.fromkeys([t for t in titles if t] + [c for c in companies if c]))[:limit]
     }
+
+
+# ── Resume intelligence (Phase 3) ────────────────────────────────────────────
+
+def _current_profile(session: Session) -> Optional[dict]:
+    rp = session.exec(select(ResumeProfile).order_by(col(ResumeProfile.id).desc())).first()
+    if not rp or not rp.profile_json:
+        return None
+    try:
+        return json.loads(rp.profile_json)
+    except Exception:
+        return None
+
+
+def _job_match_input(job: JobPosting) -> dict:
+    now = datetime.now(timezone.utc)
+    fs = job.first_seen_at
+    is_fresh = False
+    if fs:
+        if fs.tzinfo is None:
+            fs = fs.replace(tzinfo=timezone.utc)
+        is_fresh = (now - fs) < timedelta(hours=24)
+    return {
+        "job_title": job.job_title, "cleaned_description": job.cleaned_description,
+        "matched_keywords": job.matched_keywords, "role_category": job.role_category,
+        "match_score": job.match_score, "is_candidate_friendly": job.is_candidate_friendly,
+        "eligibility_risk": job.eligibility_risk, "sponsors_h1b": job.sponsors_h1b,
+        "is_fresh": is_fresh,
+    }
+
+
+@app.post("/resume/upload")
+async def upload_resume(session: SessionDep, file: UploadFile = File(...)):
+    from .resume_parser import parse_resume
+    data = await file.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Resume too large (max 8 MB)")
+    try:
+        profile = parse_resume(data, file.filename or "resume.txt")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not parse resume: {e}")
+    for old in session.exec(select(ResumeProfile)).all():
+        session.delete(old)
+    rp = ResumeProfile(filename=file.filename or "", profile_json=json.dumps(profile.to_dict()))
+    session.add(rp)
+    session.commit()
+    return {"ok": True, "profile": profile.to_dict(), "filename": file.filename}
+
+
+@app.get("/resume")
+def get_resume(session: SessionDep):
+    rp = session.exec(select(ResumeProfile).order_by(col(ResumeProfile.id).desc())).first()
+    if not rp or not rp.profile_json:
+        return {"profile": None}
+    return {"profile": json.loads(rp.profile_json), "filename": rp.filename, "uploaded_at": rp.uploaded_at}
+
+
+@app.delete("/resume")
+def delete_resume(session: SessionDep):
+    for old in session.exec(select(ResumeProfile)).all():
+        session.delete(old)
+    session.commit()
+    return {"ok": True}
+
+
+@app.get("/jobs/resume-matches")
+def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(default=50, ge=1, le=200), include_senior: bool = False):
+    profile = _current_profile(session)
+    if not profile:
+        return {"items": [], "total_count": 0, "page": 1, "limit": limit,
+                "total_pages": 1, "has_next": False, "has_prev": False, "no_resume": True}
+    from .resume_match import compute_match
+    conds = [JobPosting.active_status == "active",
+             (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0),
+             JobPosting.is_software_only == False]
+    if not include_senior:
+        conds.append(JobPosting.is_senior == False)
+    jobs = session.exec(select(JobPosting).where(*conds)).all()
+    scored = []
+    for job in jobs:
+        m = compute_match(profile, _job_match_input(job))
+        item = JobResponse.model_validate(job).model_dump()
+        item["resume_match"] = m["resume_match"]
+        item["defensibility"] = m["defensibility"]
+        item["apply_priority"] = m["apply_priority"]
+        item["matched_skills"] = m["matched_skills"][:6]
+        item["missing_skills"] = m["missing_skills"][:6]
+        scored.append((m["resume_match"], job.match_score, item))
+    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    total = len(scored)
+    start = (page - 1) * limit
+    page_items = [s[2] for s in scored[start:start + limit]]
+    total_pages = max(1, (total + limit - 1) // limit)
+    return {"items": page_items, "total_count": total, "page": page, "limit": limit,
+            "total_pages": total_pages, "has_next": page < total_pages, "has_prev": page > 1}
+
+
+@app.post("/jobs/match-batch")
+def job_match_batch(payload: dict, session: SessionDep):
+    profile = _current_profile(session)
+    if not profile:
+        return {"matches": {}}
+    from .resume_match import compute_match
+    ids = (payload.get("ids") or [])[:120]
+    out: dict[str, Any] = {}
+    for jid in ids:
+        job = session.get(JobPosting, jid)
+        if job:
+            m = compute_match(profile, _job_match_input(job))
+            out[str(jid)] = {"resume_match": m["resume_match"], "apply_priority": m["apply_priority"]}
+    return {"matches": out}
+
+
+@app.get("/resume/skill-gaps")
+def skill_gaps(session: SessionDep, min_match: int = 45):
+    profile = _current_profile(session)
+    if not profile:
+        return {"gaps": [], "high_match_jobs": 0, "no_resume": True}
+    from collections import Counter
+    from .resume_match import compute_match
+    conds = [JobPosting.active_status == "active",
+             (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0),
+             JobPosting.is_software_only == False, JobPosting.is_senior == False]
+    jobs = session.exec(select(JobPosting).where(*conds)).all()
+    counter: Counter = Counter()
+    n_high = 0
+    for job in jobs:
+        m = compute_match(profile, _job_match_input(job))
+        if m["resume_match"] >= min_match:
+            n_high += 1
+            for sk in m["missing_skills"]:
+                counter[sk] += 1
+    gaps = [{"skill": s, "count": n} for s, n in counter.most_common(15)]
+    return {"gaps": gaps, "high_match_jobs": n_high}
+
+
+@app.get("/jobs/{job_id}/match")
+def job_match(job_id: int, session: SessionDep):
+    profile = _current_profile(session)
+    if not profile:
+        raise HTTPException(status_code=404, detail="No resume uploaded")
+    job = session.get(JobPosting, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    from .resume_match import compute_match
+    return compute_match(profile, _job_match_input(job))
 
 
 @app.get("/jobs/{job_id}", response_model=JobResponse)
