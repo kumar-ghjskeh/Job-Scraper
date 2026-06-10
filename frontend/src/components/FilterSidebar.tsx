@@ -48,13 +48,13 @@ function Toggle({ on, onToggle, label, sub }: { on: boolean; onToggle: () => voi
       <div
         className="toggle-track"
         onClick={onToggle}
-        style={{ background: on ? 'var(--primary)' : '#CBD5E1' }}
+        style={{ background: on ? 'var(--primary)' : 'var(--border-strong)' }}
       >
         <div className="toggle-thumb" style={{ left: on ? 19 : 3 }} />
       </div>
       <div>
-        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{label}</div>
-        {sub && <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>{sub}</div>}
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{label}</div>
+        {sub && <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{sub}</div>}
       </div>
     </label>
   )
@@ -131,25 +131,14 @@ export function FilterSidebar({ filters, onChange, totalCount }: Props) {
           />
         </div>
 
-        {/* Toggles */}
+        {/* Toggles — USA-only is the default platform behavior; software roles
+            are excluded by design, so only the seniority toggle remains. */}
         <div style={{ marginBottom: 14 }}>
-          <Toggle
-            on={filters.usa_only !== false}
-            onToggle={() => set('usa_only', filters.usa_only === false ? true : false)}
-            label="USA Jobs Only"
-            sub="Filter to US locations"
-          />
           <Toggle
             on={!!filters.include_senior}
             onToggle={() => set('include_senior', !filters.include_senior)}
             label="Show Senior Roles"
-            sub="Include Sr / Staff / Principal"
-          />
-          <Toggle
-            on={!!filters.include_software}
-            onToggle={() => set('include_software', !filters.include_software)}
-            label="Show Software Jobs"
-            sub="Include ML, SWE, DevOps roles"
+            sub="Include Sr / Staff / Principal / Lead"
           />
         </div>
 
@@ -206,21 +195,18 @@ export function FilterSidebar({ filters, onChange, totalCount }: Props) {
         <div style={{ marginBottom: 16 }}>
           <SectionHead title="Remote Status" />
           <div style={{ display: 'flex', gap: 5 }}>
-            {[
-              { v: 'Remote', bg: '#DCFCE7', color: '#15803D', border: '#BBF7D0' },
-              { v: 'Hybrid', bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' },
-              { v: 'Onsite', bg: '#F3F4F6', color: '#4B5563', border: '#E5E7EB' },
-            ].map(({ v, bg, color, border }) => {
+            {['Remote', 'Hybrid', 'Onsite'].map((v) => {
               const active = filters.remote === v
               return (
                 <button
                   key={v}
                   onClick={() => set('remote', active ? '' : v)}
+                  className={active ? 'pill-primary' : ''}
                   style={{
-                    flex: 1, border: active ? `1.5px solid ${border}` : '1px solid var(--border)',
-                    background: active ? bg : 'var(--bg)',
+                    flex: 1, border: active ? '1px solid var(--primary-mid)' : '1px solid var(--border)',
+                    background: active ? undefined : 'var(--surface-muted)',
                     borderRadius: 6, padding: '5px 0', fontSize: 11, fontWeight: 600,
-                    cursor: 'pointer', color: active ? color : 'var(--text-muted)',
+                    cursor: 'pointer', color: active ? 'var(--primary)' : 'var(--text-secondary)',
                     transition: 'all 0.1s',
                   }}
                 >
@@ -328,9 +314,9 @@ export function FilterSidebar({ filters, onChange, totalCount }: Props) {
               Quick Stats
             </div>
             {[
-              { label: 'Entry-Level', value: facets.entry_level_count, color: '#15803D' },
-              { label: 'Remote', value: facets.remote_count, color: '#0891B2' },
-              { label: 'New Today', value: facets.new_24h_count, color: '#0A66C2' },
+              { label: 'True Entry-Level', value: facets.entry_level_count, color: 'var(--success)' },
+              { label: 'Remote', value: facets.remote_count, color: 'var(--teal)' },
+              { label: 'New Today', value: facets.new_24h_count, color: 'var(--primary)' },
             ].map(({ label, value, color }) => (
               <div key={label} style={{
                 display: 'flex', justifyContent: 'space-between',

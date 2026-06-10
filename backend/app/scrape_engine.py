@@ -12,6 +12,7 @@ from .apply_url import process_apply_url
 from .config import load_companies, load_schedule
 from .database import engine
 from .description_cleaner import clean_html_description, truncate_description_cleanly
+from .eligibility import detect_eligibility_risk
 from .location_utils import parse_location
 from .models import ActiveStatus, Company, JobPosting, ScrapeError, ScrapeRun
 from .scrapers import get_scraper
@@ -152,6 +153,7 @@ async def run_scrape(triggered_by: str = "scheduler") -> ScrapeRun:
                         sw_only = is_software_only(raw.job_title, cleaned_desc)
                         hw_sw = role_flags.get("is_hardware_software_codesign", False)
                         relevance = build_relevance_reason(raw.job_title, cleaned_desc, breakdown)
+                        elig_risk, elig_terms = detect_eligibility_risk(cleaned_desc)
 
                         import json
                         job = JobPosting(
@@ -201,6 +203,8 @@ async def run_scrape(triggered_by: str = "scheduler") -> ScrapeRun:
                             relevance_reason=relevance,
                             matched_positive_terms_json=json.dumps(matched_kws),
                             data_quality_status="ok" if cleaned_desc else "no_description",
+                            eligibility_risk=elig_risk,
+                            eligibility_terms=", ".join(elig_terms),
                         )
                         session.add(job)
                         session.commit()

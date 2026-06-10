@@ -151,6 +151,16 @@ class JobPosting(SQLModel, table=True):
     # ── Data quality ─────────────────────────────────────────────
     data_quality_status: str = ""
 
+    # ── Eligibility / export-control (Phase 1) ───────────────────
+    eligibility_risk: str = ""    # low | medium | high
+    eligibility_terms: str = ""   # comma-separated matched categories
+
+    @property
+    def sponsors_h1b(self) -> Optional[bool]:
+        """Company-level H1B sponsorship signal (read by the API response)."""
+        from .eligibility import sponsors_h1b as _lookup
+        return _lookup(self.company)
+
     # ── User actions ──────────────────────────────────────────────
     application_status: str = ""
     notes: str = ""

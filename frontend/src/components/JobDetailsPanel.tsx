@@ -212,6 +212,18 @@ export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
               Remote USA
             </span>
           )}
+          {job.eligibility_risk === 'high' && (
+            <span className="pill pill-danger"><Icon name="shield" size={11} /> Citizenship/Clearance</span>
+          )}
+          {job.eligibility_risk === 'medium' && (
+            <span className="pill pill-warning"><Icon name="shield" size={11} /> Eligibility — review</span>
+          )}
+          {job.sponsors_h1b === true && (
+            <span className="pill pill-teal"><Icon name="passport" size={11} /> Sponsors H1B</span>
+          )}
+          {job.sponsors_h1b === false && (
+            <span className="pill pill-warning"><Icon name="passport" size={11} /> No H1B sponsorship</span>
+          )}
         </div>
 
         {/* Action buttons */}

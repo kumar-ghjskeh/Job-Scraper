@@ -66,6 +66,11 @@ export interface Job {
   exclusion_reason: string
   matched_positive_terms_json: string
   data_quality_status: string
+
+  // Eligibility & sponsorship (Phase 1)
+  eligibility_risk?: string        // 'low' | 'medium' | 'high'
+  eligibility_terms?: string       // matched terms, comma-separated
+  sponsors_h1b?: boolean | null    // company-level H1B sponsorship signal
 }
 
 export interface PaginatedResponse<T> {

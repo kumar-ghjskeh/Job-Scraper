@@ -20,6 +20,8 @@ _MIGRATIONS: list[tuple[str, str, str]] = [
     ("job_postings", "matched_positive_terms_json",  "TEXT NOT NULL DEFAULT ''"),
     ("job_postings", "matched_negative_terms_json",  "TEXT NOT NULL DEFAULT ''"),
     ("job_postings", "data_quality_status",          "TEXT NOT NULL DEFAULT ''"),
+    ("job_postings", "eligibility_risk",             "TEXT NOT NULL DEFAULT ''"),
+    ("job_postings", "eligibility_terms",            "TEXT NOT NULL DEFAULT ''"),
     # Company new fields
     ("companies",    "company_search_url",           "TEXT NOT NULL DEFAULT ''"),
 ]

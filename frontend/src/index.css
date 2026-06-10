@@ -1,64 +1,128 @@
 @import "tailwindcss";
 
 /* ════════════════════════════════════════════════════════════════════════
-   Job Scraper — LinkedIn-grade design system
-   Authentic LinkedIn palette: blue #0A66C2, warm-gray feed, no violet.
+   Ashborne Silicon — design system
+   Professional SaaS UI. Light + dark are BOTH first-class themes driven by
+   a single semantic-token set. Components must use tokens, never raw colors.
+   Primary = deep indigo. Gold is a sparing premium accent only.
    ════════════════════════════════════════════════════════════════════════ */
 
+/* ── Canonical semantic tokens — LIGHT (default) ───────────────────────── */
+:root,
+:root[data-theme="light"] {
+  --background:      #F6F7F9;
+  --surface:         #FFFFFF;
+  --surface-muted:   #EEF1F5;
+  --surface-raised:  #FFFFFF;
+
+  --text-primary:    #0F172A;
+  --text-secondary:  #5A6573;
+  --text-tertiary:   #8A94A3;
+  --on-primary:      #FFFFFF;
+
+  --border:          #E4E7EC;
+  --border-strong:   #D3D8E0;
+
+  --primary:         #4F46E5;
+  --primary-hover:   #4338CA;
+  --primary-light:   #EEF0FE;
+  --primary-mid:     #D8DCFB;
+
+  --success:         #15803D;
+  --success-light:   #E6F4EA;
+  --success-border:  #B7E0C4;
+  --warning:         #B45309;
+  --warning-light:   #FBF1DC;
+  --warning-border:  #F2D9A6;
+  --danger:          #DC2626;
+  --danger-light:    #FBE9E9;
+  --danger-border:   #F3C5C5;
+
+  --teal:            #0E7490;
+  --teal-light:      #E0F5F9;
+
+  --accent-gold:     #B7791F;
+  --accent-gold-bg:  #FBF3E0;
+  --accent-gold-border: #ECD9AE;
+
+  --shadow-sm:    0 1px 2px rgba(15,23,42,0.06);
+  --shadow-card:  0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-raised: 0 6px 20px rgba(15,23,42,0.10);
+  --shadow-panel: 0 8px 30px rgba(15,23,42,0.12);
+
+  --brand-tile: linear-gradient(135deg, #15171F 0%, #0B0B0F 100%);
+
+  color-scheme: light;
+}
+
+/* ── Canonical semantic tokens — DARK ──────────────────────────────────── */
+:root[data-theme="dark"] {
+  --background:      #0B0E14;
+  --surface:         #141923;
+  --surface-muted:   #1B212D;
+  --surface-raised:  #1A2030;
+
+  --text-primary:    #E8EBF0;
+  --text-secondary:  #9AA4B2;
+  --text-tertiary:   #6B7585;
+  --on-primary:      #FFFFFF;
+
+  --border:          #262D3A;
+  --border-strong:   #36404F;
+
+  --primary:         #6366F1;
+  --primary-hover:   #818CF8;
+  --primary-light:   rgba(99,102,241,0.16);
+  --primary-mid:     rgba(99,102,241,0.40);
+
+  --success:         #34D399;
+  --success-light:   rgba(52,211,153,0.14);
+  --success-border:  rgba(52,211,153,0.32);
+  --warning:         #FBBF24;
+  --warning-light:   rgba(251,191,36,0.14);
+  --warning-border:  rgba(251,191,36,0.32);
+  --danger:          #F87171;
+  --danger-light:    rgba(248,113,113,0.14);
+  --danger-border:   rgba(248,113,113,0.32);
+
+  --teal:            #2DD4BF;
+  --teal-light:      rgba(45,212,191,0.14);
+
+  --accent-gold:     #E8B23A;
+  --accent-gold-bg:  rgba(232,178,58,0.14);
+  --accent-gold-border: rgba(232,178,58,0.34);
+
+  --shadow-sm:    0 1px 2px rgba(0,0,0,0.40);
+  --shadow-card:  0 1px 3px rgba(0,0,0,0.40), 0 1px 2px rgba(0,0,0,0.30);
+  --shadow-raised: 0 8px 24px rgba(0,0,0,0.55);
+  --shadow-panel: 0 10px 34px rgba(0,0,0,0.60);
+
+  --brand-tile: linear-gradient(135deg, #1B2030 0%, #0B0B0F 100%);
+
+  color-scheme: dark;
+}
+
+/* ── Backward-compatible aliases (existing components keep working) ─────── */
 :root {
-  /* Brand blue */
-  --primary: #0A66C2;
-  --primary-hover: #004182;
-  --primary-dark: #003A6B;
-  --primary-light: #EAF1FB;
-  --primary-mid: #C7E0F9;
+  --bg:              var(--background);
+  --text:            var(--text-primary);
+  --text-muted:      var(--text-secondary);
+  --text-faint:      var(--text-tertiary);
+  --surface-sunken:  var(--surface-muted);
+  --surface-hover:   var(--surface-muted);
+  --border-light:    var(--border);
+  --error:           var(--danger);
+  --error-light:     var(--danger-light);
+  --error-border:    var(--danger-border);
+  --gold:            var(--accent-gold);
+  --gold-light:      var(--accent-gold-bg);
+  --navy:            var(--text-primary);
 
-  /* Surfaces (LinkedIn warm-gray feed) */
-  --bg: #F4F2EE;
-  --surface: #FFFFFF;
-  --surface-hover: #F3F6F8;
-  --surface-sunken: #F7F6F3;
-
-  /* Borders */
-  --border: #E2E0DC;
-  --border-strong: #D2D0CC;
-  --border-light: #EFEDE9;
-
-  /* Text */
-  --text: rgba(0,0,0,0.90);
-  --text-muted: rgba(0,0,0,0.60);
-  --text-faint: rgba(0,0,0,0.45);
-  --text-on-dark: #FFFFFF;
-
-  /* Status */
-  --success: #057642;
-  --success-light: #E6F4EA;
-  --success-border: #B7E0C4;
-  --warning: #915907;
-  --warning-light: #FBF1DC;
-  --warning-border: #F2D9A6;
-  --error: #B91C1C;
-  --error-light: #FBE9E9;
-  --error-border: #F3C5C5;
-
-  /* Accents (blue / teal family only — NO violet) */
-  --teal: #0E7490;
-  --teal-light: #E0F5F9;
-  --gold: #915907;
-  --gold-light: #FBF1DC;
-  --navy: #1B4965;
-
-  /* Layout */
   --nav-height: 104px;
   --sidebar-width: 270px;
   --panel-width: 384px;
   --radius: 8px;
   --radius-lg: 10px;
-
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
-  --shadow-card: 0 0 0 1px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.04);
-  --shadow-raised: 0 4px 16px rgba(0,0,0,0.10);
-  --shadow-panel: 0 6px 28px rgba(0,0,0,0.10);
 }
 
 * { box-sizing: border-box; }
@@ -66,13 +130,14 @@ html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--background);
+  color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 #root { width: 100%; min-height: 100vh; }
@@ -80,34 +145,28 @@ body {
 a { color: var(--primary); text-decoration: none; }
 a:hover { text-decoration: underline; color: var(--primary-hover); }
 
-/* Scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #C9C7C2; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #ADABA6; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 1px;
 }
 
-input, select, textarea { font-family: inherit; font-size: 13px; color: var(--text); }
-input::placeholder, textarea::placeholder { color: var(--text-faint); }
+input, select, textarea { font-family: inherit; font-size: 13px; color: var(--text-primary); }
+input::placeholder, textarea::placeholder { color: var(--text-tertiary); }
+select { background: var(--surface); }
+select option { background: var(--surface); color: var(--text-primary); }
 
 /* ── Cards ─────────────────────────────────────────────────────────────── */
-.card-flat {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
+.card-flat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .card-raised {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-card);
 }
 
-/* ── Job card ──────────────────────────────────────────────────────────── */
 .job-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -123,7 +182,7 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 }
 .job-card.selected {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(10,102,194,0.20), var(--shadow-card);
+  box-shadow: 0 0 0 2px var(--primary-mid), var(--shadow-card);
 }
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
@@ -131,15 +190,16 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   display: inline-flex; align-items: center; gap: 6px;
   font-family: inherit; font-weight: 600; font-size: 13px;
   border-radius: 999px; padding: 7px 16px; cursor: pointer;
-  border: 1px solid transparent; transition: background 0.14s, border-color 0.14s, color 0.14s;
+  border: 1px solid transparent;
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
   white-space: nowrap;
 }
-.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary { background: var(--primary); color: var(--on-primary); }
 .btn-primary:hover { background: var(--primary-hover); }
 .btn-outline { background: transparent; color: var(--primary); border-color: var(--primary); }
 .btn-outline:hover { background: var(--primary-light); }
-.btn-ghost { background: transparent; color: var(--text-muted); border-color: var(--border-strong); }
-.btn-ghost:hover { background: var(--surface-hover); color: var(--text); }
+.btn-ghost { background: transparent; color: var(--text-secondary); border-color: var(--border-strong); }
+.btn-ghost:hover { background: var(--surface-muted); color: var(--text-primary); }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* ── Score circle ──────────────────────────────────────────────────────── */
@@ -151,12 +211,9 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 
 /* ── Skill chip ────────────────────────────────────────────────────────── */
 .skill-chip {
-  background: var(--primary-light);
-  color: var(--primary);
-  font-size: 11px; font-weight: 600;
-  padding: 3px 9px; border-radius: 999px;
-  border: 1px solid var(--primary-mid);
-  white-space: nowrap;
+  background: var(--primary-light); color: var(--primary);
+  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--primary-mid); white-space: nowrap;
 }
 
 /* ── Badge ─────────────────────────────────────────────────────────────── */
@@ -173,31 +230,41 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 }
 .toggle-thumb {
   position: absolute; top: 2px; width: 16px; height: 16px; border-radius: 50%;
-  background: #fff; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  background: #fff; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.30);
 }
 
-/* ── Section header ────────────────────────────────────────────────────── */
 .section-header {
-  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  font-size: 11px; font-weight: 700; color: var(--text-secondary);
   letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px;
 }
 
-/* ── Tier colors (blue/teal/neutral — no violet) ───────────────────────── */
-.tier-s { background: #FBF1DC; color: #915907; border: 1px solid #F2D9A6; }
-.tier-a { background: #EAF1FB; color: #0A66C2; border: 1px solid #C7E0F9; }
-.tier-b { background: #E0F5F9; color: #0E7490; border: 1px solid #BAE6EF; }
-.tier-c { background: #F0EFEC; color: #57534E; border: 1px solid #E2E0DC; }
+/* ── Tier colors (token-driven, theme-aware) ───────────────────────────── */
+.tier-s { background: var(--accent-gold-bg); color: var(--accent-gold); border: 1px solid var(--accent-gold-border); }
+.tier-a { background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-mid); }
+.tier-b { background: var(--teal-light); color: var(--teal); border: 1px solid var(--teal); }
+.tier-c { background: var(--surface-muted); color: var(--text-secondary); border: 1px solid var(--border); }
+
+/* ── Status pill helpers (theme-aware) ─────────────────────────────────── */
+.pill-success { background: var(--success-light); color: var(--success); border: 1px solid var(--success-border); }
+.pill-warning { background: var(--warning-light); color: var(--warning); border: 1px solid var(--warning-border); }
+.pill-danger  { background: var(--danger-light);  color: var(--danger);  border: 1px solid var(--danger-border); }
+.pill-neutral { background: var(--surface-muted);  color: var(--text-secondary); border: 1px solid var(--border); }
+.pill-gold    { background: var(--accent-gold-bg); color: var(--accent-gold); border: 1px solid var(--accent-gold-border); }
+.pill-primary { background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-mid); }
+.pill-teal    { background: var(--teal-light);    color: var(--teal);    border: 1px solid var(--teal); }
+.pill {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+}
 
 /* ── Animations ────────────────────────────────────────────────────────── */
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 .animate-in { animation: fadeIn 0.22s ease forwards; }
-
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .spin { animation: spin 0.9s linear infinite; display: inline-flex; }
-
 @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 .skeleton {
-  background: linear-gradient(90deg, var(--border-light) 25%, #F7F6F3 50%, var(--border-light) 75%);
+  background: linear-gradient(90deg, var(--surface-muted) 25%, var(--border) 50%, var(--surface-muted) 75%);
   background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px;
 }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }

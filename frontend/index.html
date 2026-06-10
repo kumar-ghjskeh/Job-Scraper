@@ -4,8 +4,23 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Job Scraper — automated RTL Design & Design Verification job discovery across top semiconductor companies." />
-    <title>Job Scraper — RTL & Design Verification Jobs</title>
+    <meta name="description" content="Ashborne Silicon — company-direct RTL, DV, ASIC, SoC, FPGA & DFT jobs in the USA, verified and resume-matched." />
+    <title>Ashborne Silicon — USA Semiconductor Jobs</title>
+    <link rel="icon" type="image/png" href="/ashborne-logo.png" />
+    <script>
+      // Set theme before first paint to avoid a flash of the wrong theme.
+      (function () {
+        try {
+          var t = localStorage.getItem('ashborne-theme');
+          if (t !== 'light' && t !== 'dark') {
+            t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

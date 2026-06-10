@@ -145,6 +145,10 @@ class JobResponse(BaseModel):
     exclusion_reason: str = ""
     matched_positive_terms_json: str = ""
     data_quality_status: str = ""
+    # Eligibility / sponsorship (Phase 1)
+    eligibility_risk: str = ""
+    eligibility_terms: str = ""
+    sponsors_h1b: Optional[bool] = None
 
     model_config = {"from_attributes": True}
 
