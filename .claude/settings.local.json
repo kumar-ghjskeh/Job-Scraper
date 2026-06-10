@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git diff *)",
+      "Bash(git status *)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, 'backend'\\); from app.main import app; print\\('Import OK'\\)\")"
+    ]
+  }
+}

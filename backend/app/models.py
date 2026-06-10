@@ -1,0 +1,185 @@
+"""SQLModel ORM models for all database tables."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import Enum
+from typing import Optional
+
+from sqlmodel import Field, SQLModel
+
+
+class ActiveStatus(str, Enum):
+    active = "active"
+    possibly_removed = "possibly_removed"
+    removed = "removed"
+    applied = "applied"
+    ignored = "ignored"
+    saved = "saved"
+
+
+class ExperienceLevel(str, Enum):
+    new_grad = "New Grad"
+    entry_level = "Entry Level"
+    zero_to_three = "0-3 Years"
+    candidate_friendly = "Candidate Friendly"
+    mid_level = "Mid-Level"
+    senior = "Senior"
+    unknown = "Unknown"
+
+
+class RoleCategory(str, Enum):
+    design_verification = "Design Verification"
+    rtl_design = "RTL Design"
+    soc_verification = "SoC Verification"
+    cpu_gpu_verification = "CPU/GPU Verification"
+    fpga_rtl = "FPGA RTL"
+    formal_verification = "Formal Verification"
+    emulation = "Emulation"
+    pre_silicon = "Pre-Silicon Validation"
+    post_silicon = "Post-Silicon Validation"
+    eda_tools = "EDA / Verification Tools"
+    adjacent = "Adjacent / Backup"
+    unknown = "Unknown"
+
+
+class RemoteStatus(str, Enum):
+    remote = "Remote"
+    hybrid = "Hybrid"
+    onsite = "Onsite"
+    unknown = "Unknown"
+
+
+class Company(SQLModel, table=True):
+    __tablename__ = "companies"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True, unique=True)
+    category: str
+    priority: str  # S, A, B, C
+    careers_url: str
+    company_search_url: str = ""
+    ats_platform: str
+    enabled: bool = True
+    last_scraped_at: Optional[datetime] = None
+    scrape_error_count: int = 0
+    notes: str = ""
+
+
+class JobPosting(SQLModel, table=True):
+    __tablename__ = "job_postings"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Identity
+    company: str = Field(index=True)
+    company_category: str = ""
+    company_priority: str = ""
+
+    # Title & classification
+    job_title: str = Field(index=True)
+    normalized_title: str = ""
+    role_category: str = RoleCategory.unknown
+    experience_level: str = ExperienceLevel.unknown
+
+    # ── Seniority & entry-level flags ─────────────────────────────
+    is_entry_level: bool = Field(default=False, index=True)
+    is_candidate_friendly: bool = Field(default=False, index=True)
+    is_senior: bool = Field(default=False, index=True)
+
+    years_required_min: Optional[int] = None
+    years_required_max: Optional[int] = None
+
+    # ── Location (raw + parsed) ───────────────────────────────────
+    location: str = ""
+    location_raw: str = ""
+    remote_status: str = RemoteStatus.unknown
+
+    is_usa: bool = Field(default=False, index=True)
+    is_remote_usa: bool = Field(default=False)
+    country: str = ""
+    state: str = Field(default="", index=True)
+    city: str = ""
+    location_confidence: float = 0.0
+
+    # Source
+    job_id_from_company: str = ""
+    apply_url: str
+    source_url: str = ""
+    ats_platform: str = ""
+
+    # ── Apply URL safety ──────────────────────────────────────────
+    original_apply_url: str = ""
+    safe_apply_url: str = ""
+    apply_url_status: str = ""
+    apply_url_reason: str = ""
+
+    # Dates
+    posted_date: Optional[datetime] = None
+    first_seen_at: datetime = Field(default_factory=datetime.utcnow)
+    last_seen_at: datetime = Field(default_factory=datetime.utcnow)
+    removed_at: Optional[datetime] = None
+
+    # Status
+    active_status: str = Field(default=ActiveStatus.active, index=True)
+    missed_scrapes: int = 0
+
+    # ── Scoring ───────────────────────────────────────────────────
+    match_score: int = 0   # kept for compat; populated same as relevance_score
+    matched_keywords: str = ""
+    score_breakdown_json: str = ""
+    relevance_score_label: str = ""
+
+    # Description
+    description_snippet: str = ""
+    full_description_text: str = ""
+
+    # ── Role flags (JSON blob of 14 booleans) ─────────────────────
+    role_flags_json: str = ""
+    is_software_only: bool = Field(default=False, index=True)
+    is_hardware_software_codesign: bool = Field(default=False)
+
+    # ── Cleaned description (HTML stripped) ──────────────────────
+    cleaned_description: str = ""
+
+    # ── Relevance / exclusion reasoning ──────────────────────────
+    relevance_reason: str = ""
+    exclusion_reason: str = ""
+    matched_positive_terms_json: str = ""
+    matched_negative_terms_json: str = ""
+
+    # ── Data quality ─────────────────────────────────────────────
+    data_quality_status: str = ""
+
+    # ── User actions ──────────────────────────────────────────────
+    application_status: str = ""
+    notes: str = ""
+    resume_version_used: str = ""
+    saved_at: Optional[datetime] = None
+    applied_at: Optional[datetime] = None
+    ignored_at: Optional[datetime] = None
+
+
+class ScrapeRun(SQLModel, table=True):
+    __tablename__ = "scrape_runs"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    started_at: datetime = Field(default_factory=datetime.utcnow)
+    finished_at: Optional[datetime] = None
+    companies_scraped: int = 0
+    jobs_found: int = 0
+    new_jobs: int = 0
+    removed_jobs: int = 0
+    errors: int = 0
+    triggered_by: str = "scheduler"
+
+
+class ScrapeError(SQLModel, table=True):
+    __tablename__ = "scrape_errors"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    scrape_run_id: Optional[int] = Field(default=None, foreign_key="scrape_runs.id")
+    company: str
+    error_message: str
+    error_type: str = ""
+    occurred_at: datetime = Field(default_factory=datetime.utcnow)

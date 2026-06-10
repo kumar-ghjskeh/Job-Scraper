@@ -1,0 +1,431 @@
+# ════════════════════════════════════════════════════════════════════════════
+#  Job Scraper — Company Sources
+#
+#  Every ENABLED company below has been live-verified to return real job data
+#  through a clean public JSON API (Greenhouse / Lever / Ashby / Workday CXS).
+#  No HTML scraping, no headless browser → zero "errors on company sites".
+#
+#  Verify any time with:   py scripts/verify_sources.py
+#  Discover new slugs with: py scripts/discover_sources.py
+#
+#  DISABLED companies are kept for reference. They use a stale endpoint,
+#  an anti-bot-protected Workday tenant, or a non-API custom site (iCIMS,
+#  Phenom, Eightfold) and need a dedicated scraper before re-enabling.
+# ════════════════════════════════════════════════════════════════════════════
+
+companies:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  ✅ VERIFIED — WORKDAY (large semiconductor employers)
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "NVIDIA"
+    category: "S-Tier"
+    priority: "S"
+    careers_url: "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite"
+    ats_platform: "workday"
+    workday_tenant: "nvidia"
+    workday_instance: "wd5"
+    workday_career_site: "NVIDIAExternalCareerSite"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "silicon", "digital design"]
+    locations_of_interest: ["Santa Clara", "Austin", "Seattle", "Remote", "United States"]
+    enabled: true
+
+  - name: "Intel"
+    category: "S-Tier"
+    priority: "S"
+    careers_url: "https://intel.wd1.myworkdayjobs.com/External"
+    ats_platform: "workday"
+    workday_tenant: "intel"
+    workday_instance: "wd1"
+    workday_career_site: "External"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "silicon", "digital design"]
+    locations_of_interest: ["Hillsboro", "Santa Clara", "Austin", "Folsom", "Remote", "United States"]
+    enabled: true
+
+  - name: "Marvell"
+    category: "S-Tier"
+    priority: "S"
+    careers_url: "https://marvell.wd1.myworkdayjobs.com/MarvellCareers"
+    ats_platform: "workday"
+    workday_tenant: "marvell"
+    workday_instance: "wd1"
+    workday_career_site: "MarvellCareers"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "soc", "silicon"]
+    locations_of_interest: ["Santa Clara", "San Jose", "Remote", "United States"]
+    enabled: true
+
+  - name: "Micron"
+    category: "Tier1"
+    priority: "A"
+    careers_url: "https://micron.wd1.myworkdayjobs.com/External"
+    ats_platform: "workday"
+    workday_tenant: "micron"
+    workday_instance: "wd1"
+    workday_career_site: "External"
+    search_keywords: ["verification", "rtl", "design verification", "dram", "memory", "digital design"]
+    locations_of_interest: ["Boise", "San Jose", "Folsom", "Remote"]
+    enabled: true
+
+  - name: "NXP Semiconductors"
+    category: "Tier1"
+    priority: "B"
+    careers_url: "https://nxp.wd3.myworkdayjobs.com/careers"
+    ats_platform: "workday"
+    workday_tenant: "nxp"
+    workday_instance: "wd3"
+    workday_career_site: "careers"
+    search_keywords: ["verification", "rtl", "design verification", "soc", "digital design"]
+    locations_of_interest: ["Austin", "Chandler", "San Jose", "Remote"]
+    enabled: true
+
+  - name: "Analog Devices"
+    category: "Tier1"
+    priority: "B"
+    careers_url: "https://analogdevices.wd1.myworkdayjobs.com/External"
+    ats_platform: "workday"
+    workday_tenant: "analogdevices"
+    workday_instance: "wd1"
+    workday_career_site: "External"
+    search_keywords: ["verification", "rtl", "design verification", "digital design", "soc"]
+    locations_of_interest: ["Wilmington", "San Jose", "Boston", "Remote"]
+    enabled: true
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  ✅ VERIFIED — GREENHOUSE (AI accelerator / chip startups & specialists)
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "Astera Labs"
+    category: "Networking"
+    priority: "A"
+    careers_url: "https://job-boards.greenhouse.io/asteralabs"
+    ats_platform: "greenhouse"
+    greenhouse_board: "asteralabs"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "pcie", "cxl", "soc"]
+    locations_of_interest: ["Santa Clara", "Remote"]
+    enabled: true
+
+  - name: "Tenstorrent"
+    category: "AI Accelerator"
+    priority: "A"
+    careers_url: "https://job-boards.greenhouse.io/tenstorrent"
+    ats_platform: "greenhouse"
+    greenhouse_board: "tenstorrent"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "risc-v", "soc"]
+    locations_of_interest: ["San Jose", "Austin", "Remote"]
+    enabled: true
+
+  - name: "Cerebras Systems"
+    category: "AI Accelerator"
+    priority: "A"
+    careers_url: "https://job-boards.greenhouse.io/cerebrassystems"
+    ats_platform: "greenhouse"
+    greenhouse_board: "cerebrassystems"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "chip", "soc"]
+    locations_of_interest: ["Sunnyvale", "Remote"]
+    enabled: true
+
+  - name: "SambaNova Systems"
+    category: "AI Accelerator"
+    priority: "A"
+    careers_url: "https://job-boards.greenhouse.io/sambanovasystems"
+    ats_platform: "greenhouse"
+    greenhouse_board: "sambanovasystems"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "soc"]
+    locations_of_interest: ["Palo Alto", "Remote"]
+    enabled: true
+
+  - name: "Lightmatter"
+    category: "AI Accelerator"
+    priority: "A"
+    careers_url: "https://job-boards.greenhouse.io/lightmatter"
+    ats_platform: "greenhouse"
+    greenhouse_board: "lightmatter"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "photonic", "soc"]
+    locations_of_interest: ["Mountain View", "Boston", "Remote"]
+    enabled: true
+
+  - name: "Ventana Micro Systems"
+    category: "RISC-V"
+    priority: "A"
+    careers_url: "https://job-boards.greenhouse.io/ventana"
+    ats_platform: "greenhouse"
+    greenhouse_board: "ventana"
+    search_keywords: ["verification", "rtl", "design verification", "risc-v", "cpu", "soc"]
+    locations_of_interest: ["Santa Clara", "Remote"]
+    enabled: true
+
+  - name: "Lattice Semiconductor"
+    category: "FPGA"
+    priority: "B"
+    careers_url: "https://job-boards.greenhouse.io/lattice"
+    ats_platform: "greenhouse"
+    greenhouse_board: "lattice"
+    search_keywords: ["verification", "rtl", "fpga", "design verification", "digital design"]
+    locations_of_interest: ["Hillsboro", "San Jose", "Remote"]
+    enabled: true
+
+  - name: "MatX"
+    category: "AI Accelerator"
+    priority: "A"
+    careers_url: "https://job-boards.greenhouse.io/matx"
+    ats_platform: "greenhouse"
+    greenhouse_board: "matx"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "soc"]
+    locations_of_interest: ["Mountain View", "Remote"]
+    enabled: true
+
+  - name: "Lemurian Labs"
+    category: "AI Accelerator"
+    priority: "B"
+    careers_url: "https://job-boards.greenhouse.io/lemurianlabs"
+    ats_platform: "greenhouse"
+    greenhouse_board: "lemurianlabs"
+    search_keywords: ["verification", "rtl", "design verification", "asic"]
+    locations_of_interest: ["Remote", "United States"]
+    enabled: true
+
+  - name: "Baya Systems"
+    category: "AI Accelerator"
+    priority: "B"
+    careers_url: "https://job-boards.greenhouse.io/bayasystems"
+    ats_platform: "greenhouse"
+    greenhouse_board: "bayasystems"
+    search_keywords: ["verification", "rtl", "design verification", "noc", "soc", "interconnect"]
+    locations_of_interest: ["San Jose", "Remote"]
+    enabled: true
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  ✅ VERIFIED — LEVER
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "Eliyan"
+    category: "AI Accelerator"
+    priority: "B"
+    careers_url: "https://jobs.lever.co/eliyan"
+    ats_platform: "lever"
+    lever_company: "eliyan"
+    search_keywords: ["verification", "rtl", "design verification", "chiplet", "soc"]
+    locations_of_interest: ["Santa Clara", "Remote"]
+    enabled: true
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  ✅ VERIFIED — ASHBY
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "d-Matrix"
+    category: "AI Accelerator"
+    priority: "A"
+    careers_url: "https://jobs.ashbyhq.com/d-matrix"
+    ats_platform: "ashby"
+    ashby_org: "d-matrix"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "in-memory", "soc"]
+    locations_of_interest: ["Santa Clara", "Remote"]
+    enabled: true
+
+  - name: "Etched"
+    category: "AI Accelerator"
+    priority: "A"
+    careers_url: "https://jobs.ashbyhq.com/Etched"
+    ats_platform: "ashby"
+    ashby_org: "Etched"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "transformer", "soc"]
+    locations_of_interest: ["Cupertino", "Remote"]
+    enabled: true
+
+  - name: "Rain AI"
+    category: "AI Accelerator"
+    priority: "B"
+    careers_url: "https://jobs.ashbyhq.com/rain"
+    ats_platform: "ashby"
+    ashby_org: "rain"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "soc"]
+    locations_of_interest: ["San Diego", "Remote", "United States"]
+    enabled: true
+
+  - name: "Axelera AI"
+    category: "AI Accelerator"
+    priority: "B"
+    careers_url: "https://jobs.ashbyhq.com/axelera"
+    ats_platform: "ashby"
+    ashby_org: "axelera"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "soc"]
+    locations_of_interest: ["Remote", "United States", "Europe"]
+    enabled: true
+
+  # ═════════════════════════════════════════════════════════════════════════
+  #  ⛔ DISABLED — need a dedicated scraper or corrected endpoint
+  #  (kept so they are visible in the Companies directory as "needs work")
+  # ═════════════════════════════════════════════════════════════════════════
+
+  # Workday tenants that hard-block server-side requests (HTTP 422 anti-bot),
+  # or have moved ATS. Re-enable once a verified config / proxy is available.
+  - name: "AMD"
+    category: "S-Tier"
+    priority: "S"
+    careers_url: "https://careers.amd.com/careers-home/jobs"
+    ats_platform: "icims"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga"]
+    notes: "Moved to iCIMS (careers-amd.icims.com) — needs dedicated iCIMS scraper."
+    enabled: false
+
+  - name: "Qualcomm"
+    category: "S-Tier"
+    priority: "S"
+    careers_url: "https://careers.qualcomm.com/careers"
+    ats_platform: "workday"
+    workday_tenant: "qualcomm"
+    workday_instance: "wd5"
+    workday_career_site: "External"
+    search_keywords: ["verification", "rtl", "asic", "modem", "design verification"]
+    notes: "Workday CXS returns 422 (anti-bot). Needs proxy or alternate source."
+    enabled: false
+
+  - name: "Arm"
+    category: "Tier1"
+    priority: "A"
+    careers_url: "https://careers.arm.com/en/jobs"
+    ats_platform: "workday"
+    workday_tenant: "arm"
+    workday_instance: "wd1"
+    workday_career_site: "Arm_External_Careers"
+    search_keywords: ["verification", "rtl", "cpu", "gpu", "design verification"]
+    notes: "Workday CXS returns 422 (anti-bot)."
+    enabled: false
+
+  - name: "Synopsys"
+    category: "EDA"
+    priority: "A"
+    careers_url: "https://synopsys.wd1.myworkdayjobs.com/Synopsys"
+    ats_platform: "workday"
+    workday_tenant: "synopsys"
+    workday_instance: "wd1"
+    workday_career_site: "Synopsys"
+    search_keywords: ["verification", "rtl", "eda", "design verification"]
+    notes: "Workday CXS returns 422 (anti-bot)."
+    enabled: false
+
+  - name: "Samsung Semiconductor"
+    category: "Tier1"
+    priority: "A"
+    careers_url: "https://semiconductor.samsung.com/us/careers/jobs/"
+    ats_platform: "workday"
+    workday_tenant: "samsungsemiconductor"
+    workday_instance: "wd1"
+    workday_career_site: "Samsung_Semiconductor_Careers"
+    search_keywords: ["verification", "rtl", "asic", "design verification"]
+    notes: "Workday CXS returns 422 (anti-bot)."
+    enabled: false
+
+  - name: "Western Digital"
+    category: "Storage"
+    priority: "B"
+    careers_url: "https://westerndigital.wd1.myworkdayjobs.com/External"
+    ats_platform: "workday"
+    workday_tenant: "westerndigital"
+    workday_instance: "wd1"
+    workday_career_site: "External"
+    search_keywords: ["verification", "rtl", "design verification", "storage", "soc"]
+    notes: "Workday CXS returns 422 (anti-bot)."
+    enabled: false
+
+  - name: "Cisco"
+    category: "Networking"
+    priority: "A"
+    careers_url: "https://jobs.cisco.com/jobs/SearchJobs"
+    ats_platform: "workday"
+    workday_tenant: "cisco"
+    workday_instance: "wd5"
+    workday_career_site: "Cisco"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "silicon"]
+    notes: "Workday career-site name unverified (404). Needs correct site slug."
+    enabled: false
+
+  # Greenhouse/Ashby boards whose slug could not be auto-resolved.
+  - name: "Groq"
+    category: "AI Accelerator"
+    priority: "A"
+    careers_url: "https://groq.com/careers/"
+    ats_platform: "greenhouse"
+    greenhouse_board: "groq"
+    search_keywords: ["verification", "rtl", "design verification", "asic"]
+    notes: "Greenhouse board slug returns 404 — needs verified slug."
+    enabled: false
+
+  - name: "SiFive"
+    category: "RISC-V"
+    priority: "A"
+    careers_url: "https://www.sifive.com/careers"
+    ats_platform: "greenhouse"
+    greenhouse_board: "sifive"
+    search_keywords: ["verification", "rtl", "design verification", "risc-v", "cpu"]
+    notes: "Greenhouse board slug returns 404 — needs verified slug."
+    enabled: false
+
+  - name: "Arista Networks"
+    category: "Networking"
+    priority: "A"
+    careers_url: "https://www.arista.com/en/careers"
+    ats_platform: "greenhouse"
+    greenhouse_board: "arista"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga"]
+    notes: "Greenhouse board slug returns 404 — needs verified slug."
+    enabled: false
+
+  - name: "Synaptics"
+    category: "Tier1"
+    priority: "B"
+    careers_url: "https://www.synaptics.com/careers"
+    ats_platform: "greenhouse"
+    greenhouse_board: "synaptics"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "soc"]
+    notes: "Greenhouse board slug returns 404 — needs verified slug."
+    enabled: false
+
+  # Non-API custom career sites (iCIMS / Phenom / Eightfold / in-house).
+  # These require a dedicated, robust scraper — intentionally disabled to keep
+  # the dashboard 100% error-free per the API-only strategy.
+  - name: "Apple"
+    category: "S-Tier"
+    priority: "S"
+    careers_url: "https://jobs.apple.com/en-us/search"
+    ats_platform: "apple"
+    search_keywords: ["verification engineer", "rtl", "silicon", "asic", "design verification"]
+    notes: "Custom jobs.apple.com — needs dedicated Apple jobs API scraper."
+    enabled: false
+
+  - name: "Google"
+    category: "Hyperscaler"
+    priority: "S"
+    careers_url: "https://www.google.com/about/careers/applications/jobs/results/"
+    ats_platform: "google"
+    search_keywords: ["hardware engineer", "silicon", "asic", "verification", "rtl", "tpu"]
+    notes: "Custom careers site — needs dedicated scraper."
+    enabled: false
+
+  - name: "Amazon"
+    category: "Hyperscaler"
+    priority: "S"
+    careers_url: "https://www.amazon.jobs/en/search"
+    ats_platform: "amazon"
+    search_keywords: ["silicon", "verification", "rtl", "asic", "annapurna", "trainium"]
+    notes: "amazon.jobs JSON — needs dedicated scraper."
+    enabled: false
+
+  - name: "Microsoft"
+    category: "Hyperscaler"
+    priority: "A"
+    careers_url: "https://careers.microsoft.com/us/en/search-results"
+    ats_platform: "microsoft"
+    search_keywords: ["silicon engineer", "hardware verification", "asic", "fpga", "rtl"]
+    notes: "Custom careers site — needs dedicated scraper."
+    enabled: false
+
+  - name: "Meta"
+    category: "Hyperscaler"
+    priority: "A"
+    careers_url: "https://www.metacareers.com/jobs"
+    ats_platform: "meta"
+    search_keywords: ["silicon", "asic", "hardware verification", "rtl", "mtia"]
+    notes: "metacareers GraphQL — needs dedicated scraper."
+    enabled: false
