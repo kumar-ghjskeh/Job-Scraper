@@ -607,6 +607,63 @@ def detect_experience_level(title: str, description: str = "") -> str:
     return ExperienceLevel.unknown
 
 
+def classify_seniority(title: str, description: str = "") -> tuple[str, int]:
+    """Granular seniority classification with a confidence score (0-100).
+
+    Returns one of: New Grad, Entry Level, Junior, Associate, Mid-Level,
+    Senior, Staff, Principal, Lead, Manager, Unknown.
+    Title signals are high-confidence; years-of-experience inference is medium;
+    a bare guess is low. This is more precise than the legacy buckets and is
+    what the UI shows + filters on.
+    """
+    t = title.lower()
+    c = (title + " " + description).lower()
+
+    # ── Title-explicit signals (most senior wins) ──
+    if re.search(r"\b(manager|director|head of|vice president)\b", t) or re.search(r"\bvp\b", t):
+        return "Manager", 95
+    if re.search(r"\b(principal|distinguished|fellow)\b", t):
+        return "Principal", 95
+    if re.search(r"\bstaff\b", t):
+        return "Staff", 94
+    if re.search(r"\b(tech(nical)? lead|\blead\b)\b", t):
+        return "Lead", 88
+    if re.search(r"\b(senior|sr\.?)\b", t):
+        return "Senior", 92
+    if re.search(r"\b(new\s+grad|new\s+college\s+grad|recent\s+graduate|university\s+grad(uate)?|early\s+career|campus)\b", c):
+        return "New Grad", 92
+    if re.search(r"\bassociate\b", t):
+        return "Associate", 84
+    if re.search(r"\b(junior|jr\.?)\b", t):
+        return "Junior", 86
+    if re.search(r"\bentry[\s-]level\b", c):
+        return "Entry Level", 86
+    if re.search(r"\bengineer\s+(i|1)\b", t) or re.search(r"\b\w+\s+engineer\s+i\b", t):
+        return "Entry Level", 80
+    if re.search(r"\bengineer\s+(ii|2)\b", t):
+        return "Mid-Level", 78
+
+    # ── Years-of-experience inference (medium confidence) ──
+    ymin, _ = detect_years_required(c)
+    if ymin is not None:
+        if ymin >= 8:
+            return "Principal", 68
+        if ymin >= 5:
+            return "Senior", 74
+        if ymin >= 3:
+            return "Mid-Level", 70
+        if ymin <= 2:
+            return "Entry Level", 66
+    if re.search(r"\b0[\s-]?(to|-)[\s-]?[123]\b|\b0-[123]\s*year", c):
+        return "Entry Level", 72
+
+    # ── Description-only new-grad hints (low-medium) ──
+    if re.search(r"\b(graduate engineer|associate engineer|junior engineer)\b", c):
+        return "Entry Level", 60
+
+    return "Unknown", 30
+
+
 def classify_seniority_flags(title: str, description: str = "") -> tuple[bool, bool]:
     """Return (is_entry_level, is_senior)."""
     exp = detect_experience_level(title, description)

@@ -22,6 +22,12 @@ _MIGRATIONS: list[tuple[str, str, str]] = [
     ("job_postings", "data_quality_status",          "TEXT NOT NULL DEFAULT ''"),
     ("job_postings", "eligibility_risk",             "TEXT NOT NULL DEFAULT ''"),
     ("job_postings", "eligibility_terms",            "TEXT NOT NULL DEFAULT ''"),
+    ("job_postings", "seniority_confidence",         "INTEGER NOT NULL DEFAULT 0"),
+    ("job_postings", "classification_confidence",    "INTEGER NOT NULL DEFAULT 0"),
+    ("job_postings", "data_quality_score",           "INTEGER NOT NULL DEFAULT 0"),
+    ("job_postings", "source_reliability",           "TEXT NOT NULL DEFAULT ''"),
+    ("job_postings", "location_label",               "TEXT NOT NULL DEFAULT ''"),
+    ("job_postings", "posted_date_known",            "INTEGER NOT NULL DEFAULT 0"),
     # Company new fields
     ("companies",    "company_search_url",           "TEXT NOT NULL DEFAULT ''"),
 ]

@@ -84,8 +84,14 @@ function ResultsSummary({ tab, loading, total, page, totalPages, analytics }: {
         <div style={{ display: 'flex', gap: 14, marginTop: 6, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-secondary)' }}>
           <span><strong style={{ color: 'var(--success)' }}>{analytics.new_24h}</strong> new today</span>
           <span><strong style={{ color: 'var(--accent-gold)' }}>{analytics.high_score_count}</strong> high-fit</span>
-          <span><strong style={{ color: 'var(--primary)' }}>{analytics.entry_level_count}</strong> new-grad</span>
+          <span><strong style={{ color: 'var(--primary)' }}>{analytics.strict_entry_count ?? analytics.entry_level_count}</strong> truly entry-level</span>
           <span><strong style={{ color: 'var(--text-primary)' }}>{analytics.total_companies}</strong> companies tracked</span>
+        </div>
+      )}
+      {!loading && tab === 'entry-level' && analytics && (
+        <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
+          <strong style={{ color: 'var(--teal)' }}>{analytics.strict_entry_count ?? 0}</strong> explicitly entry-level ·{' '}
+          <strong style={{ color: 'var(--primary)' }}>{analytics.candidate_friendly_count ?? 0}</strong> likely-junior (non-senior RTL/DV at top companies — check each job's seniority confidence)
         </div>
       )}
     </div>

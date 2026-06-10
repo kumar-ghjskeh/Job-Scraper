@@ -301,8 +301,12 @@ export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
             <MetaRow label="Priority" value={`${job.company_priority}-Tier`} />
             <MetaRow label="Role Category" value={job.role_category} />
             <MetaRow label="Experience" value={job.experience_level} />
-            <MetaRow label="Remote Status" value={job.remote_status} />
+            <MetaRow label="Work Mode" value={job.location_label || job.remote_status} />
             <MetaRow label="ATS Platform" value={job.ats_platform} />
+            <MetaRow label="Source Reliability" value={job.source_reliability} />
+            <MetaRow label="Seniority Confidence" value={job.seniority_confidence ? `${job.seniority_confidence}%` : '—'} />
+            <MetaRow label="Classification Conf." value={job.classification_confidence ? `${job.classification_confidence}%` : '—'} />
+            <MetaRow label="Data Quality" value={job.data_quality_score ? `${job.data_quality_score}%` : '—'} />
             <MetaRow label="Country" value={job.country || (job.is_usa ? 'USA' : '—')} />
             <MetaRow label="State" value={job.state} />
             {job.years_required_min !== null && (
@@ -315,9 +319,12 @@ export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
             <MetaRow label="Company Category" value={job.company_category} />
             <MetaRow label="First Seen" value={fmt(job.first_seen_at)} />
             <MetaRow label="Last Seen" value={fmt(job.last_seen_at)} />
-            {job.posted_date && (
-              <MetaRow label="Posted Date" value={fmt(job.posted_date)} />
-            )}
+            <MetaRow
+              label="Posted Date"
+              value={job.posted_date_known && job.posted_date
+                ? fmt(job.posted_date)
+                : 'Unknown — using first-seen'}
+            />
             {job.saved_at && (
               <MetaRow label="Saved On" value={fmt(job.saved_at)} />
             )}

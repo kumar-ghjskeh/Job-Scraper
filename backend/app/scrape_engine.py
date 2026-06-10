@@ -16,10 +16,16 @@ from .eligibility import detect_eligibility_risk
 from .location_utils import parse_location
 from .models import ActiveStatus, Company, JobPosting, ScrapeError, ScrapeRun
 from .scrapers import get_scraper
+from .quality import (
+    canonical_location_label,
+    compute_data_quality,
+    source_reliability,
+)
 from .scoring import (
     build_relevance_reason,
     calculate_match_score,
     classify_role_flags,
+    classify_seniority,
     classify_seniority_flags,
     detect_experience_level,
     detect_remote_status,
@@ -155,6 +161,24 @@ async def run_scrape(triggered_by: str = "scheduler") -> ScrapeRun:
                         relevance = build_relevance_reason(raw.job_title, cleaned_desc, breakdown)
                         elig_risk, elig_terms = detect_eligibility_risk(cleaned_desc)
 
+                        # Phase 2: granular seniority, location label, data quality
+                        sen_level, sen_conf = classify_seniority(raw.job_title, cleaned_desc)
+                        role_known = bool(role_cat) and role_cat != "Unknown"
+                        src_rel = source_reliability(company_cfg.get("ats_platform", ""))
+                        posted_known = raw.posted_date is not None
+                        loc_label = canonical_location_label(
+                            raw.location, loc_result.is_usa, loc_result.is_remote_usa,
+                            remote_status, loc_result.confidence,
+                        )
+                        dq_score, class_conf = compute_data_quality(
+                            has_description=bool(cleaned_desc),
+                            location_confidence=loc_result.confidence,
+                            posted_known=posted_known,
+                            apply_status=url_result.apply_url_status,
+                            role_known=role_known,
+                            seniority_confidence=sen_conf,
+                        )
+
                         import json
                         job = JobPosting(
                             company=company_name,
@@ -163,7 +187,7 @@ async def run_scrape(triggered_by: str = "scheduler") -> ScrapeRun:
                             job_title=raw.job_title,
                             normalized_title=normalize_title(raw.job_title),
                             role_category=role_cat,
-                            experience_level=exp,
+                            experience_level=sen_level,
                             is_entry_level=is_entry,
                             is_candidate_friendly=is_cand_friendly,
                             is_senior=is_senior,
@@ -205,6 +229,12 @@ async def run_scrape(triggered_by: str = "scheduler") -> ScrapeRun:
                             data_quality_status="ok" if cleaned_desc else "no_description",
                             eligibility_risk=elig_risk,
                             eligibility_terms=", ".join(elig_terms),
+                            seniority_confidence=sen_conf,
+                            classification_confidence=class_conf,
+                            data_quality_score=dq_score,
+                            source_reliability=src_rel,
+                            location_label=loc_label,
+                            posted_date_known=posted_known,
                         )
                         session.add(job)
                         session.commit()

@@ -20,6 +20,8 @@ const QUICK_KWS = [
   'PCIe', 'AXI', 'CXL', 'CPU', 'GPU',
 ]
 const US_STATES = ['CA', 'TX', 'WA', 'MA', 'NY', 'AZ', 'OR', 'CO', 'GA', 'IL', 'PA', 'VA', 'NC', 'MN']
+const SENIORITY_LEVELS = ['New Grad', 'Entry Level', 'Junior', 'Associate', 'Mid-Level', 'Senior', 'Staff', 'Principal', 'Lead', 'Manager']
+const SENIOR_TIER = new Set(['Senior', 'Staff', 'Principal', 'Lead', 'Manager'])
 
 const inp: React.CSSProperties = {
   width: '100%', background: 'var(--surface)',
@@ -71,6 +73,17 @@ export function FilterSidebar({ filters, onChange, totalCount }: Props) {
 
   const set = (k: keyof Filters, v: unknown) =>
     onChange({ ...filters, [k]: v === '' ? undefined : v })
+
+  const selectedLevels = filters.level_filter ? filters.level_filter.split(',').filter(Boolean) : []
+  function toggleLevel(lv: string) {
+    const next = selectedLevels.includes(lv) ? selectedLevels.filter((x) => x !== lv) : [...selectedLevels, lv]
+    const needSenior = next.some((l) => SENIOR_TIER.has(l))
+    onChange({
+      ...filters,
+      level_filter: next.join(',') || undefined,
+      include_senior: needSenior ? true : filters.include_senior,
+    })
+  }
 
   const hasFilters = Object.entries(filters).some(([k, v]) => {
     if (k === 'usa_only' && v === true) return false
@@ -171,6 +184,30 @@ export function FilterSidebar({ filters, onChange, totalCount }: Props) {
           </div>
         </div>
 
+        {/* Seniority */}
+        <div style={{ marginBottom: 16 }}>
+          <SectionHead title="Seniority" />
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {SENIORITY_LEVELS.map((lv) => {
+              const sel = selectedLevels.includes(lv)
+              return (
+                <button
+                  key={lv}
+                  onClick={() => toggleLevel(lv)}
+                  style={{
+                    border: sel ? '1px solid var(--primary-mid)' : '1px solid var(--border)',
+                    background: sel ? 'var(--primary-light)' : 'var(--surface-muted)',
+                    color: sel ? 'var(--primary)' : 'var(--text-secondary)',
+                    borderRadius: 999, padding: '3px 9px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  {lv}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         {/* Role Category */}
         <div style={{ marginBottom: 16 }}>
           <SectionHead title="Role Category" />
@@ -251,10 +288,15 @@ export function FilterSidebar({ filters, onChange, totalCount }: Props) {
             style={inp}
           >
             <option value="">All time</option>
+            <option value="1">Last 1 hour</option>
+            <option value="3">Last 3 hours</option>
             <option value="6">Last 6 hours</option>
+            <option value="12">Last 12 hours</option>
             <option value="24">Last 24 hours</option>
-            <option value="48">Last 48 hours</option>
+            <option value="72">Last 3 days</option>
             <option value="168">Last 7 days</option>
+            <option value="336">Last 14 days</option>
+            <option value="720">Last 30 days</option>
           </select>
         </div>
 

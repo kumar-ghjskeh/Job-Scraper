@@ -155,6 +155,14 @@ class JobPosting(SQLModel, table=True):
     eligibility_risk: str = ""    # low | medium | high
     eligibility_terms: str = ""   # comma-separated matched categories
 
+    # ── Classification confidence & data quality (Phase 2) ───────
+    seniority_confidence: int = 0       # 0-100
+    classification_confidence: int = 0  # 0-100
+    data_quality_score: int = 0         # 0-100
+    source_reliability: str = ""        # High | Medium | Low
+    location_label: str = ""            # Onsite | Hybrid | Remote - USA | …
+    posted_date_known: bool = False     # True if posted_date came from source
+
     @property
     def sponsors_h1b(self) -> Optional[bool]:
         """Company-level H1B sponsorship signal (read by the API response)."""

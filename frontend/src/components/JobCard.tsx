@@ -26,16 +26,17 @@ function scoreLabel(s: number) {
 function expPill(level: string): string {
   switch (level) {
     case 'New Grad': return 'pill-success'
-    case 'Entry Level': return 'pill-teal'
-    case '0-3 Years': return 'pill-primary'
-    case 'Candidate Friendly': return 'pill-teal'
-    case 'Senior': return 'pill-danger'
+    case 'Entry Level': case 'Junior': return 'pill-teal'
+    case 'Associate': case '0-3 Years': case 'Candidate Friendly': return 'pill-primary'
+    case 'Mid-Level': return 'pill-neutral'
+    case 'Senior': case 'Staff': case 'Principal': case 'Lead': case 'Manager': return 'pill-danger'
     default: return 'pill-neutral'
   }
 }
-function remotePill(r: string): string {
-  if (r === 'Remote') return 'pill-success'
-  if (r === 'Hybrid') return 'pill-warning'
+function locationPill(label: string): string {
+  if (label === 'Remote - USA') return 'pill-success'
+  if (label === 'Hybrid') return 'pill-warning'
+  if (label === 'Multi-location USA') return 'pill-primary'
   return 'pill-neutral'
 }
 const isNew = (d: string) => Date.now() - new Date(d).getTime() < 24 * 60 * 60 * 1000
@@ -100,9 +101,11 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
             )}
           </span>
         )}
-        {job.remote_status && job.remote_status !== 'Unknown' && (
-          <span className={`pill ${remotePill(job.remote_status)}`}>{job.remote_status}</span>
-        )}
+        {job.location_label && job.location_label !== 'Location Unknown' ? (
+          <span className={`pill ${locationPill(job.location_label)}`}>{job.location_label}</span>
+        ) : job.remote_status && job.remote_status !== 'Unknown' ? (
+          <span className={`pill ${locationPill(job.remote_status)}`}>{job.remote_status}</span>
+        ) : null}
         {job.experience_level && job.experience_level !== 'Unknown' && (
           <span className={`pill ${expPill(job.experience_level)}`}>{job.experience_level}</span>
         )}
@@ -138,7 +141,9 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
           {job.active_status === 'applied' && <span style={{ fontSize: 11.5, color: 'var(--success)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}><Icon name="checkCircle" size={12} color="var(--success)" /> Applied</span>}
           {job.active_status === 'ignored' && <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontWeight: 600 }}>Ignored</span>}
           <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
-            {fresh ? 'first seen ' : ''}{new Date(job.first_seen_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            {job.posted_date_known && job.posted_date
+              ? `Posted ${new Date(job.posted_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+              : `first seen ${new Date(job.first_seen_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
           </span>
         </div>
 

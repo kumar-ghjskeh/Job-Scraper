@@ -71,6 +71,14 @@ export interface Job {
   eligibility_risk?: string        // 'low' | 'medium' | 'high'
   eligibility_terms?: string       // matched terms, comma-separated
   sponsors_h1b?: boolean | null    // company-level H1B sponsorship signal
+
+  // Classification confidence & data quality (Phase 2)
+  seniority_confidence?: number
+  classification_confidence?: number
+  data_quality_score?: number
+  source_reliability?: string      // 'High' | 'Medium' | 'Low'
+  location_label?: string          // Onsite | Hybrid | Remote - USA | Multi-location USA | …
+  posted_date_known?: boolean
 }
 
 export interface PaginatedResponse<T> {
@@ -138,6 +146,8 @@ export interface AnalyticsSummary {
   saved_count: number
   applied_count: number
   total_companies: number
+  strict_entry_count?: number
+  candidate_friendly_count?: number
   last_run: ScrapeRun | null
 }
 
@@ -159,6 +169,7 @@ export interface Filters {
   role_flags?: string
   is_entry_level?: boolean
   state?: string
+  level_filter?: string
   sort_by?: string
   sort_order?: string
 }

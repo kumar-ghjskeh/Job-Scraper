@@ -149,6 +149,13 @@ class JobResponse(BaseModel):
     eligibility_risk: str = ""
     eligibility_terms: str = ""
     sponsors_h1b: Optional[bool] = None
+    # Classification confidence & data quality (Phase 2)
+    seniority_confidence: int = 0
+    classification_confidence: int = 0
+    data_quality_score: int = 0
+    source_reliability: str = ""
+    location_label: str = ""
+    posted_date_known: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -917,6 +924,18 @@ def analytics_summary(session: SessionDep):
         (JobPosting.is_entry_level == True) | (JobPosting.is_candidate_friendly == True),
         JobPosting.is_senior == False,
     ])
+    # Honest split: explicitly entry-level vs. inferred "likely junior"
+    strict_entry = count([
+        JobPosting.active_status == ActiveStatus.active,
+        JobPosting.is_entry_level == True,
+        JobPosting.is_senior == False,
+    ])
+    candidate_friendly = count([
+        JobPosting.active_status == ActiveStatus.active,
+        JobPosting.is_candidate_friendly == True,
+        JobPosting.is_entry_level == False,
+        JobPosting.is_senior == False,
+    ])
     usa_count = count([JobPosting.active_status == ActiveStatus.active, JobPosting.is_usa == True])
     remote_count = count([
         JobPosting.active_status == ActiveStatus.active,
@@ -935,6 +954,8 @@ def analytics_summary(session: SessionDep):
         "total_active": total_active,
         "new_24h": new_24h,
         "entry_level_count": entry_level,
+        "strict_entry_count": strict_entry,
+        "candidate_friendly_count": candidate_friendly,
         "usa_count": usa_count,
         "remote_count": remote_count,
         "high_score_count": high_score,

@@ -45,7 +45,7 @@ export function SummaryCards({ analytics }: Props) {
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
       <Card label="Verified Active" value={analytics.total_active}      color="var(--success)" icon="checkCircle" sub="Company-direct roles" />
       <Card label="New in 24h"      value={analytics.new_24h}           color="var(--primary)" icon="sparkles" sub={analytics.new_24h > 0 ? 'Fresh postings' : 'No new postings'} />
-      <Card label="True Entry-Level" value={analytics.entry_level_count} color="var(--teal)"    icon="graduation" sub="New grad / entry" />
+      <Card label="True Entry-Level" value={analytics.strict_entry_count ?? analytics.entry_level_count} color="var(--teal)" icon="graduation" sub={`+${analytics.candidate_friendly_count ?? 0} likely-junior`} />
       <Card label="USA Jobs"        value={analytics.usa_count}          color="var(--text-primary)" icon="globe" sub="incl. Remote-USA" />
       <Card label="High Priority"   value={analytics.high_score_count}   color="var(--accent-gold)" icon="star" sub="Score ≥ 70" />
       <Card label="Remote"          value={analytics.remote_count}       color="var(--teal)"    icon="home" />

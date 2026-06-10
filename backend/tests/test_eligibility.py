@@ -1,6 +1,11 @@
 """Tests for eligibility/export-control risk detection and H1B signal."""
 
-from app.eligibility import detect_eligibility_risk, sponsors_h1b
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parents[2]))
+
+from backend.app.eligibility import detect_eligibility_risk, sponsors_h1b
 
 
 def test_high_risk_citizenship():
