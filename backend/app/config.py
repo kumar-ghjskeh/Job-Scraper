@@ -68,8 +68,17 @@ def _load_yaml(path: Path) -> dict:
 
 
 def load_companies() -> list[dict]:
+    """Enabled companies only — used by the scraper."""
     data = _load_yaml(CONFIG_DIR / "companies.yaml")
     return [c for c in data.get("companies", []) if c.get("enabled", True)]
+
+
+def load_all_companies() -> list[dict]:
+    """Every company (enabled + disabled 'Direct search') — used to seed the
+    directory so the Companies page lists all of them, with the unscrapable ones
+    linking out to their careers site."""
+    data = _load_yaml(CONFIG_DIR / "companies.yaml")
+    return list(data.get("companies", []))
 
 
 def load_keywords() -> dict:

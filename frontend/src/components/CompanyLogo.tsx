@@ -25,6 +25,17 @@ const DOMAINS: Record<string, string> = {
   'microchip technology': 'microchip.com', 'rtx': 'rtx.com', 'rambus': 'rambus.com',
   'seagate': 'seagate.com', 'texas instruments': 'ti.com', 'untether ai': 'untether.ai',
   'hcltech': 'hcltech.com', 'wipro': 'wipro.com', 'mediatek': 'mediatek.com',
+  // Expanded directory (75+ companies)
+  'globalfoundries': 'gf.com', 'renesas electronics': 'renesas.com',
+  'infineon technologies': 'infineon.com', 'stmicroelectronics': 'st.com',
+  'cadence design systems': 'cadence.com', 'skyworks solutions': 'skyworksinc.com',
+  'qorvo': 'qorvo.com', 'onsemi': 'onsemi.com', 'cirrus logic': 'cirrus.com',
+  'silicon labs': 'silabs.com', 'ambarella': 'ambarella.com', 'wolfspeed': 'wolfspeed.com',
+  'teradyne': 'teradyne.com', 'ampere computing': 'amperecomputing.com', 'kioxia': 'kioxia.com',
+  'sk hynix': 'skhynix.com', 'tsmc': 'tsmc.com', 'ayar labs': 'ayarlabs.com',
+  'rivos': 'rivosinc.com', 'sima.ai': 'sima.ai', 'recogni': 'recogni.com',
+  'mythic': 'mythic.ai', 'blaize': 'blaize.com', 'flex logix': 'flex-logix.com',
+  'quadric': 'quadric.io', 'expedera': 'expedera.com', 'tesla': 'tesla.com',
 }
 
 // Resilient logo sources, tried in order. icon.horse returns the real brand logo

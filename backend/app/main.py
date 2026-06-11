@@ -36,10 +36,12 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     init_db()
-    from .config import load_companies
+    from .config import load_all_companies
     from .database import engine
+    # Seed the directory with EVERY company (enabled + disabled "Direct search"),
+    # so the Companies page always lists them all and keeps their config in sync.
     with Session(engine) as session:
-        for cfg in load_companies():
+        for cfg in load_all_companies():
             existing = session.exec(select(Company).where(Company.name == cfg["name"])).first()
             if not existing:
                 session.add(Company(
@@ -52,9 +54,12 @@ async def startup():
                     enabled=cfg.get("enabled", True),
                 ))
             else:
-                # Update mutable config fields on existing company records
+                # Keep mutable config fields in sync with the YAML.
+                existing.category = cfg.get("category", existing.category)
+                existing.priority = cfg.get("priority", existing.priority)
                 existing.careers_url = cfg.get("careers_url", existing.careers_url)
                 existing.company_search_url = cfg.get("company_search_url", getattr(existing, "company_search_url", ""))
+                existing.ats_platform = cfg.get("ats_platform", existing.ats_platform)
                 existing.enabled = cfg.get("enabled", existing.enabled)
                 session.add(existing)
         session.commit()
