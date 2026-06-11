@@ -4,8 +4,8 @@
   "description": "USA RTL, DV, ASIC, SoC, FPGA & DFT jobs — verified and resume-matched.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0B0E14",
-  "theme_color": "#4F46E5",
+  "background_color": "#0A0E1A",
+  "theme_color": "#2563EB",
   "icons": [
     { "src": "/ashborne-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/ashborne-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }

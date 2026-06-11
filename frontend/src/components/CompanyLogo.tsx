@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 // Known company → primary domain (for logo fetch). Unknown → letter fallback.
 const DOMAINS: Record<string, string> = {
@@ -15,6 +15,17 @@ const DOMAINS: Record<string, string> = {
   'samsung semiconductor': 'samsung.com', 'western digital': 'westerndigital.com', 'sifive': 'sifive.com',
   'groq': 'groq.com', 'arista networks': 'arista.com', 'synaptics': 'synaptics.com',
   'achronix': 'achronix.com', 'alphawave semi': 'awaveip.com', 'siemens eda': 'siemens.com',
+  'waymo': 'waymo.com',
+}
+
+// Resilient logo sources, tried in order. icon.horse returns the real brand logo
+// for both giants and startups (Clearbit's old API is discontinued); Google's
+// favicon service is the always-on fallback; then a letter tile.
+function sources(domain: string): string[] {
+  return [
+    `https://icon.horse/icon/${domain}`,
+    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+  ]
 }
 
 interface Props {
@@ -24,10 +35,11 @@ interface Props {
 }
 
 export function CompanyLogo({ company, size = 46, radius = 10 }: Props) {
-  const [failed, setFailed] = useState(false)
   const domain = DOMAINS[company.toLowerCase().trim()]
-  const letter = company.charAt(0).toUpperCase()
+  const [stage, setStage] = useState(0)
+  useEffect(() => { setStage(0) }, [domain])
 
+  const letter = company.charAt(0).toUpperCase()
   const fallback = (
     <div style={{
       width: size, height: size, borderRadius: radius, background: 'var(--primary-light)',
@@ -39,7 +51,8 @@ export function CompanyLogo({ company, size = 46, radius = 10 }: Props) {
     </div>
   )
 
-  if (!domain || failed) return fallback
+  const urls = domain ? sources(domain) : []
+  if (!domain || stage >= urls.length) return fallback
 
   return (
     <div style={{
@@ -48,11 +61,12 @@ export function CompanyLogo({ company, size = 46, radius = 10 }: Props) {
       justifyContent: 'center', flexShrink: 0, overflow: 'hidden',
     }}>
       <img
-        src={`https://logo.clearbit.com/${domain}?size=128`}
+        key={stage}
+        src={urls[stage]}
         alt={company}
-        width={size * 0.72} height={size * 0.72}
+        width={size * 0.74} height={size * 0.74}
         style={{ objectFit: 'contain' }}
-        onError={() => setFailed(true)}
+        onError={() => setStage((s) => s + 1)}
         loading="lazy"
       />
     </div>

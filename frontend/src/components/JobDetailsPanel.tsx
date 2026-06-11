@@ -161,7 +161,8 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
   } catch { /* ignore */ }
 
   const keywords = job.matched_keywords
-    ? job.matched_keywords.split(',').map((k) => k.trim()).filter(Boolean)
+    ? job.matched_keywords.split(',').map((k) => k.trim())
+        .filter((k) => k && !/^(usa|us|united states|priority-[a-d]|recent|fresh|new)$/i.test(k))
     : []
 
   const DETAIL_TABS: { id: DetailTab; label: string }[] = [
@@ -244,10 +245,9 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             <ScoreGauge value={job.match_score} label="Excellent Fit" color={sc} />
             {matchData && <ScoreGauge value={matchData.resume_match} label="Resume Match" color={matchColor(matchData.resume_match)} suffix="%" />}
-            {matchData && <ScoreGauge value={matchData.defensibility} label="Defensibility" color={matchColor(matchData.defensibility)} suffix="%" />}
             {!matchData && !matchLoading && (
               <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', maxWidth: 140, lineHeight: 1.45 }}>
-                Upload your resume in <strong style={{ color: 'var(--primary)' }}>Resume Matches</strong> for match &amp; defensibility scores.
+                Upload your resume in <strong style={{ color: 'var(--primary)' }}>Resume Matches</strong> to see your match score.
               </div>
             )}
           </div>
@@ -392,7 +392,6 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <MiniStat label="Resume Match" value={`${matchData.resume_match}%`} color={matchColor(matchData.resume_match)} />
-                  <MiniStat label="Defensibility" value={`${matchData.defensibility}%`} color={matchColor(matchData.defensibility)} />
                   <MiniStat label="Priority" value={matchData.apply_priority} color={priorityColor(matchData.apply_priority)} />
                 </div>
 
@@ -482,9 +481,9 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
             {/* Score explanation */}
             <div style={{
               background: 'var(--primary-light)',
-              border: '1px solid #BFDBFE',
+              border: '1px solid var(--primary-mid)',
               borderRadius: 8, padding: '10px 14px', marginBottom: 16,
-              fontSize: 12, color: '#1E40AF', lineHeight: 1.6,
+              fontSize: 12, color: 'var(--primary)', lineHeight: 1.6,
             }}>
               <strong>Job Relevance Score</strong> — Based on RTL/DV job relevance, title
               keywords, skills, company priority, seniority, USA location, and posting
@@ -535,8 +534,8 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
                     <div key={reason} style={{
                       display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', padding: '7px 12px',
-                      background: (pts as number) > 0 ? '#F0FDF4' : '#FEF2F2',
-                      border: `1px solid ${(pts as number) > 0 ? '#BBF7D0' : '#FECACA'}`,
+                      background: (pts as number) > 0 ? 'var(--success-light)' : 'var(--danger-light)',
+                      border: `1px solid ${(pts as number) > 0 ? 'var(--success-border)' : 'var(--danger-border)'}`,
                       borderRadius: 6,
                     }}>
                       <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>{reason}</span>
@@ -580,7 +579,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
               <div style={{
                 background: 'var(--primary-light)', border: '1px solid var(--primary-mid)',
                 borderRadius: 8, padding: '8px 12px', marginBottom: 14,
-                fontSize: 12, color: '#1E40AF', lineHeight: 1.6,
+                fontSize: 12, color: 'var(--primary)', lineHeight: 1.6,
               }}>
                 <strong>Why this job:</strong> {job.relevance_reason}
               </div>

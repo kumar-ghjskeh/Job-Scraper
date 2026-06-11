@@ -290,8 +290,29 @@ def _build_job_query(
     if level_filter:
         levels = [lv.strip() for lv in level_filter.split(',') if lv.strip()]
         if levels:
-            from sqlmodel import or_ as sql_or
-            conditions.append(sql_or(*[col(JobPosting.experience_level) == lv for lv in levels]))
+            from sqlmodel import and_ as sql_and, or_ as sql_or
+            # The seniority classifier only ever emits New Grad / Junior / Mid-Level /
+            # Senior / Staff / Principal / Lead / Manager (no "Entry Level"/"Associate"),
+            # so a plain label match leaves the early-career chips empty. Map the
+            # early-career chips onto the real entry/candidate-friendly signals.
+            level_conds = []
+            for lv in levels:
+                if lv == "New Grad":
+                    level_conds.append(col(JobPosting.experience_level) == "New Grad")
+                    level_conds.append(JobPosting.is_entry_level == True)  # noqa: E712
+                elif lv == "Entry Level":
+                    level_conds.append(col(JobPosting.experience_level).in_(["Entry Level", "New Grad"]))
+                    level_conds.append(JobPosting.is_entry_level == True)  # noqa: E712
+                elif lv in ("Junior", "Associate"):
+                    level_conds.append(col(JobPosting.experience_level) == lv)
+                    level_conds.append(sql_and(
+                        JobPosting.is_candidate_friendly == True,  # noqa: E712
+                        JobPosting.is_senior == False,             # noqa: E712
+                        JobPosting.is_entry_level == False,        # noqa: E712
+                    ))
+                else:
+                    level_conds.append(col(JobPosting.experience_level) == lv)
+            conditions.append(sql_or(*level_conds))
 
     if remote:
         conditions.append(col(JobPosting.remote_status).ilike(f"%{remote}%"))
@@ -309,8 +330,10 @@ def _build_job_query(
         else:
             conditions.append(JobPosting.is_usa == True)
 
-    # Senior filter (exclude by default)
-    if not include_senior:
+    # Senior filter (exclude by default) — but an explicit keyword search should
+    # surface ALL matching roles (e.g. searching a company name shows its senior
+    # roles too), so the senior gate is lifted whenever a keyword is present.
+    if not include_senior and not keyword:
         conditions.append(JobPosting.is_senior == False)
 
     if state:

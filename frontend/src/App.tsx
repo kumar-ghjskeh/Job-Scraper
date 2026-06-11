@@ -45,7 +45,33 @@ function SkeletonCard() {
   )
 }
 
-function EmptyState({ tab }: { tab: Tab }) {
+function EmptyState({ tab, query }: { tab: Tab; query?: string }) {
+  // Active company/keyword search that returned nothing → likely an untracked
+  // company (e.g. AMD). Be explicit and offer a direct careers search.
+  if (query && query.trim() && ['all', 'best', 'entry-level'].includes(tab)) {
+    const q = query.trim()
+    const careers = `https://www.google.com/search?q=${encodeURIComponent(`${q} RTL OR "design verification" OR ASIC jobs careers`)}`
+    return (
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '52px 24px', textAlign: 'center' }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: '50%', background: 'var(--surface-muted)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px',
+        }}>
+          <Icon name="search" size={26} color="var(--text-tertiary)" />
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
+          No tracked jobs match “{q}”
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 420, margin: '0 auto 16px', lineHeight: 1.6 }}>
+          We may not track this company yet, or it has no open RTL/DV roles right now.
+          You can search their careers site directly.
+        </div>
+        <a href={careers} target="_blank" rel="noopener noreferrer" className="btn btn-outline" style={{ textDecoration: 'none' }}>
+          Search “{q}” roles directly <Icon name="external" size={14} />
+        </a>
+      </div>
+    )
+  }
   const msgs: Partial<Record<Tab, { title: string; sub: string }>> = {
     'entry-level': { title: 'No new-grad jobs match your filters', sub: 'Try widening filters or refresh jobs to pull the latest postings.' },
     'saved': { title: 'No saved jobs', sub: 'Click the bookmark icon on any job to save it for later.' },
@@ -282,7 +308,7 @@ export default function App() {
                   {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
               ) : jobs.length === 0 ? (
-                <EmptyState tab={tab} />
+                <EmptyState tab={tab} query={filters.keyword} />
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }} className="animate-in">
                   {grouped.map((g) => (

@@ -23,10 +23,11 @@
   --border:          #E4E7EC;
   --border-strong:   #D3D8E0;
 
-  --primary:         #4F46E5;
-  --primary-hover:   #4338CA;
-  --primary-light:   #EEF0FE;
-  --primary-mid:     #D8DCFB;
+  --primary:         #2563EB;
+  --primary-hover:   #1D4ED8;
+  --primary-light:   #EAF1FE;
+  --primary-mid:     #C3D7FB;
+  --primary-glow:    0 6px 18px rgba(37,99,235,0.28);
 
   --success:         #15803D;
   --success-light:   #E6F4EA;
@@ -57,23 +58,25 @@
 
 /* ── Canonical semantic tokens — DARK ──────────────────────────────────── */
 :root[data-theme="dark"] {
-  --background:      #0B0E14;
-  --surface:         #141923;
-  --surface-muted:   #1B212D;
-  --surface-raised:  #1A2030;
+  /* Deep Space Navy — blue-black base with layered, blue-tinted surfaces */
+  --background:      #0A0E1A;
+  --surface:         #121829;
+  --surface-muted:   #161D30;
+  --surface-raised:  #19223A;
 
-  --text-primary:    #E8EBF0;
-  --text-secondary:  #9AA4B2;
-  --text-tertiary:   #6B7585;
+  --text-primary:    #E7ECF5;
+  --text-secondary:  #99A6BE;
+  --text-tertiary:   #65718B;
   --on-primary:      #FFFFFF;
 
-  --border:          #262D3A;
-  --border-strong:   #36404F;
+  --border:          #1E2841;
+  --border-strong:   #2C3A56;
 
-  --primary:         #6366F1;
-  --primary-hover:   #818CF8;
-  --primary-light:   rgba(99,102,241,0.16);
-  --primary-mid:     rgba(99,102,241,0.40);
+  --primary:         #3B82F6;
+  --primary-hover:   #60A5FA;
+  --primary-light:   rgba(59,130,246,0.16);
+  --primary-mid:     rgba(59,130,246,0.42);
+  --primary-glow:    0 6px 22px rgba(59,130,246,0.40);
 
   --success:         #34D399;
   --success-light:   rgba(52,211,153,0.14);
@@ -194,8 +197,8 @@ select option { background: var(--surface); color: var(--text-primary); }
   transition: background 0.14s, border-color 0.14s, color 0.14s;
   white-space: nowrap;
 }
-.btn-primary { background: var(--primary); color: var(--on-primary); }
-.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary { background: var(--primary); color: var(--on-primary); box-shadow: var(--primary-glow); }
+.btn-primary:hover { background: var(--primary-hover); box-shadow: var(--primary-glow); }
 .btn-outline { background: transparent; color: var(--primary); border-color: var(--primary); }
 .btn-outline:hover { background: var(--primary-light); }
 .btn-ghost { background: transparent; color: var(--text-secondary); border-color: var(--border-strong); }

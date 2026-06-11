@@ -52,8 +52,11 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
   const risk = job.eligibility_risk
   const h1b = job.sponsors_h1b
 
+  // Drop scoring artifacts (USA is the default, priority/recency aren't skills) so
+  // the chips read as real skills/protocols only.
+  const NOISE_KW = /^(usa|us|united states|priority-[a-d]|recent|fresh|new)$/i
   const keywords = job.matched_keywords
-    ? job.matched_keywords.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 6)
+    ? job.matched_keywords.split(',').map((k) => k.trim()).filter((k) => k && !NOISE_KW.test(k)).slice(0, 6)
     : []
   const snippet = job.cleaned_description || job.description_snippet || ''
 

@@ -98,12 +98,12 @@ def _render_html(d: dict) -> str:
         for j in items:
             extra = f" · <b>{j.get('resume_match')}% match</b>" if show_match and j.get("resume_match") is not None else ""
             out += (f'<tr><td style="padding:8px 0;border-bottom:1px solid #eee">'
-                    f'<a href="{j["url"]}" style="color:#4F46E5;text-decoration:none;font-weight:600">{j["title"]}</a><br>'
+                    f'<a href="{j["url"]}" style="color:#2563EB;text-decoration:none;font-weight:600">{j["title"]}</a><br>'
                     f'<span style="color:#666;font-size:13px">{j["company"]} · {j["location"]} · score {j["score"]}{extra}</span></td></tr>')
         return out or '<tr><td style="color:#888;padding:8px 0">None today.</td></tr>'
 
     return f"""<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:600px;margin:auto;color:#111">
-      <h2 style="color:#4F46E5">Ashborne Silicon — Daily VLSI Digest</h2>
+      <h2 style="color:#2563EB">Ashborne Silicon — Daily VLSI Digest</h2>
       <p style="color:#555">New in last 24h: <b>{c['new_24h']}</b> · High-fit (apply today): <b>{c['apply_today']}</b>
       · New grad: <b>{c['new_entry_level']}</b> · S-tier: <b>{c['new_stier']}</b>
       · Resume matches: <b>{c['high_resume_matches']}</b> · Eligibility-risk: <b>{c['eligibility_risk']}</b></p>
