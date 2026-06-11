@@ -365,12 +365,14 @@ companies:
   - name: "SiFive"
     category: "RISC-V"
     priority: "A"
-    careers_url: "https://www.sifive.com/careers"
-    ats_platform: "greenhouse"
-    greenhouse_board: "sifive"
+    careers_url: "https://sifive.wd1.myworkdayjobs.com/en-US/sifivecareers"
+    ats_platform: "workday"
+    workday_tenant: "sifive"
+    workday_instance: "wd1"
+    workday_career_site: "sifivecareers"
     search_keywords: ["verification", "rtl", "design verification", "risc-v", "cpu"]
-    notes: "Greenhouse board slug returns 404 — needs verified slug."
-    enabled: false
+    notes: "Workday (sifive.wd1) — verified live."
+    enabled: true
 
   - name: "Arista Networks"
     category: "Networking"
@@ -401,7 +403,7 @@ companies:
     careers_url: "https://jobs.apple.com/en-us/search"
     ats_platform: "apple"
     search_keywords: ["verification engineer", "rtl", "silicon", "asic", "design verification"]
-    notes: "Custom jobs.apple.com — needs dedicated Apple jobs API scraper."
+    notes: "jobs.apple.com role-search API was revamped (old endpoint 404s); needs a refreshed adapter. Use the careers link to search Apple Silicon directly."
     enabled: false
 
   - name: "Google"
@@ -410,7 +412,7 @@ companies:
     careers_url: "https://www.google.com/about/careers/applications/jobs/results/"
     ats_platform: "google"
     search_keywords: ["hardware engineer", "silicon", "asic", "verification", "rtl", "tpu"]
-    notes: "Custom careers site — needs dedicated scraper."
+    notes: "careers.google.com v3 search API was retired (404); needs a refreshed adapter. Use the careers link for Google Silicon / TPU roles."
     enabled: false
 
   - name: "Amazon"
@@ -418,9 +420,9 @@ companies:
     priority: "S"
     careers_url: "https://www.amazon.jobs/en/search"
     ats_platform: "amazon"
-    search_keywords: ["silicon", "verification", "rtl", "asic", "annapurna", "trainium"]
-    notes: "amazon.jobs JSON — needs dedicated scraper."
-    enabled: false
+    search_keywords: ["silicon verification", "rtl design", "asic verification", "design verification"]
+    notes: "amazon.jobs public JSON API (Annapurna Labs / AWS silicon) — verified live."
+    enabled: true
 
   - name: "Microsoft"
     category: "Hyperscaler"
@@ -428,7 +430,7 @@ companies:
     careers_url: "https://careers.microsoft.com/us/en/search-results"
     ats_platform: "microsoft"
     search_keywords: ["silicon engineer", "hardware verification", "asic", "fpga", "rtl"]
-    notes: "Custom careers site — needs dedicated scraper."
+    notes: "gcsservices.careers.microsoft.com blocks automated TLS handshakes; needs a browser-grade adapter. Use the careers link for Azure Maia silicon roles."
     enabled: false
 
   - name: "Meta"
