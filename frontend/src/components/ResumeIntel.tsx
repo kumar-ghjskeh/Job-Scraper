@@ -78,6 +78,13 @@ export function ResumeIntel({ onChanged }: Props) {
     try { await api.deleteResumeOne(id); await loadAll(); onChanged() } finally { setBusy(false) }
   }
 
+  async function removeAll() {
+    if (busy) return
+    if (!window.confirm('Delete all resume versions? Job matches will be turned off until you upload again.')) return
+    setBusy(true)
+    try { await api.deleteResume(); await loadAll(); onChanged() } finally { setBusy(false) }
+  }
+
   const maxGap = gaps.length ? gaps[0].count : 1
 
   return (
@@ -128,10 +135,16 @@ export function ResumeIntel({ onChanged }: Props) {
                 ranked & compared against. Switch to re-score everything. */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>Resume Versions</div>
-              <button onClick={() => pickFile(true)} title="Add another resume version"
-                style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                <Icon name="fileText" size={12} color="var(--primary)" /> Add
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button onClick={() => pickFile(true)} title="Add another resume version"
+                  style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  <Icon name="fileText" size={12} color="var(--primary)" /> Add
+                </button>
+                <button onClick={removeAll} title="Delete all resume versions"
+                  style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+                  Remove all
+                </button>
+              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
               {versions.map((v) => {
@@ -155,12 +168,10 @@ export function ResumeIntel({ onChanged }: Props) {
                         <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-tertiary)' }}>{v.skill_count} skills{active ? ' · active' : ''}</span>
                       </span>
                     </button>
-                    {versions.length > 1 && (
-                      <button onClick={() => deleteVersion(v.id)} title="Delete this version"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 0, display: 'flex' }}>
-                        <Icon name="x" size={12} />
-                      </button>
-                    )}
+                    <button onClick={() => deleteVersion(v.id)} title="Delete this version"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 0, display: 'flex' }}>
+                      <Icon name="x" size={12} />
+                    </button>
                   </div>
                 )
               })}

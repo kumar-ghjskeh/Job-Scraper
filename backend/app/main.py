@@ -252,6 +252,7 @@ def _build_job_query(
     view: Optional[str] = None,
     role_flags: Optional[str] = None,
     state: Optional[str] = None,
+    h1b_only: bool = False,
     sort_by: str = "match_score",
     sort_order: str = "desc",
     page: int = 1,
@@ -348,20 +349,33 @@ def _build_job_query(
         conditions.append(JobPosting.first_seen_at >= cutoff)
 
     if keyword:
-        # Portable multi-token full-text search (works on SQLite + Postgres):
-        # every token must appear in at least one searchable field (AND of tokens,
-        # OR of fields). Covers title, company, description, skills, protocols,
-        # tools, role category, seniority, state, and ATS source.
+        # Accurate multi-token search (portable SQLite + Postgres). Each token must
+        # appear in at least one field (AND of tokens, OR of fields). High-signal
+        # fields (company/title/skills/role/location) match as substrings; the free
+        # text description matches on WHOLE WORDS only — so e.g. "intel" returns
+        # Intel, not every job whose description says "intelligence".
+        from sqlalchemy import literal
         from sqlmodel import or_ as sql_or
-        search_fields = [
-            JobPosting.job_title, JobPosting.company, JobPosting.cleaned_description,
-            JobPosting.description_snippet, JobPosting.matched_keywords,
-            JobPosting.role_category, JobPosting.experience_level,
-            JobPosting.state, JobPosting.location, JobPosting.ats_platform,
+        substr_fields = [
+            JobPosting.job_title, JobPosting.normalized_title, JobPosting.company,
+            JobPosting.matched_keywords, JobPosting.role_category,
+            JobPosting.experience_level, JobPosting.state, JobPosting.location,
+            JobPosting.ats_platform,
         ]
+        word_fields = [JobPosting.cleaned_description, JobPosting.description_snippet]
         for tok in keyword.split():
+            tok = tok.strip()
+            if not tok:
+                continue
             kw = f"%{tok}%"
-            conditions.append(sql_or(*[col(f).ilike(kw) for f in search_fields]))
+            ors = [col(f).ilike(kw) for f in substr_fields]
+            # Word-boundary on description: pad with spaces and require " token ".
+            word = f"% {tok} %"
+            ors += [
+                (literal(" ").concat(col(f)).concat(literal(" "))).ilike(word)
+                for f in word_fields
+            ]
+            conditions.append(sql_or(*ors))
 
     if skills:
         for skill in skills.split(","):
@@ -398,6 +412,12 @@ def _build_job_query(
             if flag_name and hasattr(JobPosting, flag_name):
                 conditions.append(getattr(JobPosting, flag_name) == True)
 
+    # H1B sponsor-friendly: restrict to companies known to sponsor (sponsors_h1b is
+    # a company-level signal, not a column, so filter by the known-sponsor name set).
+    if h1b_only:
+        from .eligibility import _KNOWN_SPONSOR
+        conditions.append(func.lower(col(JobPosting.company)).in_(list(_KNOWN_SPONSOR)))
+
     for cond in conditions:
         stmt = stmt.where(cond)
 
@@ -410,6 +430,7 @@ def _build_job_query(
         "match_score": JobPosting.match_score,
         "first_seen_at": JobPosting.first_seen_at,
         "last_seen_at": JobPosting.last_seen_at,
+        "posted_date": JobPosting.posted_date,
         "company": JobPosting.company,
         "job_title": JobPosting.job_title,
     }
@@ -468,6 +489,7 @@ def list_jobs(
     view: Optional[str] = None,
     role_flags: Optional[str] = None,
     state: Optional[str] = None,
+    h1b_only: bool = False,
     sort_by: str = "match_score",
     sort_order: str = "desc",
 ):
@@ -481,7 +503,7 @@ def list_jobs(
         include_unknown_location=include_unknown_location,
         include_software=include_software, include_adjacent=include_adjacent,
         view=view, role_flags=role_flags,
-        state=state, sort_by=sort_by, sort_order=sort_order, page=page, limit=limit,
+        state=state, h1b_only=h1b_only, sort_by=sort_by, sort_order=sort_order, page=page, limit=limit,
     )
     return _paginate(items, total, page, limit)
 

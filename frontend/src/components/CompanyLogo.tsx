@@ -16,6 +16,15 @@ const DOMAINS: Record<string, string> = {
   'groq': 'groq.com', 'arista networks': 'arista.com', 'synaptics': 'synaptics.com',
   'achronix': 'achronix.com', 'alphawave semi': 'awaveip.com', 'siemens eda': 'siemens.com',
   'waymo': 'waymo.com',
+  // Remaining tracked companies (so every card shows a real logo)
+  'bae systems': 'baesystems.com', 'celestial ai': 'celestial.ai',
+  'cornelis networks': 'cornelisnetworks.com', 'credo semiconductor': 'credosemi.com',
+  'enfabrica': 'enfabrica.net', 'esperanto technologies': 'esperanto.ai',
+  'general dynamics mission systems': 'gd.com', 'juniper networks': 'juniper.net',
+  'keysight technologies': 'keysight.com', 'maxlinear': 'maxlinear.com',
+  'microchip technology': 'microchip.com', 'rtx': 'rtx.com', 'rambus': 'rambus.com',
+  'seagate': 'seagate.com', 'texas instruments': 'ti.com', 'untether ai': 'untether.ai',
+  'hcltech': 'hcltech.com', 'wipro': 'wipro.com', 'mediatek': 'mediatek.com',
 }
 
 // Resilient logo sources, tried in order. icon.horse returns the real brand logo

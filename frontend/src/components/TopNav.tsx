@@ -53,13 +53,8 @@ export function TopNav({
               style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, objectFit: 'contain' }} />
           </div>
           {!isMobile && (
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 16.5, color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
-                Ashborne Silicon
-              </div>
-              <div style={{ fontSize: 10.5, color: 'var(--text-secondary)', letterSpacing: '0.04em', marginTop: 1 }}>
-                USA RTL · DV · ASIC · SoC · FPGA · DFT jobs
-              </div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+              Ashborne Silicon
             </div>
           )}
         </div>

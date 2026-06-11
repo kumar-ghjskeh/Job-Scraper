@@ -146,9 +146,9 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
           {job.active_status === 'applied' && <span style={{ fontSize: 11.5, color: 'var(--success)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}><Icon name="checkCircle" size={12} color="var(--success)" /> Applied</span>}
           {job.active_status === 'ignored' && <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontWeight: 600 }}>Ignored</span>}
           <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
-            {job.posted_date_known && job.posted_date
+            {job.posted_date
               ? `Posted ${new Date(job.posted_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-              : `first seen ${new Date(job.first_seen_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+              : 'Recently posted'}
           </span>
         </div>
 

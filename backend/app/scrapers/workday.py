@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .base import BaseScraper, JobData
@@ -17,7 +18,31 @@ CXS_URL = "https://{tenant}.{instance}.myworkdayjobs.com/wday/cxs/{tenant}/{care
 # Default search terms for semiconductor / verification roles
 DEFAULT_SEARCH_TERMS = ["verification", "rtl design", "asic", "fpga", "digital design"]
 
-LIMIT = 20  # jobs per page
+LIMIT = 20          # jobs per page
+DETAIL_CAP = 80     # max per-job detail fetches per company (descriptions + dates)
+
+
+def _parse_relative_posted(s: str) -> datetime | None:
+    """Workday lists ship a relative string ('Posted Yesterday', 'Posted 30+ Days
+    Ago') rather than a date. Convert it to an approximate UTC datetime."""
+    if not s:
+        return None
+    t = s.lower()
+    now = datetime.now(timezone.utc)
+    if "today" in t or "just posted" in t:
+        return now
+    if "yesterday" in t:
+        return now - timedelta(days=1)
+    m = re.search(r"(\d+)\+?\s*day", t)
+    if m:
+        return now - timedelta(days=int(m.group(1)))
+    m = re.search(r"(\d+)\+?\s*week", t)
+    if m:
+        return now - timedelta(weeks=int(m.group(1)))
+    m = re.search(r"(\d+)\+?\s*month", t)
+    if m:
+        return now - timedelta(days=30 * int(m.group(1)))
+    return None
 
 
 class WorkdayScraper(BaseScraper):
@@ -51,7 +76,36 @@ class WorkdayScraper(BaseScraper):
             jobs.extend(fetched)
             await asyncio.sleep(2)
 
-        return self._filter_relevant(jobs)
+        # Title-first relevance gate, THEN enrich survivors with the per-job detail
+        # endpoint (Workday's list omits descriptions and only gives a relative
+        # posted string — the detail call returns the full description + a precise
+        # startDate).
+        relevant = self._filter_relevant(jobs)
+        await self._enrich_details(relevant, tenant, instance, career_site)
+        return relevant
+
+    async def _enrich_details(self, jobs: list[JobData], tenant: str, instance: str, career_site: str) -> None:
+        site_root = f"https://{tenant}.{instance}.myworkdayjobs.com"
+        for j in jobs[:DETAIL_CAP]:
+            ext_path = j.apply_url[len(site_root):] if j.apply_url.startswith(site_root) else ""
+            if not ext_path:
+                continue
+            try:
+                data = await self._get_json(f"{site_root}/wday/cxs/{tenant}/{career_site}{ext_path}")
+                info = data.get("jobPostingInfo", {}) if isinstance(data, dict) else {}
+                desc = info.get("jobDescription", "") or ""
+                if desc:
+                    j.full_description_text = desc
+                    j.description_snippet = desc[:600]
+                start = info.get("startDate", "")
+                if start:
+                    try:
+                        j.posted_date = datetime.fromisoformat(start)
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.debug("Workday detail fetch failed %s: %s", j.apply_url, e)
+            await asyncio.sleep(0.25)
 
     async def _search_workday(self, base_url: str, search_text: str, seen_ids: set[str]) -> list[JobData]:
         jobs: list[JobData] = []
@@ -93,13 +147,9 @@ class WorkdayScraper(BaseScraper):
                 instance = self.config.get("workday_instance", "wd1")
                 apply_url = f"https://{tenant}.{instance}.myworkdayjobs.com{ext_path}" if ext_path else ""
 
-                posted_on = item.get("postedOn", "")
-                posted = None
-                if posted_on:
-                    try:
-                        posted = datetime.fromisoformat(posted_on.replace("Z", "+00:00"))
-                    except Exception:
-                        pass
+                # List ships a relative string ("Posted Yesterday"); parse it as a
+                # fallback — _enrich_details will override with the exact startDate.
+                posted = _parse_relative_posted(item.get("postedOn", ""))
 
                 jobs.append(
                     JobData(

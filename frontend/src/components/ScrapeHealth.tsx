@@ -2,10 +2,21 @@ import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import type { Company, ScrapeRun } from '../lib/types'
 
+const TZ_OPTIONS: { label: string; value: string }[] = [
+  { label: 'My local time', value: 'local' },
+  { label: 'Eastern (ET)', value: 'America/New_York' },
+  { label: 'Central (CT)', value: 'America/Chicago' },
+  { label: 'Mountain (MT)', value: 'America/Denver' },
+  { label: 'Pacific (PT)', value: 'America/Los_Angeles' },
+]
+const RUNS_PREVIEW = 12
+
 export function ScrapeHealth() {
   const [runs, setRuns] = useState<ScrapeRun[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
+  const [tz, setTz] = useState<string>(() => localStorage.getItem('ashborne-tz') || 'local')
+  const [showAllRuns, setShowAllRuns] = useState(false)
 
   useEffect(() => {
     Promise.all([api.getScrapeRuns(), api.getCompanies()])
@@ -13,8 +24,16 @@ export function ScrapeHealth() {
       .finally(() => setLoading(false))
   }, [])
 
-  const fmt = (d: string | null) =>
-    d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
+  function changeTz(v: string) { setTz(v); localStorage.setItem('ashborne-tz', v) }
+
+  const fmt = (d: string | null) => {
+    if (!d) return '—'
+    const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+    if (tz !== 'local') opts.timeZone = tz
+    return new Date(d).toLocaleString('en-US', opts)
+  }
+
+  const shownRuns = showAllRuns ? runs : runs.slice(0, RUNS_PREVIEW)
 
   const errCompanies = companies.filter((c) => c.scrape_error_count > 0)
     .sort((a, b) => b.scrape_error_count - a.scrape_error_count)
@@ -25,9 +44,18 @@ export function ScrapeHealth() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 20px', color: 'var(--text)' }}>
-        Scrape Health
-      </h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
+          Data Health
+        </h2>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text-secondary)' }}>
+          Times in
+          <select value={tz} onChange={(e) => changeTz(e.target.value)}
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 7, padding: '5px 9px', color: 'var(--text-primary)', fontSize: 12.5, outline: 'none' }}>
+            {TZ_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+      </div>
 
       {/* Summary stats */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
@@ -76,7 +104,7 @@ export function ScrapeHealth() {
                     No scrape runs yet. Click "Run Scrape" to start.
                   </td>
                 </tr>
-              ) : runs.map((r) => {
+              ) : shownRuns.map((r) => {
                 const dur = r.finished_at
                   ? Math.round((new Date(r.finished_at).getTime() - new Date(r.started_at).getTime()) / 60000)
                   : null
@@ -102,6 +130,14 @@ export function ScrapeHealth() {
             </tbody>
           </table>
         </div>
+        {runs.length > RUNS_PREVIEW && (
+          <div style={{ borderTop: '1px solid var(--border)', textAlign: 'center', padding: '8px' }}>
+            <button onClick={() => setShowAllRuns((s) => !s)}
+              style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+              {showAllRuns ? 'Show fewer' : `Show all ${runs.length} runs`}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Error companies */}
@@ -113,7 +149,7 @@ export function ScrapeHealth() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {errCompanies.map((c) => (
               <div key={c.id} style={{
-                background: '#FEF2F2', border: '1px solid #FECACA',
+                background: 'var(--danger-light)', border: '1px solid var(--danger-border)',
                 borderRadius: 8, padding: '7px 12px', fontSize: 13,
               }}>
                 <span style={{ fontWeight: 600, color: 'var(--text)' }}>{c.name}</span>

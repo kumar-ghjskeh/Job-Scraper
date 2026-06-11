@@ -19,7 +19,7 @@ import type { AnalyticsSummary, Filters, Job, PaginatedResponse } from './lib/ty
 const PAGE_SIZE = 50
 
 const TAB_LABELS: Partial<Record<Tab, string>> = {
-  'all': 'verified USA VLSI jobs',
+  'all': 'verified jobs',
   'resume': 'jobs ranked by resume match',
   'entry-level': 'new-grad & entry-level jobs',
   'best': 'high-fit jobs',
@@ -144,7 +144,9 @@ export default function App() {
   const [page, setPage] = useState(1)
   const [paginatedJobs, setPaginatedJobs] = useState<PaginatedResponse<Job> | null>(null)
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null)
-  const [filters, setFilters] = useState<Filters>({ usa_only: true, include_senior: false })
+  // Default shows every live role (incl. senior) — the New Grad tab + seniority
+  // chips narrow it. include_senior stays true; the toggle was removed.
+  const [filters, setFilters] = useState<Filters>({ usa_only: true, include_senior: true })
   const [search, setSearch] = useState('')
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [loading, setLoading] = useState(true)
@@ -257,8 +259,23 @@ export default function App() {
   async function handleRefresh() {
     setRefreshing(true)
     try {
+      const prevId = (await api.getScrapeRuns().catch(() => []))[0]?.id
       await api.triggerScrape()
-      setTimeout(() => { setRefreshing(false); loadJobs(); loadAnalytics() }, 10000)
+      // Poll the scrape run until it actually finishes (a scrape takes minutes —
+      // the old fixed 10s reload showed stale counts), then refresh the list.
+      const deadline = Date.now() + 7 * 60 * 1000
+      const poll = async () => {
+        try {
+          const runs = (await api.getScrapeRuns()).sort((a, b) => (a.started_at < b.started_at ? 1 : -1))
+          const latest = runs[0]
+          if (latest && latest.id !== prevId && latest.finished_at) {
+            setRefreshing(false); loadJobs(); loadAnalytics(); return
+          }
+        } catch { /* keep polling */ }
+        if (Date.now() < deadline) setTimeout(poll, 4000)
+        else { setRefreshing(false); loadJobs(); loadAnalytics() }
+      }
+      setTimeout(poll, 4000)
     } catch { setRefreshing(false) }
   }
 

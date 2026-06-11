@@ -240,6 +240,7 @@ export interface Filters {
   is_entry_level?: boolean
   state?: string
   level_filter?: string
+  h1b_only?: boolean
   sort_by?: string
   sort_order?: string
 }

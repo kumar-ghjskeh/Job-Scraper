@@ -51,7 +51,12 @@ ERROR_QUARANTINE_THRESHOLD = 8
 async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | None = None) -> ScrapeRun:
     schedule_cfg = load_schedule()
     delay_between = schedule_cfg.get("rate_limit", {}).get("delay_between_companies_seconds", 5)
-    removed_threshold = schedule_cfg.get("removed_job_threshold", 2)
+    # Keyword-based sources (Amazon / Workday search) return a slightly different
+    # subset each run, so a job can be transiently absent. A higher threshold means
+    # a posting must be missing across several consecutive successful scrapes before
+    # it's marked removed — this stops the active/removed churn that re-stamped
+    # "first seen" and made the daily count look flat.
+    removed_threshold = schedule_cfg.get("removed_job_threshold", 4)
 
     run = ScrapeRun(triggered_by=triggered_by)
     with Session(engine) as session:
@@ -113,9 +118,21 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
                         existing.last_seen_at = now
                         existing.active_status = ActiveStatus.active
                         existing.missed_scrapes = 0
-                        if raw.description_snippet and not existing.description_snippet:
-                            existing.description_snippet = raw.description_snippet
-                            existing.cleaned_description = clean_html_description(raw.description_snippet)
+                        # Upgrade to a fuller description when the scraper now returns
+                        # one (e.g. the Phase 5 Workday detail fetch), and backfill a
+                        # real posted date when it was previously unknown.
+                        raw_desc = raw.full_description_text or raw.description_snippet or ""
+                        if raw_desc:
+                            cleaned = clean_html_description(raw_desc)
+                            if len(cleaned) > len(existing.cleaned_description or "") + 50:
+                                existing.cleaned_description = cleaned
+                                if raw.full_description_text:
+                                    existing.full_description_text = raw.full_description_text
+                                existing.description_snippet = truncate_description_cleanly(cleaned, length=300)
+                                existing.data_quality_status = "ok"
+                        if raw.posted_date and not existing.posted_date:
+                            existing.posted_date = raw.posted_date
+                            existing.posted_date_known = True
                         session.add(existing)
                     else:
                         total_new += 1
@@ -248,10 +265,14 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
 
                 session.commit()
 
-            removed = await _update_removed_status(
-                company_name, found_per_company[company_name], removed_threshold
-            )
-            total_removed += removed
+            # Only reconcile removals when the scrape actually returned jobs for this
+            # company — an empty result is almost always a transient hiccup, not the
+            # company closing every posting at once.
+            if found_per_company[company_name]:
+                removed = await _update_removed_status(
+                    company_name, found_per_company[company_name], removed_threshold
+                )
+                total_removed += removed
 
             with Session(engine) as session:
                 co = session.exec(select(Company).where(Company.name == company_name)).first()

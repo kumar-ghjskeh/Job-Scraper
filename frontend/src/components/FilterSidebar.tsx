@@ -19,9 +19,9 @@ const CATEGORIES = [
   'EDA / Verification Tools', 'Adjacent / Backup',
 ]
 const QUICK_KWS = [
-  'UVM', 'SystemVerilog', 'SVA', 'Verilog', 'VHDL',
-  'ASIC', 'SoC', 'FPGA', 'formal', 'coverage',
-  'PCIe', 'AXI', 'CXL', 'CPU', 'GPU',
+  'UVM', 'SystemVerilog', 'SVA', 'Verilog', 'RTL',
+  'ASIC', 'SoC', 'FPGA', 'DFT', 'formal',
+  'CDC', 'AXI', 'PCIe', 'CXL', 'DDR',
 ]
 const US_STATES = ['CA', 'TX', 'WA', 'MA', 'NY', 'AZ', 'OR', 'CO', 'GA', 'IL', 'PA', 'VA', 'NC', 'MN']
 const SENIORITY_LEVELS = ['New Grad', 'Entry Level', 'Junior', 'Associate', 'Mid-Level', 'Senior', 'Staff', 'Principal', 'Lead', 'Manager']
@@ -115,7 +115,8 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
 
   const hasFilters = Object.entries(filters).some(([k, v]) => {
     if (k === 'usa_only' && v === true) return false
-    if (k === 'include_senior' && v === false) return false
+    if (k === 'include_senior') return false  // always on now; not a user filter
+    if (k === 'sort_by' || k === 'sort_order') return false
     return v !== undefined && v !== '' && v !== false
   })
 
@@ -151,7 +152,7 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {hasFilters && (
             <button
-              onClick={() => onChange({ usa_only: true, include_senior: false })}
+              onClick={() => onChange({ usa_only: true, include_senior: true })}
               style={{
                 background: 'none', border: 'none', color: 'var(--primary)',
                 fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: 0,
@@ -207,27 +208,27 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
           )}
         </div>
 
-        {/* Search */}
+        {/* Sort */}
         <div style={{ marginBottom: 16 }}>
-          <SectionHead title="Search" />
-          <input
-            placeholder="Title, company, keyword…"
-            value={filters.keyword || ''}
-            onChange={(e) => set('keyword', e.target.value)}
+          <SectionHead title="Sort By" />
+          <select
+            value={filters.sort_by || 'match_score'}
+            onChange={(e) => set('sort_by', e.target.value)}
             style={inp}
-            onFocus={(e) => (e.target.style.borderColor = 'var(--primary)')}
-            onBlur={(e) => (e.target.style.borderColor = 'var(--border)')}
-          />
+          >
+            <option value="match_score">Best fit (relevance)</option>
+            <option value="posted_date">Newest posted</option>
+            <option value="first_seen_at">Recently added</option>
+          </select>
         </div>
 
-        {/* Toggles — USA-only is the default platform behavior; software roles
-            are excluded by design, so only the seniority toggle remains. */}
+        {/* H1B sponsorship */}
         <div style={{ marginBottom: 14 }}>
           <Toggle
-            on={!!filters.include_senior}
-            onToggle={() => set('include_senior', !filters.include_senior)}
-            label="Show Senior Roles"
-            sub="Include Sr / Staff / Principal / Lead"
+            on={!!filters.h1b_only}
+            onToggle={() => set('h1b_only', !filters.h1b_only)}
+            label="H1B sponsor-friendly"
+            sub="Only companies that historically sponsor H1B"
           />
         </div>
 
