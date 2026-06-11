@@ -106,9 +106,17 @@ function ResultsSummary({ tab, loading, total, page, totalPages, analytics }: {
             <><strong style={{ fontWeight: 800 }}>{total.toLocaleString()}</strong> <span style={{ color: 'var(--text-secondary)' }}>{label}</span></>
           )}
         </div>
-        {total > 0 && totalPages > 1 && (
-          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Page {page} of {totalPages}</span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {(tab === 'applied' || tab === 'saved') && total > 0 && (
+            <a href={api.applicationsCsvUrl()} download
+              style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
+              <Icon name="external" size={12} color="var(--primary)" /> Export CSV
+            </a>
+          )}
+          {total > 0 && totalPages > 1 && (
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Page {page} of {totalPages}</span>
+          )}
+        </div>
       </div>
       {!loading && analytics && total > 0 && (
         <div style={{ display: 'flex', gap: 14, marginTop: 6, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -198,6 +206,32 @@ export default function App() {
 
   // Leaving mobile (e.g. rotate to landscape / resize) should dismiss the drawer.
   useEffect(() => { if (!isMobile) setFiltersOpen(false) }, [isMobile])
+
+  // Keyboard navigation (desktop power-user): j/k or ↑/↓ move through jobs,
+  // Enter/o open, Esc closes the panel, s saves, a marks applied. Ignored while
+  // typing in a field.
+  useEffect(() => {
+    if (isMobile) return
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null
+      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const list = groupByCanonical(paginatedJobs?.items ?? []).map((g) => g.job)
+      if (!list.length && e.key !== 'Escape') return
+      const idx = selectedJob ? list.findIndex((j) => j.id === selectedJob.id) : -1
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault(); setSelectedJob(list[Math.min(list.length - 1, idx + 1)] ?? list[0])
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault(); setSelectedJob(idx <= 0 ? list[0] : list[idx - 1])
+      } else if (e.key === 'Escape') {
+        setSelectedJob(null)
+      } else if (selectedJob && (e.key === 's' || e.key === 'a')) {
+        e.preventDefault(); handleQuickAction(selectedJob, e.key === 's' ? 'saved' : 'applied')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isMobile, paginatedJobs, selectedJob]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function changeTab(t: Tab) { setTab(t); setPage(1); setSelectedJob(null); setFiltersOpen(false) }
   function changeFilters(f: Filters) { setFilters(f); setPage(1) }

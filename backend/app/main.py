@@ -1345,6 +1345,42 @@ async def digest_send(session: SessionDep):
     return {"sent": ok, "configured": ok is not None, **data}
 
 
+@app.get("/export/applications.csv")
+def export_applications(session: SessionDep):
+    """Export every saved / applied / pipeline-tracked job as CSV for offline tracking."""
+    import csv
+    import io
+    from fastapi import Response
+
+    jobs = session.exec(
+        select(JobPosting).where(
+            (JobPosting.active_status.in_(["saved", "applied"]))  # type: ignore[attr-defined]
+            | (col(JobPosting.application_status) != "")
+        ).order_by(col(JobPosting.applied_at).desc(), col(JobPosting.saved_at).desc())
+    ).all()
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow([
+        "Company", "Title", "Location", "Stage", "Status", "Relevance",
+        "Resume Used", "Applied On", "Follow-up", "Confirmation ID",
+        "Recruiter", "Apply URL", "Notes",
+    ])
+    for j in jobs:
+        w.writerow([
+            j.company, j.job_title, j.location, j.application_status or "", j.active_status,
+            j.match_score, j.resume_version_used or "",
+            j.applied_at.date().isoformat() if j.applied_at else "",
+            j.follow_up_date or "", j.confirmation_id or "", j.recruiter_contact or "",
+            j.safe_apply_url or j.apply_url, (j.notes or "").replace("\n", " "),
+        ])
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=ashborne-applications.csv"},
+    )
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "4.0.0"}
+    return {"status": "ok", "version": "5.0.0"}

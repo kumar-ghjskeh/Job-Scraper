@@ -79,6 +79,10 @@ export const api = {
     return data
   },
 
+  applicationsCsvUrl(): string {
+    return `${BASE}/export/applications.csv`
+  },
+
   async getScrapeRuns(): Promise<ScrapeRun[]> {
     const { data } = await axios.get(`${BASE}/scrape-runs`)
     return data
