@@ -8,6 +8,8 @@ interface Props {
   job: Job | null
   onClose: () => void
   onUpdate: () => void
+  /** When rendered as a full-screen sheet on mobile: fill the sheet, no sticky/border. */
+  mobile?: boolean
 }
 
 type DetailTab = 'overview' | 'match' | 'score' | 'description' | 'source' | 'notes'
@@ -17,6 +19,16 @@ const TIER_STYLE: Record<string, string> = {
   'Reword Only': 'pill-primary',
   'Learn First': 'pill-warning',
   'Do Not Add': 'pill-danger',
+}
+
+const fieldLabel: React.CSSProperties = {
+  fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)',
+  textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: 6,
+}
+const fieldInput: React.CSSProperties = {
+  width: '100%', border: '1px solid var(--border)', borderRadius: 8,
+  padding: '8px 12px', fontSize: 13, background: 'var(--surface)',
+  color: 'var(--text-primary)', outline: 'none',
 }
 
 function scoreColor(score: number): string {
@@ -78,10 +90,14 @@ function MiniStat({ label, value, color }: { label: string; value: string; color
   )
 }
 
-export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
+export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Props) {
   const [detailTab, setDetailTab] = useState<DetailTab>('overview')
   const [notes, setNotes] = useState('')
   const [appStatus, setAppStatus] = useState('')
+  const [resumeUsed, setResumeUsed] = useState('')
+  const [followUp, setFollowUp] = useState('')
+  const [confirmId, setConfirmId] = useState('')
+  const [recruiter, setRecruiter] = useState('')
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
   const [matchData, setMatchData] = useState<JobMatch | null>(null)
@@ -103,6 +119,10 @@ export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
     setLastJobId(job.id)
     setNotes(job.notes || '')
     setAppStatus(job.application_status || '')
+    setResumeUsed(job.resume_version_used || '')
+    setFollowUp(job.follow_up_date || '')
+    setConfirmId(job.confirmation_id || '')
+    setRecruiter(job.recruiter_contact || '')
     setDetailTab('overview')
   }
 
@@ -118,7 +138,10 @@ export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
   async function handleSaveNotes() {
     setSaving(true)
     try {
-      await api.updateJobStatus(job!.id, { application_status: appStatus, notes })
+      await api.updateJobStatus(job!.id, {
+        application_status: appStatus, notes, resume_version_used: resumeUsed,
+        follow_up_date: followUp, confirmation_id: confirmId, recruiter_contact: recruiter,
+      })
       onUpdate()
     } finally {
       setSaving(false)
@@ -147,22 +170,31 @@ export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
     { id: 'score', label: 'Score' },
     { id: 'description', label: 'Description' },
     { id: 'source', label: 'Source' },
-    { id: 'notes', label: 'Notes' },
+    { id: 'notes', label: 'Application' },
   ]
 
+  const rootStyle: React.CSSProperties = mobile
+    ? {
+        width: '100%', flex: 1, minHeight: 0,
+        background: 'var(--surface)',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+      }
+    : {
+        width: 'var(--panel-width)', flexShrink: 0,
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        display: 'flex', flexDirection: 'column',
+        position: 'sticky', top: 'calc(var(--nav-height) + 8px)',
+        maxHeight: 'calc(100vh - var(--nav-height) - 24px)',
+        overflow: 'hidden',
+        alignSelf: 'flex-start',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+      }
+
   return (
-    <aside style={{
-      width: 'var(--panel-width)', flexShrink: 0,
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 10,
-      display: 'flex', flexDirection: 'column',
-      position: 'sticky', top: 'calc(var(--nav-height) + 8px)',
-      maxHeight: 'calc(100vh - var(--nav-height) - 24px)',
-      overflow: 'hidden',
-      alignSelf: 'flex-start',
-      boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-    }}>
+    <aside style={rootStyle}>
       {/* Panel header */}
       <div style={{
         padding: '16px 20px 12px',
@@ -651,23 +683,31 @@ export function JobDetailsPanel({ job, onClose, onUpdate }: Props) {
         {detailTab === 'notes' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
-              <label style={{
-                fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
-                textTransform: 'uppercase', letterSpacing: '0.04em',
-                display: 'block', marginBottom: 6,
-              }}>
-                Application Status
-              </label>
-              <input
-                value={appStatus}
-                onChange={(e) => setAppStatus(e.target.value)}
-                placeholder="e.g. Applied, Phone screen, OA, Offer..."
-                style={{
-                  width: '100%', border: '1px solid var(--border)',
-                  borderRadius: 8, padding: '8px 12px', fontSize: 13,
-                  background: 'var(--surface)', color: 'var(--text)', outline: 'none',
-                }}
-              />
+              <label style={fieldLabel}>Application Stage</label>
+              <select value={appStatus} onChange={(e) => setAppStatus(e.target.value)} style={fieldInput}>
+                <option value="">— Not set —</option>
+                {['Saved', 'Applied', 'Assessment', 'Interview', 'Rejected', 'Offer', 'Archived', 'Ignored'].map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <label style={fieldLabel}>Resume Used</label>
+                <input value={resumeUsed} onChange={(e) => setResumeUsed(e.target.value)} placeholder="e.g. DV/UVM v3" style={fieldInput} />
+              </div>
+              <div>
+                <label style={fieldLabel}>Follow-up Date</label>
+                <input type="date" value={followUp} onChange={(e) => setFollowUp(e.target.value)} style={fieldInput} />
+              </div>
+              <div>
+                <label style={fieldLabel}>Confirmation ID</label>
+                <input value={confirmId} onChange={(e) => setConfirmId(e.target.value)} placeholder="Req / app ID" style={fieldInput} />
+              </div>
+              <div>
+                <label style={fieldLabel}>Recruiter Contact</label>
+                <input value={recruiter} onChange={(e) => setRecruiter(e.target.value)} placeholder="Name / email" style={fieldInput} />
+              </div>
             </div>
 
             <div>

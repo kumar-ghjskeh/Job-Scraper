@@ -195,6 +195,16 @@ companies:
     locations_of_interest: ["San Jose", "Remote"]
     enabled: true
 
+  - name: "Waymo"
+    category: "Cloud Silicon"
+    priority: "A"
+    careers_url: "https://job-boards.greenhouse.io/waymo"
+    ats_platform: "greenhouse"
+    greenhouse_board: "waymo"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "soc", "silicon", "microarchitecture"]
+    locations_of_interest: ["Mountain View", "Remote", "United States"]
+    enabled: true
+
   # ─────────────────────────────────────────────────────────────────────────
   #  ✅ VERIFIED — LEVER
   # ─────────────────────────────────────────────────────────────────────────

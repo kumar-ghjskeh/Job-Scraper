@@ -14,7 +14,7 @@ from sqlmodel import Session, col, func, select
 
 from .config import settings
 from .database import get_session, init_db
-from .models import ActiveStatus, Company, JobPosting, ResumeProfile, ScrapeError, ScrapeRun
+from .models import ActiveStatus, Company, JobPosting, ResumeProfile, ScrapeError, ScrapeRun, Watchlist
 from .scheduler import create_scheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -134,6 +134,9 @@ class JobResponse(BaseModel):
     notes: str
     application_status: str
     resume_version_used: str = ""
+    follow_up_date: str = ""
+    confirmation_id: str = ""
+    recruiter_contact: str = ""
     years_required_min: Optional[int]
     years_required_max: Optional[int]
     job_id_from_company: str = ""
@@ -176,6 +179,9 @@ class StatusUpdate(BaseModel):
     application_status: Optional[str] = None
     notes: Optional[str] = None
     resume_version_used: Optional[str] = None
+    follow_up_date: Optional[str] = None
+    confirmation_id: Optional[str] = None
+    recruiter_contact: Optional[str] = None
 
 
 class CompanyResponse(BaseModel):
@@ -319,13 +325,20 @@ def _build_job_query(
         conditions.append(JobPosting.first_seen_at >= cutoff)
 
     if keyword:
-        kw = f"%{keyword}%"
-        conditions.append(
-            col(JobPosting.job_title).ilike(kw)
-            | col(JobPosting.matched_keywords).ilike(kw)
-            | col(JobPosting.description_snippet).ilike(kw)
-            | col(JobPosting.company).ilike(kw)
-        )
+        # Portable multi-token full-text search (works on SQLite + Postgres):
+        # every token must appear in at least one searchable field (AND of tokens,
+        # OR of fields). Covers title, company, description, skills, protocols,
+        # tools, role category, seniority, state, and ATS source.
+        from sqlmodel import or_ as sql_or
+        search_fields = [
+            JobPosting.job_title, JobPosting.company, JobPosting.cleaned_description,
+            JobPosting.description_snippet, JobPosting.matched_keywords,
+            JobPosting.role_category, JobPosting.experience_level,
+            JobPosting.state, JobPosting.location, JobPosting.ats_platform,
+        ]
+        for tok in keyword.split():
+            kw = f"%{tok}%"
+            conditions.append(sql_or(*[col(f).ilike(kw) for f in search_fields]))
 
     if skills:
         for skill in skills.split(","):
@@ -846,10 +859,21 @@ def update_job_status(job_id: int, update: StatusUpdate, session: SessionDep):
 
     if update.application_status is not None:
         job.application_status = update.application_status
+        # Pipeline stage implies the job belongs in the Applied workspace.
+        if update.application_status in ("Applied", "Assessment", "Interview", "Offer") and not job.applied_at:
+            job.applied_at = now
+            if job.active_status not in ("applied",):
+                job.active_status = ActiveStatus.applied
     if update.notes is not None:
         job.notes = update.notes
     if update.resume_version_used is not None:
         job.resume_version_used = update.resume_version_used
+    if update.follow_up_date is not None:
+        job.follow_up_date = update.follow_up_date
+    if update.confirmation_id is not None:
+        job.confirmation_id = update.confirmation_id
+    if update.recruiter_contact is not None:
+        job.recruiter_contact = update.recruiter_contact
 
     session.add(job)
     session.commit()
@@ -941,6 +965,18 @@ def _build_company_response(company: Company, session: Session) -> dict:
     else:
         scrape_status = "never"
 
+    # Parser confidence — how complete/trustworthy the parsed records are for this
+    # company, derived from the average per-job data-quality score (0–100) across its
+    # active postings. A low value flags a parser that is extracting thin/garbled data
+    # even when the scrape itself "succeeds".
+    avg_quality = session.exec(
+        select(func.avg(JobPosting.data_quality_score)).where(
+            JobPosting.company == company.name,
+            JobPosting.active_status == ActiveStatus.active,
+        )
+    ).one()
+    parser_confidence = int(round(avg_quality)) if avg_quality else 0
+
     return {
         "id": company.id,
         "name": company.name,
@@ -959,6 +995,7 @@ def _build_company_response(company: Company, session: Session) -> dict:
         "entry_level_jobs": entry,
         "new_jobs_today": new_today,
         "scrape_status": scrape_status,
+        "parser_confidence": parser_confidence,
     }
 
 
@@ -1128,6 +1165,88 @@ def stats(session: SessionDep):
     return analytics_summary(session)
 
 
+# ── Watchlists / saved searches (Phase 4) ────────────────────────────────────
+
+class WatchlistCreate(BaseModel):
+    name: str
+    filters: dict = {}
+    alert_enabled: bool = True
+
+
+_WL_FILTER_KEYS = {
+    "keyword", "role_category", "level_filter", "state", "priority", "remote",
+    "min_score", "company", "usa_only", "include_senior", "role_flags",
+}
+
+
+def _wl_counts(session: Session, filters: dict, since: datetime) -> tuple[int, int]:
+    f = {k: v for k, v in (filters or {}).items() if k in _WL_FILTER_KEYS and v not in (None, "", [])}
+    _, total = _build_job_query(session, page=1, limit=1, **f)
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    hours = max(1, int((datetime.now(timezone.utc) - since).total_seconds() // 3600) + 1)
+    _, new = _build_job_query(session, page=1, limit=1, new_since_hours=hours, **f)
+    return total, new
+
+
+@app.get("/watchlists")
+def list_watchlists(session: SessionDep):
+    wls = session.exec(select(Watchlist).order_by(col(Watchlist.created_at).desc())).all()
+    out = []
+    for w in wls:
+        try:
+            filters = json.loads(w.filters_json) if w.filters_json else {}
+        except Exception:
+            filters = {}
+        total, new = _wl_counts(session, filters, w.last_checked_at)
+        out.append({
+            "id": w.id, "name": w.name, "filters": filters, "alert_enabled": w.alert_enabled,
+            "last_checked_at": w.last_checked_at, "total": total, "new_count": new,
+        })
+    return out
+
+
+@app.post("/watchlists")
+def create_watchlist(payload: WatchlistCreate, session: SessionDep):
+    w = Watchlist(name=payload.name, filters_json=json.dumps(payload.filters or {}), alert_enabled=payload.alert_enabled)
+    session.add(w); session.commit(); session.refresh(w)
+    return {"ok": True, "id": w.id}
+
+
+@app.delete("/watchlists/{wl_id}")
+def delete_watchlist(wl_id: int, session: SessionDep):
+    w = session.get(Watchlist, wl_id)
+    if w:
+        session.delete(w); session.commit()
+    return {"ok": True}
+
+
+@app.post("/watchlists/{wl_id}/check")
+def check_watchlist(wl_id: int, session: SessionDep):
+    w = session.get(Watchlist, wl_id)
+    if not w:
+        raise HTTPException(status_code=404, detail="Watchlist not found")
+    w.last_checked_at = datetime.now(timezone.utc)
+    session.add(w); session.commit()
+    return {"ok": True}
+
+
+# ── Email digest (Phase 4) ───────────────────────────────────────────────────
+
+@app.get("/digest/preview")
+def digest_preview(session: SessionDep):
+    from .services.digest import build_digest
+    return build_digest(session)
+
+
+@app.post("/digest/send")
+async def digest_send(session: SessionDep):
+    from .services.digest import build_digest, send_digest_email
+    data = build_digest(session)
+    ok = await send_digest_email(data)
+    return {"sent": ok, "configured": ok is not None, **data}
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "2.0.0"}
+    return {"status": "ok", "version": "4.0.0"}

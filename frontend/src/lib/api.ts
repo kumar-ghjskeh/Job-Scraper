@@ -45,9 +45,28 @@ export const api = {
 
   async updateJobStatus(
     id: number,
-    update: { active_status?: string; application_status?: string; notes?: string }
+    update: {
+      active_status?: string; application_status?: string; notes?: string
+      resume_version_used?: string; follow_up_date?: string
+      confirmation_id?: string; recruiter_contact?: string
+    }
   ): Promise<void> {
     await axios.patch(`${BASE}/jobs/${id}/status`, update)
+  },
+
+  // ── Watchlists (Phase 4) ──
+  async getWatchlists(): Promise<import('./types').Watchlist[]> {
+    const { data } = await axios.get(`${BASE}/watchlists`)
+    return data
+  },
+  async createWatchlist(name: string, filters: Record<string, unknown>): Promise<void> {
+    await axios.post(`${BASE}/watchlists`, { name, filters })
+  },
+  async deleteWatchlist(id: number): Promise<void> {
+    await axios.delete(`${BASE}/watchlists/${id}`)
+  },
+  async checkWatchlist(id: number): Promise<void> {
+    await axios.post(`${BASE}/watchlists/${id}/check`)
   },
 
   async getJob(id: number): Promise<Job> {

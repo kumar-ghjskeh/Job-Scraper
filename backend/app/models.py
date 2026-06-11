@@ -170,12 +170,16 @@ class JobPosting(SQLModel, table=True):
         return _lookup(self.company)
 
     # ── User actions ──────────────────────────────────────────────
-    application_status: str = ""
+    application_status: str = ""   # Saved|Applied|Assessment|Interview|Rejected|Offer|Archived|Ignored
     notes: str = ""
     resume_version_used: str = ""
     saved_at: Optional[datetime] = None
     applied_at: Optional[datetime] = None
     ignored_at: Optional[datetime] = None
+    # Application-tracking pipeline (Phase 4)
+    follow_up_date: str = ""
+    confirmation_id: str = ""
+    recruiter_contact: str = ""
 
 
 class ResumeProfile(SQLModel, table=True):
@@ -187,6 +191,18 @@ class ResumeProfile(SQLModel, table=True):
     filename: str = ""
     profile_json: str = ""  # JSON of ResumeProfileData
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Watchlist(SQLModel, table=True):
+    """A saved search (filter set) with new-since-last-check tracking."""
+    __tablename__ = "watchlists"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    filters_json: str = ""          # JSON of the saved filter set
+    alert_enabled: bool = True
+    last_checked_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class ScrapeRun(SQLModel, table=True):

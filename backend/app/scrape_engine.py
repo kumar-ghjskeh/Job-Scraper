@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 ERROR_QUARANTINE_THRESHOLD = 8
 
 
-async def run_scrape(triggered_by: str = "scheduler") -> ScrapeRun:
+async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | None = None) -> ScrapeRun:
     schedule_cfg = load_schedule()
     delay_between = schedule_cfg.get("rate_limit", {}).get("delay_between_companies_seconds", 5)
     removed_threshold = schedule_cfg.get("removed_job_threshold", 2)
@@ -61,6 +61,9 @@ async def run_scrape(triggered_by: str = "scheduler") -> ScrapeRun:
         run_id = run.id
 
     companies = load_companies()
+    if priorities:
+        # Tier-based sync: only scrape companies in the requested priority tiers.
+        companies = [c for c in companies if c.get("priority", "C") in priorities]
     total_new = 0
     total_found = 0
     total_errors = 0

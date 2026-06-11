@@ -185,7 +185,22 @@ export function CompaniesPage({ onViewJobs }: Props) {
                           {(co.entry_level_jobs ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--teal)', fontWeight: 600 }}>{co.entry_level_jobs} entry-lvl</span>}
                           {(co.new_jobs_today ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>{co.new_jobs_today} new today</span>}
                         </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>Last updated: {fmtDate(co.last_scraped_at)}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Last updated: {fmtDate(co.last_scraped_at)}</span>
+                          {(co.total_active_jobs ?? 0) > 0 && co.parser_confidence !== undefined && (() => {
+                            const pc = co.parser_confidence!
+                            const c = pc >= 80 ? 'var(--success)' : pc >= 60 ? 'var(--teal)' : pc >= 40 ? 'var(--warning)' : 'var(--danger)'
+                            return (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }} title="Average data-quality of parsed postings">
+                                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>·</span>
+                                <span style={{ width: 42, height: 5, background: 'var(--surface-muted)', borderRadius: 3, overflow: 'hidden', display: 'inline-block' }}>
+                                  <span style={{ display: 'block', width: `${pc}%`, height: '100%', background: c, borderRadius: 3 }} />
+                                </span>
+                                <span style={{ fontSize: 11, color: c, fontWeight: 700 }}>{pc}% parser</span>
+                              </span>
+                            )
+                          })()}
+                        </div>
                       </>
                     ) : (
                       <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.5 }}>

@@ -105,13 +105,22 @@ def parse_location(location_raw: str, description: str = "") -> LocationResult:
     desc_snippet = (description or "")[:500].lower()
     combined = loc + " " + desc_snippet
 
-    # 1. Check for explicit non-USA country first (highest priority)
-    for signal in NON_USA_SIGNALS:
-        if re.search(r"\b" + re.escape(signal) + r"\b", combined):
-            return LocationResult(
-                is_usa=False, country=signal.title(), confidence=0.95,
-                reason=f"non-USA signal: '{signal}'"
-            )
+    # A multi-region posting that ALSO lists a US office (e.g.
+    # "Boston, MA; Santa Clara, CA; Toronto, Canada") is reachable from the US,
+    # so it must not be dropped just because a foreign city appears. If the
+    # location field itself carries a clear US signal, prefer USA.
+    usa_in_loc = _has_usa_signal(loc)
+
+    # 1. Check for explicit non-USA country first (highest priority) — unless the
+    #    location field also names a US office, in which case fall through to the
+    #    USA detection below and pick the US state/city.
+    if not usa_in_loc:
+        for signal in NON_USA_SIGNALS:
+            if re.search(r"\b" + re.escape(signal) + r"\b", combined):
+                return LocationResult(
+                    is_usa=False, country=signal.title(), confidence=0.95,
+                    reason=f"non-USA signal: '{signal}'"
+                )
 
     # 2. Explicit USA strings
     for sig in USA_EXPLICIT:
@@ -158,6 +167,26 @@ def parse_location(location_raw: str, description: str = "") -> LocationResult:
 
     # 7. Unknown
     return LocationResult(confidence=0.0, reason="location unknown")
+
+
+def _has_usa_signal(loc: str) -> bool:
+    """True if the location field clearly names a US office (explicit USA string,
+    a full US state name, or a known US city). Used to keep multi-region postings
+    that include a US location in the USA view. Bare 2-letter state abbreviations
+    are intentionally excluded here — they collide with country codes (IN=India,
+    OR, etc.) and the real multi-region postings always spell out a US city."""
+    if not loc:
+        return False
+    for sig in USA_EXPLICIT:
+        if sig in loc:
+            return True
+    for state_name in US_STATE_NAMES:
+        if state_name in loc:
+            return True
+    for city_lower, _ in US_CITIES:
+        if city_lower in loc:
+            return True
+    return False
 
 
 def _check_remote(loc: str, result: LocationResult) -> None:

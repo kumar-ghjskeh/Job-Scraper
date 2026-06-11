@@ -164,9 +164,10 @@ def is_rtl_dv_relevant(title: str, description: str = "") -> tuple[bool, str]:
     if is_software_only(title, description):
         return False, "Pure software role (no hardware overlap)"
 
-    # 3. Decisive digital RTL/DV title signal → relevant
+    # 3. Decisive digital RTL/DV title signal → relevant. Word-boundary matched
+    #    so short tokens ("soc", "rtl") don't match inside words like "Social".
     for sig in _DIGITAL_TITLE_SIGNALS:
-        if sig in title_l:
+        if re.search(r"\b" + re.escape(sig) + r"\b", title_l):
             return True, f"RTL/DV title signal: {sig}"
 
     # 4. Generic 'verification'/'validation'/'design engineer' title that is
@@ -178,11 +179,18 @@ def is_rtl_dv_relevant(title: str, description: str = "") -> tuple[bool, str]:
         ]):
             return True, "Hardware design/verification role"
 
-    # 5. No title signal — require MULTIPLE distinct role-specific signals so
-    #    company boilerplate ("we build SoCs") never leaks non-eng roles in.
+    # 5. No title signal — require an engineering-ish title AND multiple distinct
+    #    role-specific signals, so verbose company boilerplate ("we build SoCs")
+    #    can never leak non-engineering roles (e.g. "Social Media Lead",
+    #    "Mission Operations Director") into the pool.
+    eng_title = any(w in title_l for w in [
+        "engineer", "designer", "architect", "verification", "design",
+        "silicon", "hardware", "rtl", "asic", "vlsi", "soc", "fpga", "dft",
+        "member of technical staff", "mts", "cad", "co-op", "intern",
+    ])
     hits = [s for s in _RELEVANT_DESC_SIGNALS if s in desc_l]
-    if len(hits) >= 2:
-        return True, "Multiple RTL/DV methodology signals in description"
+    if eng_title and len(hits) >= 2:
+        return True, "Engineering role with multiple RTL/DV methodology signals"
 
     return False, "No RTL/DV signal in title or description"
 

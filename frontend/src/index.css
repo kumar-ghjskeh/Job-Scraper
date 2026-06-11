@@ -268,3 +268,61 @@ select option { background: var(--surface); color: var(--text-primary); }
   background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px;
 }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Mobile / PWA — filters become a left drawer, job details a full-screen
+   bottom sheet. Desktop layout is untouched (these only fire ≤ 820px or via
+   the explicit .mobile-* wrappers the App renders on small screens).
+   ════════════════════════════════════════════════════════════════════════ */
+/* Note: the sticky TopNav header is z-index 200, so these overlays must sit
+   ABOVE it to fully cover the screen on mobile. */
+.mobile-backdrop {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(8, 11, 18, 0.55);
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.18s ease forwards;
+}
+
+/* Left slide-in drawer that hosts the FilterSidebar on phones. */
+.mobile-drawer {
+  position: fixed; top: 0; left: 0; bottom: 0; z-index: 301;
+  width: min(86vw, 330px);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+  animation: slideInLeft 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Full-screen sheet that hosts the JobDetailsPanel on phones. */
+.mobile-sheet {
+  position: fixed; inset: 0; z-index: 320;
+  background: var(--surface);
+  display: flex; flex-direction: column;
+  animation: slideInUp 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@keyframes slideInUp   { from { transform: translateY(8%); opacity: 0.6; } to { transform: translateY(0); opacity: 1; } }
+
+/* Floating button row used to open Filters on mobile. */
+.mobile-toolbar {
+  display: flex; gap: 8px; align-items: center;
+  margin-bottom: 12px;
+}
+.mobile-toolbar button {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: 999px; padding: 8px 14px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+}
+
+/* Make tap targets comfortable on touch devices. */
+@media (max-width: 820px) {
+  :root { --nav-height: 96px; }
+  .btn { padding: 9px 16px; }
+  .job-card { padding: 14px; }
+}

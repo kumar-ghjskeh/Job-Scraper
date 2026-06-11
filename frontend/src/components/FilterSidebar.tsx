@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
-import type { Filters, JobFacets } from '../lib/types'
+import type { Filters, JobFacets, Watchlist } from '../lib/types'
+import { Icon } from './Icon'
 
 interface Props {
   filters: Filters
   onChange: (f: Filters) => void
   totalCount: number
+  /** When rendered inside the mobile drawer: full-width, non-sticky, with a close button. */
+  mobile?: boolean
+  onClose?: () => void
 }
 
 const CATEGORIES = [
@@ -62,8 +66,32 @@ function Toggle({ on, onToggle, label, sub }: { on: boolean; onToggle: () => voi
   )
 }
 
-export function FilterSidebar({ filters, onChange, totalCount }: Props) {
+export function FilterSidebar({ filters, onChange, totalCount, mobile = false, onClose }: Props) {
   const [facets, setFacets] = useState<JobFacets | null>(null)
+  const [watchlists, setWatchlists] = useState<Watchlist[]>([])
+
+  const loadWatchlists = useCallback(() => {
+    api.getWatchlists().then(setWatchlists).catch(() => {/* non-fatal */})
+  }, [])
+
+  useEffect(() => { loadWatchlists() }, [loadWatchlists])
+
+  async function saveWatchlist() {
+    const name = window.prompt('Name this saved search (e.g. "New Grad DV in CA/TX"):')
+    if (!name) return
+    const clean = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== '' && v !== false))
+    await api.createWatchlist(name, clean)
+    loadWatchlists()
+  }
+  async function applyWatchlist(w: Watchlist) {
+    onChange({ usa_only: true, include_senior: false, ...w.filters })
+    await api.checkWatchlist(w.id)
+    loadWatchlists()
+  }
+  async function removeWatchlist(id: number) {
+    await api.deleteWatchlist(id)
+    loadWatchlists()
+  }
 
   useEffect(() => {
     api.getFacets(filters.usa_only !== false, filters.include_software)
@@ -91,16 +119,20 @@ export function FilterSidebar({ filters, onChange, totalCount }: Props) {
     return v !== undefined && v !== '' && v !== false
   })
 
+  const rootStyle: React.CSSProperties = mobile
+    ? { width: '100%', flexShrink: 0, background: 'var(--surface)' }
+    : {
+        width: 'var(--sidebar-width)', flexShrink: 0,
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        position: 'sticky', top: 'calc(var(--nav-height) + 8px)',
+        maxHeight: 'calc(100vh - var(--nav-height) - 24px)',
+        overflowY: 'auto', alignSelf: 'flex-start',
+      }
+
   return (
-    <aside style={{
-      width: 'var(--sidebar-width)', flexShrink: 0,
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 10,
-      position: 'sticky', top: 'calc(var(--nav-height) + 8px)',
-      maxHeight: 'calc(100vh - var(--nav-height) - 24px)',
-      overflowY: 'auto', alignSelf: 'flex-start',
-    }}>
+    <aside style={rootStyle}>
       {/* Header */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -108,28 +140,72 @@ export function FilterSidebar({ filters, onChange, totalCount }: Props) {
         borderBottom: '1px solid var(--border)',
         position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1,
       }}>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>Filters</span>
           {facets && (
-            <span style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>
               {totalCount.toLocaleString()} jobs
             </span>
           )}
         </div>
-        {hasFilters && (
-          <button
-            onClick={() => onChange({ usa_only: true, include_senior: false })}
-            style={{
-              background: 'none', border: 'none', color: 'var(--primary)',
-              fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: 0,
-            }}
-          >
-            Clear all
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {hasFilters && (
+            <button
+              onClick={() => onChange({ usa_only: true, include_senior: false })}
+              style={{
+                background: 'none', border: 'none', color: 'var(--primary)',
+                fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: 0,
+              }}
+            >
+              Clear all
+            </button>
+          )}
+          {mobile && onClose && (
+            <button
+              onClick={onClose}
+              title="Done"
+              style={{
+                background: 'var(--surface-sunken)', border: '1px solid var(--border)',
+                borderRadius: 6, width: 30, height: 30, cursor: 'pointer', color: 'var(--text-muted)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            ><Icon name="x" size={16} /></button>
+          )}
+        </div>
       </div>
 
       <div style={{ padding: '12px 16px' }}>
+
+        {/* Saved searches / watchlists */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Saved Searches</span>
+            <button onClick={saveWatchlist} title="Save current filters"
+              style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              <Icon name="bookmark" size={12} color="var(--primary)" /> Save
+            </button>
+          </div>
+          {watchlists.length === 0 ? (
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Save a filter set to track new jobs.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {watchlists.map((w) => (
+                <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface-muted)', borderRadius: 7, padding: '6px 9px' }}>
+                  <button onClick={() => applyWatchlist(w)} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {w.name}
+                  </button>
+                  {w.new_count > 0 && (
+                    <span className="pill pill-primary" style={{ fontSize: 9.5, fontWeight: 800 }}>{w.new_count} new</span>
+                  )}
+                  <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)' }}>{w.total}</span>
+                  <button onClick={() => removeWatchlist(w.id)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 0, display: 'flex' }}>
+                    <Icon name="x" size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Search */}
         <div style={{ marginBottom: 16 }}>

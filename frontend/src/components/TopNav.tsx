@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { AnalyticsSummary } from '../lib/types'
 import type { Theme } from '../lib/theme'
+import { useIsMobile } from '../lib/useIsMobile'
 import { Icon, type IconName } from './Icon'
 
 export type Tab = 'all' | 'resume' | 'entry-level' | 'best' | 'saved' | 'applied' | 'companies' | 'health'
@@ -31,39 +32,42 @@ export function TopNav({
   activeTab, onTabChange, analytics, onRefresh, refreshing, search, onSearch, theme, onToggleTheme,
 }: Props) {
   const [q, setQ] = useState(search)
+  const isMobile = useIsMobile()
 
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 200, background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
       {/* Brand + search + actions */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 18,
-        padding: '10px 24px', maxWidth: 1640, margin: '0 auto',
+        display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 18,
+        padding: isMobile ? '8px 12px' : '10px 24px', maxWidth: 1640, margin: '0 auto',
       }}>
         {/* Brand */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexShrink: 0 }}>
           <div style={{
-            width: 40, height: 40, borderRadius: 10, background: 'var(--brand-tile)',
+            width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, borderRadius: 10, background: 'var(--brand-tile)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
             border: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
           }}>
             <img src="/ashborne-logo.png" alt="Ashborne Silicon"
-              style={{ width: 34, height: 34, objectFit: 'contain' }} />
+              style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, objectFit: 'contain' }} />
           </div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 16.5, color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
-              Ashborne Silicon
+          {!isMobile && (
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 16.5, color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+                Ashborne Silicon
+              </div>
+              <div style={{ fontSize: 10.5, color: 'var(--text-secondary)', letterSpacing: '0.04em', marginTop: 1 }}>
+                USA RTL · DV · ASIC · SoC · FPGA · DFT jobs
+              </div>
             </div>
-            <div style={{ fontSize: 10.5, color: 'var(--text-secondary)', letterSpacing: '0.04em', marginTop: 1 }}>
-              USA RTL · DV · ASIC · SoC · FPGA · DFT jobs
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Search */}
         <form
           onSubmit={(e) => { e.preventDefault(); onSearch(q.trim()) }}
-          style={{ flex: 1, maxWidth: 540, position: 'relative' }}
+          style={{ flex: 1, maxWidth: isMobile ? undefined : 540, position: 'relative' }}
         >
           <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', display: 'flex' }}>
             <Icon name="search" size={16} />
@@ -71,7 +75,7 @@ export function TopNav({
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by title, company, skill, protocol, or state…"
+            placeholder={isMobile ? 'Search jobs…' : 'Search by title, company, skill, protocol, or state…'}
             style={{
               width: '100%', height: 38, paddingLeft: 36, paddingRight: q ? 64 : 14,
               background: 'var(--surface-muted)', border: '1px solid var(--border)',
@@ -94,7 +98,7 @@ export function TopNav({
           )}
         </form>
 
-        <div style={{ flex: 1 }} />
+        {!isMobile && <div style={{ flex: 1 }} />}
 
         {/* Theme toggle */}
         <button
@@ -102,7 +106,7 @@ export function TopNav({
           title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
           aria-label="Toggle theme"
           style={{
-            width: 38, height: 38, borderRadius: 10, cursor: 'pointer',
+            width: 38, height: 38, borderRadius: 10, cursor: 'pointer', flexShrink: 0,
             background: 'var(--surface-muted)', border: '1px solid var(--border)',
             color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'background 0.14s, color 0.14s',
@@ -113,12 +117,18 @@ export function TopNav({
           <Icon name={theme === 'light' ? 'moon' : 'sun'} size={18} />
         </button>
 
-        {/* Refresh */}
-        <button onClick={onRefresh} disabled={refreshing} className="btn btn-primary">
+        {/* Refresh — icon-only on mobile to save horizontal space */}
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="btn btn-primary"
+          title="Refresh jobs"
+          style={isMobile ? { width: 38, height: 38, padding: 0, justifyContent: 'center', flexShrink: 0 } : undefined}
+        >
           {refreshing ? (
-            <><span className="spin"><Icon name="refresh" size={15} color="var(--on-primary)" /></span> Updating…</>
+            <><span className="spin"><Icon name="refresh" size={15} color="var(--on-primary)" /></span>{!isMobile && ' Updating…'}</>
           ) : (
-            <><Icon name="refresh" size={15} color="var(--on-primary)" /> Refresh Jobs</>
+            <><Icon name="refresh" size={15} color="var(--on-primary)" />{!isMobile && ' Refresh Jobs'}</>
           )}
         </button>
       </div>
@@ -126,7 +136,7 @@ export function TopNav({
       {/* Tabs */}
       <div style={{ borderTop: '1px solid var(--border)' }}>
         <div style={{
-          display: 'flex', alignItems: 'center', padding: '0 24px',
+          display: 'flex', alignItems: 'center', padding: isMobile ? '0 8px' : '0 24px',
           overflowX: 'auto', gap: 4, maxWidth: 1640, margin: '0 auto',
         }}>
           {TABS.map((t) => {

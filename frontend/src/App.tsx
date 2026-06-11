@@ -12,6 +12,7 @@ import { Icon } from './components/Icon'
 import { ResumeIntel } from './components/ResumeIntel'
 import { groupByCanonical } from './lib/dedupe'
 import { useTheme } from './lib/theme'
+import { useIsMobile } from './lib/useIsMobile'
 import { api } from './lib/api'
 import type { AnalyticsSummary, Filters, Job, PaginatedResponse } from './lib/types'
 
@@ -103,6 +104,8 @@ function ResultsSummary({ tab, loading, total, page, totalPages, analytics }: {
 
 export default function App() {
   const { theme, toggle: toggleTheme } = useTheme()
+  const isMobile = useIsMobile()
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [tab, setTab] = useState<Tab>('all')
   const [page, setPage] = useState(1)
   const [paginatedJobs, setPaginatedJobs] = useState<PaginatedResponse<Job> | null>(null)
@@ -159,7 +162,18 @@ export default function App() {
     loadAnalytics()
   }, [tab, filters, page]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function changeTab(t: Tab) { setTab(t); setPage(1); setSelectedJob(null) }
+  // Lock body scroll while a mobile drawer or full-screen sheet is open.
+  const sheetOpen = isMobile && selectedJob !== null
+  useEffect(() => {
+    const lock = filtersOpen || sheetOpen
+    document.body.style.overflow = lock ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [filtersOpen, sheetOpen])
+
+  // Leaving mobile (e.g. rotate to landscape / resize) should dismiss the drawer.
+  useEffect(() => { if (!isMobile) setFiltersOpen(false) }, [isMobile])
+
+  function changeTab(t: Tab) { setTab(t); setPage(1); setSelectedJob(null); setFiltersOpen(false) }
   function changeFilters(f: Filters) { setFilters(f); setPage(1) }
 
   function handleSearch(q: string) {
@@ -196,6 +210,11 @@ export default function App() {
 
   const showSidebar = !['companies', 'health', 'saved', 'applied', 'resume'].includes(tab)
   const showPanel = selectedJob !== null
+  const activeFilterCount = Object.entries(filters).filter(([k, v]) => {
+    if (k === 'usa_only' && v === true) return false
+    if (k === 'include_senior' && v === false) return false
+    return v !== undefined && v !== '' && v !== false
+  }).length
   const jobs = paginatedJobs?.items ?? []
   // Collapse multi-location duplicates of the same role into one canonical card.
   const grouped = groupByCanonical(jobs)
@@ -214,7 +233,7 @@ export default function App() {
         onToggleTheme={toggleTheme}
       />
 
-      <main style={{ maxWidth: 1680, margin: '0 auto', padding: '16px 20px 48px' }}>
+      <main style={{ maxWidth: 1680, margin: '0 auto', padding: isMobile ? '12px 12px 40px' : '16px 20px 48px' }}>
         {error && (
           <div style={{
             background: 'var(--warning-light)', border: '1px solid var(--warning-border)',
@@ -233,14 +252,24 @@ export default function App() {
             <ScrapeHealth />
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: isMobile ? 12 : 16, alignItems: 'flex-start', flexDirection: isMobile ? 'column' : 'row' }}>
             {tab === 'resume' ? (
               <ResumeIntel onChanged={() => { loadJobs(); loadAnalytics() }} />
-            ) : showSidebar ? (
+            ) : !isMobile && showSidebar ? (
               <FilterSidebar filters={filters} onChange={changeFilters} totalCount={paginatedJobs?.total_count ?? 0} />
             ) : null}
 
-            <div style={{ flex: 1, minWidth: 0 }} ref={jobListRef}>
+            <div style={{ flex: 1, minWidth: 0, width: isMobile ? '100%' : undefined }} ref={jobListRef}>
+              {isMobile && showSidebar && (
+                <div className="mobile-toolbar">
+                  <button onClick={() => setFiltersOpen(true)}>
+                    <Icon name="sliders" size={15} /> Filters
+                    {activeFilterCount > 0 && (
+                      <span className="pill pill-primary" style={{ fontSize: 10, fontWeight: 800, padding: '1px 7px' }}>{activeFilterCount}</span>
+                    )}
+                  </button>
+                </div>
+              )}
               <ResultsSummary
                 tab={tab} loading={loading} analytics={analytics}
                 total={paginatedJobs?.total_count ?? 0}
@@ -283,12 +312,40 @@ export default function App() {
               )}
             </div>
 
-            {showPanel && (
+            {!isMobile && showPanel && (
               <JobDetailsPanel job={selectedJob} onClose={() => setSelectedJob(null)} onUpdate={() => { loadJobs(); loadAnalytics() }} />
             )}
           </div>
         )}
       </main>
+
+      {/* ── Mobile: filters drawer ── */}
+      {isMobile && filtersOpen && (
+        <>
+          <div className="mobile-backdrop" onClick={() => setFiltersOpen(false)} />
+          <div className="mobile-drawer">
+            <FilterSidebar
+              mobile
+              onClose={() => setFiltersOpen(false)}
+              filters={filters}
+              onChange={changeFilters}
+              totalCount={paginatedJobs?.total_count ?? 0}
+            />
+          </div>
+        </>
+      )}
+
+      {/* ── Mobile: job details full-screen sheet ── */}
+      {isMobile && showPanel && (
+        <div className="mobile-sheet">
+          <JobDetailsPanel
+            mobile
+            job={selectedJob}
+            onClose={() => setSelectedJob(null)}
+            onUpdate={() => { loadJobs(); loadAnalytics() }}
+          />
+        </div>
+      )}
     </div>
   )
 }

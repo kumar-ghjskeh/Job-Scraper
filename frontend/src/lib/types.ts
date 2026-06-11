@@ -54,6 +54,9 @@ export interface Job {
   application_status: string
   notes: string
   resume_version_used: string
+  follow_up_date?: string
+  confirmation_id?: string
+  recruiter_contact?: string
   saved_at: string | null
   applied_at: string | null
   ignored_at: string | null
@@ -127,6 +130,16 @@ export interface JobMatch {
 
 export interface SkillGap { skill: string; count: number }
 
+export interface Watchlist {
+  id: number
+  name: string
+  filters: Filters
+  alert_enabled: boolean
+  last_checked_at: string
+  total: number
+  new_count: number
+}
+
 export interface PaginatedResponse<T> {
   items: T[]
   total_count: number
@@ -156,6 +169,7 @@ export interface Company {
   entry_level_jobs?: number
   new_jobs_today?: number
   scrape_status?: string
+  parser_confidence?: number
 }
 
 export interface JobFacets {

@@ -72,3 +72,30 @@ def test_empty_location_unknown():
 def test_confidence_high_for_state_abbr():
     r = parse_location("San Diego, CA")
     assert r.confidence >= 0.85
+
+
+# ── Multi-region postings (Phase 4 accuracy fix) ─────────────────────────────
+# A role listed across several countries that INCLUDES a US office is reachable
+# from the US and must stay in the USA view, not be dropped on the foreign city.
+
+def test_multiregion_with_us_office_is_usa():
+    r = parse_location(
+        "Boston, Massachusetts, United States; Santa Clara, California, United States; "
+        "Toronto, Ontario, Canada"
+    )
+    assert r.is_usa is True
+    assert r.state in ("MA", "CA")
+
+
+def test_multiregion_us_city_among_foreign_is_usa():
+    r = parse_location("Bengaluru, India; Sunnyvale, CA; Toronto, Canada")
+    assert r.is_usa is True
+
+
+def test_foreign_country_code_not_rescued_to_us_state():
+    # "IN" is India here, not Indiana — must NOT be rescued to USA.
+    assert parse_location("Hyderabad, IN").is_usa is False
+
+
+def test_london_ontario_still_canada():
+    assert parse_location("London, Ontario, Canada").is_usa is False
