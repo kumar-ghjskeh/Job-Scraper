@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import type { ResumeProfile, SkillGap } from '../lib/types'
+import type { ResumeProfile, ResumeVersion, SkillGap } from '../lib/types'
 import { Icon } from './Icon'
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
 const ACCEPT = '.pdf,.docx,.txt,.tex'
 
 export function ResumeIntel({ onChanged }: Props) {
+  const [versions, setVersions] = useState<ResumeVersion[]>([])
   const [profile, setProfile] = useState<ResumeProfile | null>(null)
   const [filename, setFilename] = useState('')
   const [gaps, setGaps] = useState<SkillGap[]>([])
@@ -17,26 +18,31 @@ export function ResumeIntel({ onChanged }: Props) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [drag, setDrag] = useState(false)
+  const [busy, setBusy] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const loadGaps = useCallback(async () => {
     try { const g = await api.getSkillGaps(); setGaps(g.gaps || []); setHighMatch(g.high_match_jobs || 0) } catch { /* */ }
   }, [])
 
-  useEffect(() => {
-    api.getResume().then((r) => {
+  const loadAll = useCallback(async () => {
+    try {
+      const vs = await api.getResumes()
+      setVersions(vs)
+      const r = await api.getResume()
       setProfile(r.profile)
       setFilename(r.filename || '')
-      if (r.profile) loadGaps()
-    }).catch(() => {})
+      if (r.profile) loadGaps(); else { setGaps([]); setHighMatch(0) }
+    } catch { /* */ }
   }, [loadGaps])
 
-  async function handleFile(file: File) {
+  useEffect(() => { loadAll() }, [loadAll])
+
+  async function handleFile(file: File, label?: string) {
     setUploading(true); setError('')
     try {
-      const res = await api.uploadResume(file)
-      setProfile(res.profile); setFilename(res.filename)
-      await loadGaps()
+      await api.uploadResume(file, label || '')
+      await loadAll()
       onChanged()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Upload failed')
@@ -45,10 +51,31 @@ export function ResumeIntel({ onChanged }: Props) {
     }
   }
 
-  async function handleRemove() {
-    await api.deleteResume()
-    setProfile(null); setFilename(''); setGaps([])
-    onChanged()
+  function pickFile(asNewVersion: boolean) {
+    const input = inputRef.current
+    if (!input) return
+    input.onchange = () => {
+      const f = input.files?.[0]
+      if (!f) return
+      const label = asNewVersion
+        ? (window.prompt('Name this resume version (e.g. "DV/UVM", "RTL Design"):') || '').trim()
+        : ''
+      handleFile(f, label)
+      input.value = ''
+    }
+    input.click()
+  }
+
+  async function selectVersion(id: number) {
+    if (busy) return
+    setBusy(true)
+    try { await api.activateResume(id); await loadAll(); onChanged() } finally { setBusy(false) }
+  }
+
+  async function deleteVersion(id: number) {
+    if (busy) return
+    setBusy(true)
+    try { await api.deleteResumeOne(id); await loadAll(); onChanged() } finally { setBusy(false) }
   }
 
   const maxGap = gaps.length ? gaps[0].count : 1
@@ -60,15 +87,16 @@ export function ResumeIntel({ onChanged }: Props) {
       position: 'sticky', top: 'calc(var(--nav-height) + 8px)',
       maxHeight: 'calc(100vh - var(--nav-height) - 24px)', overflowY: 'auto', alignSelf: 'flex-start',
     }}>
+      <input ref={inputRef} type="file" accept={ACCEPT} style={{ display: 'none' }} />
       <div style={{ padding: '14px 16px' }}>
-        {!profile ? (
+        {versions.length === 0 ? (
           <>
             <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>Resume Intelligence</div>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.5 }}>
-              Upload your resume to rank every job by fit, see matched & missing skills, and get safe tailoring advice. It stays private on your backend.
+              Upload your resume to rank every job by fit, see matched &amp; missing skills, and get safe tailoring advice. It stays private on your backend.
             </div>
             <div
-              onClick={() => inputRef.current?.click()}
+              onClick={() => pickFile(false)}
               onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
               onDragLeave={() => setDrag(false)}
               onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f) }}
@@ -93,39 +121,73 @@ export function ResumeIntel({ onChanged }: Props) {
               )}
             </div>
             {error && <div style={{ fontSize: 11.5, color: 'var(--danger)', marginTop: 8 }}>{error}</div>}
-            <input ref={inputRef} type="file" accept={ACCEPT} style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
           </>
         ) : (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>Your Resume</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => inputRef.current?.click()} title="Replace"
-                  style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Replace</button>
-                <button onClick={handleRemove} title="Remove"
-                  style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Remove</button>
-              </div>
+            {/* Resume version manager — the ACTIVE version is what every job is
+                ranked & compared against. Switch to re-score everything. */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>Resume Versions</div>
+              <button onClick={() => pickFile(true)} title="Add another resume version"
+                style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <Icon name="fileText" size={12} color="var(--primary)" /> Add
+              </button>
             </div>
-            <input ref={inputRef} type="file" accept={ACCEPT} style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
+              {versions.map((v) => {
+                const active = v.is_active
+                return (
+                  <div key={v.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 7, padding: '7px 9px', borderRadius: 8,
+                      border: `1px solid ${active ? 'var(--primary-mid)' : 'var(--border)'}`,
+                      background: active ? 'var(--primary-light)' : 'var(--surface-muted)',
+                    }}>
+                    <button onClick={() => selectVersion(v.id)} title={active ? 'Active' : 'Use this resume'}
+                      style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{
+                        width: 9, height: 9, borderRadius: '50%', flexShrink: 0,
+                        background: active ? 'var(--primary)' : 'transparent',
+                        border: active ? 'none' : '1.5px solid var(--border-strong)',
+                      }} />
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 12.5, fontWeight: active ? 700 : 600, color: active ? 'var(--primary)' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.label}</span>
+                        <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-tertiary)' }}>{v.skill_count} skills{active ? ' · active' : ''}</span>
+                      </span>
+                    </button>
+                    {versions.length > 1 && (
+                      <button onClick={() => deleteVersion(v.id)} title="Delete this version"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 0, display: 'flex' }}>
+                        <Icon name="x" size={12} />
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
 
-            <div style={{ background: 'var(--surface-muted)', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>{profile.role_focus}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2 }}>
-                {[profile.degree, profile.grad_date].filter(Boolean).join(' · ') || filename}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-                {profile.all_skills.slice(0, 12).map((s) => (
-                  <span key={s} className="skill-chip" style={{ fontSize: 10 }}>{s}</span>
-                ))}
-                {profile.all_skills.length > 12 && (
-                  <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)', alignSelf: 'center' }}>+{profile.all_skills.length - 12}</span>
+            {profile && (
+              <div style={{ background: 'var(--surface-muted)', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>{profile.role_focus}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2 }}>
+                  {[profile.degree, profile.grad_date].filter(Boolean).join(' · ') || filename}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                  {profile.all_skills.slice(0, 12).map((s) => (
+                    <span key={s} className="skill-chip" style={{ fontSize: 10 }}>{s}</span>
+                  ))}
+                  {profile.all_skills.length > 12 && (
+                    <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)', alignSelf: 'center' }}>+{profile.all_skills.length - 12}</span>
+                  )}
+                </div>
+                {profile.projects.length > 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 8 }}>{profile.projects.length} projects detected</div>
                 )}
               </div>
-              {profile.projects.length > 0 && (
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 8 }}>{profile.projects.length} projects detected</div>
-              )}
+            )}
+
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 12, lineHeight: 1.5 }}>
+              Click any job to see how it matches the <strong style={{ color: 'var(--primary)' }}>active</strong> resume — switch versions above to re-score everything.
             </div>
 
             <div className="section-header">Skill Gaps · top missing</div>
@@ -147,6 +209,7 @@ export function ResumeIntel({ onChanged }: Props) {
                 </div>
               </>
             )}
+            {error && <div style={{ fontSize: 11.5, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}
           </>
         )}
       </div>

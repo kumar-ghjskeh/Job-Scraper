@@ -130,6 +130,16 @@ export interface JobMatch {
 
 export interface SkillGap { skill: string; count: number }
 
+export interface ResumeVersion {
+  id: number
+  label: string
+  filename: string
+  is_active: boolean
+  uploaded_at: string
+  role_focus: string
+  skill_count: number
+}
+
 export interface Watchlist {
   id: number
   name: string

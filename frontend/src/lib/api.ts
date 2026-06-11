@@ -116,34 +116,48 @@ export const api = {
     return data.suggestions || []
   },
 
-  // ── Resume intelligence (Phase 3) ──
-  async uploadResume(file: File): Promise<{ ok: boolean; profile: import('./types').ResumeProfile; filename: string }> {
+  // ── Resume intelligence (Phase 3 · multi-resume Phase 5) ──
+  async uploadResume(file: File, label = ''): Promise<{ ok: boolean; id: number; profile: import('./types').ResumeProfile; filename: string; label: string }> {
     const fd = new FormData()
     fd.append('file', file)
+    if (label) fd.append('label', label)
     const { data } = await axios.post(`${BASE}/resume/upload`, fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
     return data
   },
 
-  async getResume(): Promise<{ profile: import('./types').ResumeProfile | null; filename?: string }> {
+  async getResume(): Promise<{ profile: import('./types').ResumeProfile | null; filename?: string; id?: number; label?: string }> {
     const { data } = await axios.get(`${BASE}/resume`)
     return data
+  },
+
+  async getResumes(): Promise<import('./types').ResumeVersion[]> {
+    const { data } = await axios.get(`${BASE}/resumes`)
+    return data
+  },
+
+  async activateResume(id: number): Promise<void> {
+    await axios.post(`${BASE}/resume/${id}/activate`)
+  },
+
+  async deleteResumeOne(id: number): Promise<void> {
+    await axios.delete(`${BASE}/resume/${id}`)
   },
 
   async deleteResume(): Promise<void> {
     await axios.delete(`${BASE}/resume`)
   },
 
-  async getResumeMatches(page = 1, limit = 50, includeSenior = false): Promise<PaginatedResponse<Job> & { no_resume?: boolean }> {
+  async getResumeMatches(page = 1, limit = 50, includeSenior = false, resumeId?: number): Promise<PaginatedResponse<Job> & { no_resume?: boolean }> {
     const { data } = await axios.get(`${BASE}/jobs/resume-matches`, {
-      params: { page, limit, include_senior: includeSenior },
+      params: clean({ page, limit, include_senior: includeSenior, resume_id: resumeId }),
     })
     return data
   },
 
-  async getJobMatch(id: number): Promise<import('./types').JobMatch> {
-    const { data } = await axios.get(`${BASE}/jobs/${id}/match`)
+  async getJobMatch(id: number, resumeId?: number): Promise<import('./types').JobMatch> {
+    const { data } = await axios.get(`${BASE}/jobs/${id}/match`, { params: clean({ resume_id: resumeId }) })
     return data
   },
 

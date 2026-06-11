@@ -183,13 +183,16 @@ class JobPosting(SQLModel, table=True):
 
 
 class ResumeProfile(SQLModel, table=True):
-    """Single-row store for the user's parsed resume profile (personal tool).
-    Only the extracted profile is kept — the raw file is discarded after parse."""
+    """Store for the user's parsed resume profiles. Multiple versions are kept
+    (e.g. 'DV/UVM', 'RTL Design'); exactly one is marked active. Only the
+    extracted profile is kept — the raw file is discarded after parse."""
     __tablename__ = "resume_profile"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     filename: str = ""
-    profile_json: str = ""  # JSON of ResumeProfileData
+    label: str = ""              # user-facing version name, e.g. "DV/UVM v3"
+    is_active: bool = True       # the version used for default ranking/badges
+    profile_json: str = ""       # JSON of ResumeProfileData
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
 
 

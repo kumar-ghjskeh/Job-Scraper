@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlmodel import Session, col, func, select
@@ -710,8 +710,20 @@ def search_suggestions(q: str, session: SessionDep, limit: int = 8):
 
 # ── Resume intelligence (Phase 3) ────────────────────────────────────────────
 
-def _current_profile(session: Session) -> Optional[dict]:
-    rp = session.exec(select(ResumeProfile).order_by(col(ResumeProfile.id).desc())).first()
+def _active_resume(session: Session) -> Optional[ResumeProfile]:
+    """The resume version marked active, else the most recent one."""
+    rp = session.exec(
+        select(ResumeProfile).where(ResumeProfile.is_active == True)  # noqa: E712
+        .order_by(col(ResumeProfile.id).desc())
+    ).first()
+    if rp:
+        return rp
+    return session.exec(select(ResumeProfile).order_by(col(ResumeProfile.id).desc())).first()
+
+
+def _current_profile(session: Session, resume_id: Optional[int] = None) -> Optional[dict]:
+    """Parsed profile for a specific resume id, else the active resume."""
+    rp = session.get(ResumeProfile, resume_id) if resume_id else _active_resume(session)
     if not rp or not rp.profile_json:
         return None
     try:
@@ -737,8 +749,24 @@ def _job_match_input(job: JobPosting) -> dict:
     }
 
 
+def _resume_brief(rp: ResumeProfile) -> dict:
+    try:
+        prof = json.loads(rp.profile_json) if rp.profile_json else {}
+    except Exception:
+        prof = {}
+    return {
+        "id": rp.id,
+        "label": rp.label or (prof.get("role_focus") or rp.filename or f"Resume {rp.id}"),
+        "filename": rp.filename,
+        "is_active": rp.is_active,
+        "uploaded_at": rp.uploaded_at,
+        "role_focus": prof.get("role_focus", ""),
+        "skill_count": len(prof.get("all_skills", []) or []),
+    }
+
+
 @app.post("/resume/upload")
-async def upload_resume(session: SessionDep, file: UploadFile = File(...)):
+async def upload_resume(session: SessionDep, file: UploadFile = File(...), label: str = Form(default="")):
     from .resume_parser import parse_resume
     data = await file.read()
     if len(data) > 8 * 1024 * 1024:
@@ -747,24 +775,70 @@ async def upload_resume(session: SessionDep, file: UploadFile = File(...)):
         profile = parse_resume(data, file.filename or "resume.txt")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not parse resume: {e}")
-    for old in session.exec(select(ResumeProfile)).all():
-        session.delete(old)
-    rp = ResumeProfile(filename=file.filename or "", profile_json=json.dumps(profile.to_dict()))
+    # New upload becomes the active version; demote the others (keep them).
+    for other in session.exec(select(ResumeProfile)).all():
+        if other.is_active:
+            other.is_active = False
+            session.add(other)
+    prof_dict = profile.to_dict()
+    rp = ResumeProfile(
+        filename=file.filename or "",
+        label=(label or "").strip() or prof_dict.get("role_focus", "") or (file.filename or ""),
+        is_active=True,
+        profile_json=json.dumps(prof_dict),
+    )
     session.add(rp)
     session.commit()
-    return {"ok": True, "profile": profile.to_dict(), "filename": file.filename}
+    session.refresh(rp)
+    return {"ok": True, "id": rp.id, "profile": prof_dict, "filename": file.filename, "label": rp.label}
+
+
+@app.get("/resumes")
+def list_resumes(session: SessionDep):
+    rows = session.exec(select(ResumeProfile).order_by(col(ResumeProfile.id).desc())).all()
+    return [_resume_brief(r) for r in rows]
 
 
 @app.get("/resume")
 def get_resume(session: SessionDep):
-    rp = session.exec(select(ResumeProfile).order_by(col(ResumeProfile.id).desc())).first()
+    rp = _active_resume(session)
     if not rp or not rp.profile_json:
         return {"profile": None}
-    return {"profile": json.loads(rp.profile_json), "filename": rp.filename, "uploaded_at": rp.uploaded_at}
+    return {"profile": json.loads(rp.profile_json), "filename": rp.filename,
+            "uploaded_at": rp.uploaded_at, "id": rp.id, "label": rp.label}
+
+
+@app.post("/resume/{resume_id}/activate")
+def activate_resume(resume_id: int, session: SessionDep):
+    target = session.get(ResumeProfile, resume_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    for r in session.exec(select(ResumeProfile)).all():
+        r.is_active = (r.id == resume_id)
+        session.add(r)
+    session.commit()
+    return {"ok": True, "active_id": resume_id}
+
+
+@app.delete("/resume/{resume_id}")
+def delete_resume_one(resume_id: int, session: SessionDep):
+    rp = session.get(ResumeProfile, resume_id)
+    if rp:
+        was_active = rp.is_active
+        session.delete(rp)
+        session.commit()
+        if was_active:
+            nxt = session.exec(select(ResumeProfile).order_by(col(ResumeProfile.id).desc())).first()
+            if nxt:
+                nxt.is_active = True
+                session.add(nxt)
+                session.commit()
+    return {"ok": True}
 
 
 @app.delete("/resume")
 def delete_resume(session: SessionDep):
+    """Delete all resume versions (legacy 'remove resume' action)."""
     for old in session.exec(select(ResumeProfile)).all():
         session.delete(old)
     session.commit()
@@ -772,8 +846,9 @@ def delete_resume(session: SessionDep):
 
 
 @app.get("/jobs/resume-matches")
-def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(default=50, ge=1, le=200), include_senior: bool = False):
-    profile = _current_profile(session)
+def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(default=50, ge=1, le=200),
+                   include_senior: bool = False, resume_id: Optional[int] = None):
+    profile = _current_profile(session, resume_id)
     if not profile:
         return {"items": [], "total_count": 0, "page": 1, "limit": limit,
                 "total_pages": 1, "has_next": False, "has_prev": False, "no_resume": True}
@@ -843,8 +918,8 @@ def skill_gaps(session: SessionDep, min_match: int = 45):
 
 
 @app.get("/jobs/{job_id}/match")
-def job_match(job_id: int, session: SessionDep):
-    profile = _current_profile(session)
+def job_match(job_id: int, session: SessionDep, resume_id: Optional[int] = None):
+    profile = _current_profile(session, resume_id)
     if not profile:
         raise HTTPException(status_code=404, detail="No resume uploaded")
     job = session.get(JobPosting, job_id)
