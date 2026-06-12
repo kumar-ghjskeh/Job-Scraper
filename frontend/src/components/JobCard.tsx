@@ -15,19 +15,13 @@ interface Props {
   resumePrimary?: boolean
 }
 
-function scoreColor(s: number) {
-  if (s >= 85) return 'var(--accent-gold)'
+// New Grad Fit ring colour — gold only for a true Excellent (90+) fit.
+function ngColor(s: number) {
+  if (s >= 90) return 'var(--accent-gold)'
   if (s >= 75) return 'var(--primary)'
-  if (s >= 65) return 'var(--teal)'
-  if (s >= 50) return 'var(--warning)'
+  if (s >= 60) return 'var(--teal)'
+  if (s >= 46) return 'var(--warning)'
   return 'var(--text-tertiary)'
-}
-function scoreLabel(s: number) {
-  if (s >= 85) return 'Excellent'
-  if (s >= 75) return 'Strong'
-  if (s >= 65) return 'Good'
-  if (s >= 50) return 'Fair'
-  return 'Low'
 }
 function expPill(level: string): string {
   switch (level) {
@@ -47,13 +41,15 @@ function locationPill(label: string): string {
 }
 const isNew = (d: string) => Date.now() - new Date(d).getTime() < 24 * 60 * 60 * 1000
 
-export function JobCard({ job, selected, onClick, onQuickAction, extraLocations = [], resumeMatch, resumePrimary }: Props) {
+export function JobCard({ job, selected, onClick, onQuickAction, extraLocations = [], resumeMatch }: Props) {
   const fresh = isNew(job.first_seen_at)
-  const sc = scoreColor(job.match_score)
   const saved = job.active_status === 'saved'
   const rm = resumeMatch ?? job.resume_match
-  // On the Resume tab the ring shows the resume match; elsewhere the relevance score.
-  const showResumeRing = !!resumePrimary && rm !== undefined && rm !== null
+  // The ring always shows New Grad Fit (the primary score for this candidate);
+  // Resume Match is a smaller secondary badge.
+  const ng = job.new_grad_fit ?? 0
+  const ngc = ngColor(ng)
+  const ngLabel = job.new_grad_fit_label || ''
   const risk = job.eligibility_risk
   const h1b = job.sponsors_h1b
 
@@ -81,7 +77,7 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{job.company}</span>
             <span className={`badge tier-${(job.company_priority || 'c').toLowerCase()}`}>{job.company_priority}</span>
-            {!showResumeRing && rm !== undefined && rm !== null && (
+            {rm !== undefined && rm !== null && (
               <span className="pill" style={{ background: 'transparent', color: matchColor(rm), border: `1px solid ${matchColor(rm)}`, fontWeight: 700, fontSize: 10.5 }}>
                 <Icon name="target" size={10} color={matchColor(rm)} /> Resume {rm}%
               </span>
@@ -90,24 +86,19 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
           </div>
         </div>
 
-        {/* Score ring — resume match on the Resume tab, else relevance score */}
-        {(() => {
-          const ringColor = showResumeRing ? matchColor(rm!) : sc
-          return (
-            <div style={{
-              width: 52, height: 52, borderRadius: '50%', background: 'var(--surface-muted)',
-              border: `2.5px solid ${ringColor}`, display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: ringColor, lineHeight: 1 }}>
-                {showResumeRing ? `${rm}%` : job.match_score}
-              </div>
-              <div style={{ fontSize: 8, color: ringColor, fontWeight: 700, letterSpacing: '0.02em', marginTop: 1 }}>
-                {showResumeRing ? 'MATCH' : scoreLabel(job.match_score)}
-              </div>
-            </div>
-          )
-        })()}
+        {/* Score ring — New Grad Fit (how realistic this role is for a new grad) */}
+        <div
+          title={`New Grad Fit ${ng} — ${job.overall_recommendation || ngLabel}`}
+          style={{
+            width: 54, height: 54, borderRadius: '50%', background: 'var(--surface-muted)',
+            border: `2.5px solid ${ngc}`, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0, textAlign: 'center',
+          }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: ngc, lineHeight: 1 }}>{ng}</div>
+          <div style={{ fontSize: 7.5, color: ngc, fontWeight: 700, letterSpacing: '0.01em', marginTop: 1, padding: '0 2px' }}>
+            {ngLabel}
+          </div>
+        </div>
       </div>
 
       {/* Meta badges */}

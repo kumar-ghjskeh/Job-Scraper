@@ -360,8 +360,8 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
         <div style={{ marginBottom: 16 }}>
           <SectionHead title="Posted Within" />
           <select
-            value={filters.new_since_hours ?? ''}
-            onChange={(e) => set('new_since_hours', e.target.value ? Number(e.target.value) : undefined)}
+            value={filters.posted_within_hours ?? ''}
+            onChange={(e) => set('posted_within_hours', e.target.value ? Number(e.target.value) : undefined)}
             style={inp}
           >
             <option value="">All time</option>

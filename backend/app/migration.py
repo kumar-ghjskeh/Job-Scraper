@@ -31,6 +31,8 @@ _MIGRATIONS: list[tuple[str, str, str]] = [
     ("job_postings", "follow_up_date",               "TEXT NOT NULL DEFAULT ''"),
     ("job_postings", "confirmation_id",              "TEXT NOT NULL DEFAULT ''"),
     ("job_postings", "recruiter_contact",            "TEXT NOT NULL DEFAULT ''"),
+    ("job_postings", "new_grad_fit",                 "INTEGER NOT NULL DEFAULT 0"),
+    ("job_postings", "experienced_fit",              "INTEGER NOT NULL DEFAULT 0"),
     # Company new fields
     ("companies",    "company_search_url",           "TEXT NOT NULL DEFAULT ''"),
     # ResumeProfile new fields (multi-resume support)

@@ -116,6 +116,10 @@ class JobResponse(BaseModel):
     location_confidence: float = 0.0
     match_score: int
     relevance_score_label: str = ""
+    new_grad_fit: int = 0
+    experienced_fit: int = 0
+    new_grad_fit_label: str = ""
+    overall_recommendation: str = ""
     matched_keywords: str
     score_breakdown_json: str = ""
     active_status: str
@@ -247,6 +251,7 @@ def _build_job_query(
     min_score: Optional[int] = None,
     new_since_hours: Optional[int] = None,
     first_seen_days: Optional[int] = None,
+    posted_within_hours: Optional[int] = None,
     keyword: Optional[str] = None,
     skills: Optional[str] = None,
     usa_only: bool = True,
@@ -258,7 +263,7 @@ def _build_job_query(
     role_flags: Optional[str] = None,
     state: Optional[str] = None,
     h1b_only: bool = False,
-    sort_by: str = "match_score",
+    sort_by: str = "new_grad_fit",
     sort_order: str = "desc",
     page: int = 1,
     limit: int = 50,
@@ -295,6 +300,11 @@ def _build_job_query(
 
     if level_filter:
         levels = [lv.strip() for lv in level_filter.split(',') if lv.strip()]
+        # Selecting a senior tier must lift the default senior gate below, or the
+        # filter and the gate contradict and return zero results.
+        if any(lv in ("Senior", "Staff", "Principal", "Lead", "Manager", "Director")
+               for lv in levels):
+            include_senior = True
         if levels:
             from sqlmodel import and_ as sql_and, or_ as sql_or
             # The seniority classifier only ever emits New Grad / Junior / Mid-Level /
@@ -324,7 +334,9 @@ def _build_job_query(
         conditions.append(col(JobPosting.remote_status).ilike(f"%{remote}%"))
 
     if min_score is not None:
-        conditions.append(JobPosting.match_score >= min_score)
+        # "Min score" filter is re-based on New Grad Fit — for this candidate,
+        # "high score" means "realistic for a new grad", not intrinsic relevance.
+        conditions.append(JobPosting.new_grad_fit >= min_score)
 
     # USA filter
     if usa_only:
@@ -352,6 +364,14 @@ def _build_job_query(
     if first_seen_days:
         cutoff = datetime.now(timezone.utc) - timedelta(days=first_seen_days)
         conditions.append(JobPosting.first_seen_at >= cutoff)
+
+    # "Posted within" filters on the company's actual POSTED date (what the card
+    # shows), NOT when we scraped it. A job with no known posted date is excluded
+    # from short windows — we can't claim it was posted that recently.
+    if posted_within_hours:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=posted_within_hours)
+        conditions.append(col(JobPosting.posted_date).is_not(None))
+        conditions.append(JobPosting.posted_date >= cutoff)
 
     if keyword:
         # Accurate multi-token search (portable SQLite + Postgres). Each token must
@@ -399,7 +419,7 @@ def _build_job_query(
             (JobPosting.is_entry_level == True) | (JobPosting.is_candidate_friendly == True)
         )
     elif view == "best":
-        conditions.append(JobPosting.match_score >= 65)
+        conditions.append(JobPosting.new_grad_fit >= 65)
     elif view == "all_usa":
         pass  # usa_only already applied above
     elif view == "adjacent":
@@ -430,20 +450,23 @@ def _build_job_query(
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total_count = session.exec(count_stmt).one()
 
-    # Sort
+    # Sort — default ranks by New Grad Fit (primary score for this candidate),
+    # with role relevance and recency as natural tiebreakers.
     sort_col_map = {
+        "new_grad_fit": JobPosting.new_grad_fit,
         "match_score": JobPosting.match_score,
+        "experienced_fit": JobPosting.experienced_fit,
         "first_seen_at": JobPosting.first_seen_at,
         "last_seen_at": JobPosting.last_seen_at,
         "posted_date": JobPosting.posted_date,
         "company": JobPosting.company,
         "job_title": JobPosting.job_title,
     }
-    sort_col = sort_col_map.get(sort_by, JobPosting.match_score)
+    sort_col = sort_col_map.get(sort_by, JobPosting.new_grad_fit)
     if sort_order == "asc":
-        stmt = stmt.order_by(col(sort_col).asc(), col(JobPosting.first_seen_at).desc())
+        stmt = stmt.order_by(col(sort_col).asc(), col(JobPosting.match_score).desc(), col(JobPosting.first_seen_at).desc())
     else:
-        stmt = stmt.order_by(col(sort_col).desc(), col(JobPosting.first_seen_at).desc())
+        stmt = stmt.order_by(col(sort_col).desc(), col(JobPosting.match_score).desc(), col(JobPosting.first_seen_at).desc())
 
     # Paginate
     offset = (page - 1) * limit
@@ -484,6 +507,7 @@ def list_jobs(
     min_score: Optional[int] = None,
     new_since_hours: Optional[int] = None,
     first_seen_days: Optional[int] = None,
+    posted_within_hours: Optional[int] = None,
     keyword: Optional[str] = None,
     skills: Optional[str] = None,
     usa_only: bool = True,
@@ -495,7 +519,7 @@ def list_jobs(
     role_flags: Optional[str] = None,
     state: Optional[str] = None,
     h1b_only: bool = False,
-    sort_by: str = "match_score",
+    sort_by: str = "new_grad_fit",
     sort_order: str = "desc",
 ):
     items, total = _build_job_query(
@@ -503,7 +527,8 @@ def list_jobs(
         priority=priority, role_category=role_category, experience_level=experience_level,
         level_filter=level_filter,
         remote=remote, min_score=min_score, new_since_hours=new_since_hours,
-        first_seen_days=first_seen_days, keyword=keyword, skills=skills,
+        first_seen_days=first_seen_days, posted_within_hours=posted_within_hours,
+        keyword=keyword, skills=skills,
         usa_only=usa_only, include_senior=include_senior,
         include_unknown_location=include_unknown_location,
         include_software=include_software, include_adjacent=include_adjacent,
@@ -773,9 +798,10 @@ def _job_match_input(job: JobPosting) -> dict:
         "match_score": job.match_score, "is_candidate_friendly": job.is_candidate_friendly,
         "eligibility_risk": job.eligibility_risk, "sponsors_h1b": job.sponsors_h1b,
         "is_fresh": is_fresh,
-        # Seniority context for the experience-fit sub-score
+        # Seniority context + stored job-intrinsic fit scores
         "experience_level": job.experience_level, "is_senior": job.is_senior,
         "is_entry_level": job.is_entry_level, "years_required_min": job.years_required_min,
+        "new_grad_fit": job.new_grad_fit, "experienced_fit": job.experienced_fit,
     }
 
 
@@ -894,6 +920,9 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
         m = compute_match(profile, _job_match_input(job))
         item = JobResponse.model_validate(job).model_dump()
         item["resume_match"] = m["resume_match"]
+        item["new_grad_fit"] = m["new_grad_fit"]
+        item["experienced_fit"] = m["experienced_fit"]
+        item["overall_recommendation"] = m["overall_recommendation"]
         item["match_breakdown"] = m["match_breakdown"]
         item["defensibility"] = m["defensibility"]
         item["apply_priority"] = m["apply_priority"]
@@ -1243,31 +1272,36 @@ def analytics_summary(session: SessionDep):
     def co_count(q):
         return session.exec(select(func.count(Company.id)).where(*q)).one() or 0
 
-    total_active = count([JobPosting.active_status == ActiveStatus.active])
-    new_24h = count([JobPosting.active_status == ActiveStatus.active, JobPosting.first_seen_at >= cutoff_24h])
-    entry_level = count([
-        JobPosting.active_status == ActiveStatus.active,
+    # All browseable cards count the SAME USA-relevant pool the All Jobs list
+    # shows (USA or unknown-location, non-software), so "Verified Active" always
+    # equals the list count and the cards reconcile. USA is a hard gate here.
+    USA_VIEW = [
+        (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0),
+        JobPosting.is_software_only == False,
+    ]
+    active = [JobPosting.active_status == ActiveStatus.active]
+
+    total_active = count(active + USA_VIEW)
+    new_24h = count(active + USA_VIEW + [JobPosting.first_seen_at >= cutoff_24h])
+    entry_level = count(active + USA_VIEW + [
         (JobPosting.is_entry_level == True) | (JobPosting.is_candidate_friendly == True),
         JobPosting.is_senior == False,
     ])
     # Honest split: explicitly entry-level vs. inferred "likely junior"
-    strict_entry = count([
-        JobPosting.active_status == ActiveStatus.active,
-        JobPosting.is_entry_level == True,
-        JobPosting.is_senior == False,
+    strict_entry = count(active + USA_VIEW + [
+        JobPosting.is_entry_level == True, JobPosting.is_senior == False,
     ])
-    candidate_friendly = count([
-        JobPosting.active_status == ActiveStatus.active,
+    candidate_friendly = count(active + USA_VIEW + [
         JobPosting.is_candidate_friendly == True,
-        JobPosting.is_entry_level == False,
-        JobPosting.is_senior == False,
+        JobPosting.is_entry_level == False, JobPosting.is_senior == False,
     ])
-    usa_count = count([JobPosting.active_status == ActiveStatus.active, JobPosting.is_usa == True])
-    remote_count = count([
-        JobPosting.active_status == ActiveStatus.active,
+    usa_count = count(active + [JobPosting.is_usa == True])
+    remote_count = count(active + USA_VIEW + [
         col(JobPosting.remote_status).in_(["Remote", "remote"]),
     ])
-    high_score = count([JobPosting.active_status == ActiveStatus.active, JobPosting.match_score >= 70])
+    # "High priority" + a dedicated new-grad card are both re-based on New Grad Fit.
+    high_score = count(active + USA_VIEW + [JobPosting.new_grad_fit >= 70])
+    strong_new_grad = count(active + USA_VIEW + [JobPosting.new_grad_fit >= 75])
     saved = count([JobPosting.active_status == ActiveStatus.saved])
     applied = count([JobPosting.active_status == ActiveStatus.applied])
     total_companies = co_count([Company.enabled == True])
@@ -1285,6 +1319,7 @@ def analytics_summary(session: SessionDep):
         "usa_count": usa_count,
         "remote_count": remote_count,
         "high_score_count": high_score,
+        "strong_new_grad_count": strong_new_grad,
         "saved_count": saved,
         "applied_count": applied,
         "total_companies": total_companies,

@@ -75,6 +75,24 @@ NON_USA_SIGNALS: frozenset[str] = frozenset({
     "australia","sydney","melbourne",
 })
 
+# Explicit foreign COUNTRY/region names. These are strong signals: when one
+# appears in the location field and there is NO unambiguous US signal (explicit
+# "United States" or a US state), the job is non-USA — even if it also contains a
+# city name that collides with a US city (Cambridge UK vs Cambridge MA, London,
+# Richmond, Victoria, etc.). This is the guardrail against foreign jobs leaking
+# into the USA list.
+FOREIGN_COUNTRIES: tuple[str, ...] = (
+    "united kingdom", "england", "scotland", "wales", "northern ireland",
+    "ireland", "canada", "india", "germany", "israel", "taiwan", "singapore",
+    "malaysia", "china", "hong kong", "japan", "south korea", "korea",
+    "netherlands", "france", "sweden", "finland", "switzerland", "norway",
+    "denmark", "poland", "romania", "spain", "italy", "austria", "belgium",
+    "czech", "hungary", "portugal", "greece", "argentina", "brazil", "mexico",
+    "australia", "new zealand", "vietnam", "philippines", "thailand",
+    "indonesia", "turkey", "ukraine", "uae", "united arab emirates",
+    "saudi arabia", "egypt", "morocco", "south africa", "uk",
+)
+
 USA_EXPLICIT: tuple[str, ...] = (
     "united states", "united states of america", "usa", "u.s.", "u.s.a.", "us ",
 )
@@ -105,20 +123,29 @@ def parse_location(location_raw: str, description: str = "") -> LocationResult:
     desc_snippet = (description or "")[:500].lower()
     combined = loc + " " + desc_snippet
 
-    # A multi-region posting that ALSO lists a US office (e.g.
-    # "Boston, MA; Santa Clara, CA; Toronto, Canada") is reachable from the US,
-    # so it must not be dropped just because a foreign city appears. If the
-    # location field itself carries a clear US signal, prefer USA.
-    usa_in_loc = _has_usa_signal(loc)
+    # An *unambiguous* US signal = explicit "United States", a full US state name,
+    # or a "City, ST" state abbreviation. A bare city name does NOT count — cities
+    # like Cambridge / London / Richmond / Victoria collide with foreign cities.
+    # Only a strong US signal lets a genuine multi-region posting
+    # ("Austin, TX; London, United Kingdom") stay in the USA view.
+    strong_usa = _has_usa_signal(loc)
 
-    # 1. Check for explicit non-USA country first (highest priority) — unless the
-    #    location field also names a US office, in which case fall through to the
-    #    USA detection below and pick the US state/city.
-    if not usa_in_loc:
+    # 1. Explicit foreign COUNTRY in the location field wins unless a strong US
+    #    signal is also present — this stops "Cambridge, United Kingdom" being
+    #    mis-read as Cambridge, MA.
+    if not strong_usa:
+        for country in FOREIGN_COUNTRIES:
+            if re.search(r"\b" + re.escape(country) + r"\b", loc):
+                return LocationResult(
+                    is_usa=False, country=country.title(), confidence=0.97,
+                    reason=f"foreign country: '{country}'"
+                )
+        # Foreign CITY signals (Bangalore, Hsinchu, …) — also strong enough to
+        # exclude on their own. Checked across loc+description as before.
         for signal in NON_USA_SIGNALS:
             if re.search(r"\b" + re.escape(signal) + r"\b", combined):
                 return LocationResult(
-                    is_usa=False, country=signal.title(), confidence=0.95,
+                    is_usa=False, country=signal.title(), confidence=0.92,
                     reason=f"non-USA signal: '{signal}'"
                 )
 
@@ -169,23 +196,34 @@ def parse_location(location_raw: str, description: str = "") -> LocationResult:
     return LocationResult(confidence=0.0, reason="location unknown")
 
 
+_ABBR_RE = re.compile(
+    r"(?<![A-Za-z])(" + "|".join(sorted(US_STATE_ABBREVIATIONS)) + r")(?![A-Za-z])",
+    re.IGNORECASE,
+)
+
+
 def _has_usa_signal(loc: str) -> bool:
-    """True if the location field clearly names a US office (explicit USA string,
-    a full US state name, or a known US city). Used to keep multi-region postings
-    that include a US location in the USA view. Bare 2-letter state abbreviations
-    are intentionally excluded here — they collide with country codes (IN=India,
-    OR, etc.) and the real multi-region postings always spell out a US city."""
+    """True only for an UNAMBIGUOUS US signal: explicit "United States", a full
+    US state name, or a KNOWN US city paired with a state abbreviation
+    ("Sunnyvale, CA"). A bare 2-letter abbreviation alone is NOT trusted —
+    CA=Canada, IN=India, DE=Germany all collide — and a bare city name alone is
+    NOT trusted either (Cambridge/London/Richmond collide with foreign cities).
+    Only this strict signal lets a posting override an explicit foreign country,
+    which is what keeps genuine multi-region US offices in while excluding UK/IN
+    jobs that merely share a US city name."""
     if not loc:
         return False
     for sig in USA_EXPLICIT:
         if sig in loc:
             return True
     for state_name in US_STATE_NAMES:
-        if state_name in loc:
+        if re.search(r"\b" + re.escape(state_name) + r"\b", loc):
             return True
-    for city_lower, _ in US_CITIES:
-        if city_lower in loc:
-            return True
+    # Known US city + a state abbreviation present somewhere = a real US office.
+    if _ABBR_RE.search(loc):
+        for city_lower, _ in US_CITIES:
+            if city_lower in loc:
+                return True
     return False
 
 

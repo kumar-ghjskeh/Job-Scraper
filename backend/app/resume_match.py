@@ -14,6 +14,9 @@ from typing import Optional
 from .resume_parser import (
     HDLS, METHODOLOGIES, TOOLS, PROTOCOLS, CONCEPTS, LANGUAGES, PROJECT_SIGNALS,
 )
+from .scoring import (
+    experienced_fit_score, new_grad_fit_score, overall_recommendation,
+)
 
 _ALL = {**HDLS, **METHODOLOGIES, **TOOLS, **PROTOCOLS, **CONCEPTS, **LANGUAGES}
 _TOOLSET = set(TOOLS) | set(PROTOCOLS)  # things you must actually have used
@@ -202,7 +205,7 @@ def compute_match(profile: dict, job: dict) -> dict:
     matched = [s for s in job_skills if s in resume_skills]
     missing = [s for s in job_skills if s not in resume_skills]
 
-    # ── Sub-scores (what recruiters actually weigh), each 0–100 ──────────────
+    # ── Resume-overlap sub-scores (each 0–100) ───────────────────────────────
     # 1. Skills: overlap ratio blended with absolute depth.
     if job_skills:
         overlap = len(matched) / len(job_skills)
@@ -221,34 +224,54 @@ def compute_match(profile: dict, job: dict) -> dict:
     matched_projects = matched_projects[:4]
     projects_score = [40, 70, 90, 100][min(len(matched_projects), 3)]
 
-    # 3. Experience / seniority fit (how realistic the level is for the candidate).
-    experience_score = _experience_fit(profile, job)
-    # 4. Domain alignment (role category vs resume focus).
+    # 3. Domain alignment (role category vs resume focus).
     domain_score = _domain_score(profile, job)
 
-    # Overall match — weighted like a recruiter scan: skills first, then how
-    # realistic the level is, then proof (projects), then domain alignment.
-    match_pct = round(
-        0.42 * skills_score + 0.24 * experience_score + 0.19 * projects_score + 0.15 * domain_score
+    # 4. Tool / protocol match — the specific tools/protocols the JD names.
+    job_tools = [s for s in job_skills if s in _TOOLSET]
+    matched_tools = [s for s in job_tools if s in resume_skills]
+    tool_protocol_score = round(100 * len(matched_tools) / len(job_tools)) if job_tools else 60
+
+    # Resume Match = PURE resume↔JD overlap. Deliberately has NO seniority
+    # component and NO cap — it must not be dragged up/down by level fit. Whether
+    # the role is realistic for a new grad is a SEPARATE score (New Grad Fit).
+    resume_match = round(
+        0.50 * skills_score + 0.20 * projects_score
+        + 0.20 * domain_score + 0.10 * tool_protocol_score
     )
-    # Reality cap: you can't be a strong match for a role whose level you don't
-    # fit. This keeps a no-experience resume from reading as a 95% match to a
-    # "2+ yrs" or senior role — the experience-fit score ceilings the overall %.
-    match_pct = min(match_pct, experience_score + 15)
+
+    # ── Job-intrinsic fit scores (seniority reality, resume-independent) ──────
+    lvl = job.get("experience_level", "") or ""
+    is_sen = bool(job.get("is_senior"))
+    ng_fit = job.get("new_grad_fit")
+    if ng_fit is None:
+        ng_fit = new_grad_fit_score(
+            lvl, is_sen, bool(job.get("is_entry_level")),
+            bool(job.get("is_candidate_friendly")), job.get("years_required_min"),
+            job.get("job_title", ""), job.get("cleaned_description", ""),
+        )
+    exp_fit = job.get("experienced_fit")
+    if exp_fit is None:
+        exp_fit = experienced_fit_score(lvl, is_sen, job.get("years_required_min"))
+    recommendation = overall_recommendation(ng_fit)
+
     match_breakdown = {
-        "skills": skills_score, "experience": experience_score,
-        "projects": projects_score, "domain": domain_score,
+        "skills": skills_score,
+        "experience": ng_fit,          # "Experience / level fit" row = New Grad Fit
+        "projects": projects_score,
+        "domain": domain_score,
+        "tool_protocol": tool_protocol_score,
     }
 
     # Defensibility (kept for compatibility; not shown in UI)
     proj_factor = min(1.0, len(matched_projects) / 2)
-    defensibility = round(100 * (0.55 * (match_pct / 100) + 0.45 * proj_factor))
+    defensibility = round(100 * (0.55 * (resume_match / 100) + 0.45 * proj_factor))
 
-    # Apply priority
-    rel = job.get("match_score", 0)
-    fresh_bonus = 5 if job.get("is_fresh") else 0
-    elig_pen = 20 if job.get("eligibility_risk") == "high" else (8 if job.get("eligibility_risk") == "medium" else 0)
-    priority_score = 0.35 * rel + 0.55 * match_pct + fresh_bonus - elig_pen
+    # Apply priority — prioritise roles that are realistic for a new grad AND a
+    # decent resume overlap. Eligibility risk only nudges; it never overrides the
+    # seniority/level reality.
+    elig_pen = 12 if job.get("eligibility_risk") == "high" else (5 if job.get("eligibility_risk") == "medium" else 0)
+    priority_score = 0.55 * ng_fit + 0.45 * resume_match - elig_pen
     apply_priority = "High" if priority_score >= 72 else ("Medium" if priority_score >= 52 else "Low")
 
     # Why matches
@@ -273,7 +296,10 @@ def compute_match(profile: dict, job: dict) -> dict:
         suggestions.append({"skill": sk, "tier": tier, "rationale": rationale})
 
     return {
-        "resume_match": match_pct,
+        "resume_match": resume_match,
+        "new_grad_fit": ng_fit,
+        "experienced_fit": exp_fit,
+        "overall_recommendation": recommendation,
         "match_breakdown": match_breakdown,
         "defensibility": defensibility,
         "apply_priority": apply_priority,

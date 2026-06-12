@@ -43,6 +43,10 @@ export interface Job {
   missed_scrapes: number
 
   match_score: number
+  new_grad_fit: number
+  experienced_fit: number
+  new_grad_fit_label: string
+  overall_recommendation: string
   matched_keywords: string
   score_breakdown_json: string
   relevance_score_label: string
@@ -120,10 +124,14 @@ export interface MatchBreakdown {
   experience: number
   projects: number
   domain: number
+  tool_protocol?: number
 }
 
 export interface JobMatch {
   resume_match: number
+  new_grad_fit?: number
+  experienced_fit?: number
+  overall_recommendation?: string
   match_breakdown?: MatchBreakdown
   defensibility: number
   apply_priority: string
@@ -221,6 +229,7 @@ export interface AnalyticsSummary {
   usa_count: number
   remote_count: number
   high_score_count: number
+  strong_new_grad_count?: number
   saved_count: number
   applied_count: number
   total_companies: number
@@ -238,6 +247,7 @@ export interface Filters {
   remote?: string
   min_score?: number
   new_since_hours?: number
+  posted_within_hours?: number
   keyword?: string
   usa_only?: boolean
   include_senior?: boolean

@@ -59,6 +59,15 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
+// New Grad Fit colour — gold only for a true Excellent (90+).
+function ngColor(s: number) {
+  if (s >= 90) return 'var(--accent-gold)'
+  if (s >= 75) return 'var(--primary)'
+  if (s >= 60) return 'var(--teal)'
+  if (s >= 46) return 'var(--warning)'
+  return 'var(--text-tertiary)'
+}
+
 function ScoreBar({ score, max = 100 }: { score: number; max?: number }) {
   const pct = Math.min(100, (score / max) * 100)
   const color = scoreColor(score)
@@ -127,8 +136,6 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
   }
 
   if (!job) return null
-
-  const sc = scoreColor(job.match_score)
 
   async function handleSetStatus(status: string) {
     await api.updateJobStatus(job!.id, { active_status: status })
@@ -240,17 +247,30 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
           </div>
         </div>
 
-        {/* Multi-score summary */}
+        {/* Multi-score summary — New Grad Fit (primary), Resume Match, Experienced Fit */}
         <div style={{ marginTop: 12 }}>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-            <ScoreGauge value={job.match_score} label="Excellent Fit" color={sc} />
-            {matchData && <ScoreGauge value={matchData.resume_match} label="Resume Match" color={matchColor(matchData.resume_match)} suffix="%" />}
-            {!matchData && !matchLoading && (
-              <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', maxWidth: 140, lineHeight: 1.45 }}>
-                Upload your resume in <strong style={{ color: 'var(--primary)' }}>Resume Matches</strong> to see your match score.
-              </div>
-            )}
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <ScoreGauge value={job.new_grad_fit} label="New Grad Fit" color={ngColor(job.new_grad_fit)} />
+            {matchData
+              ? <ScoreGauge value={matchData.resume_match} label="Resume Match" color={matchColor(matchData.resume_match)} suffix="%" />
+              : (!matchLoading && (
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', maxWidth: 120, lineHeight: 1.4 }}>
+                    Upload a resume in <strong style={{ color: 'var(--primary)' }}>Resume Matches</strong> for your match.
+                  </div>
+                ))}
+            <ScoreGauge value={job.experienced_fit} label="Experienced Fit" color="var(--text-secondary)" />
           </div>
+          {job.overall_recommendation && (
+            <div style={{ marginTop: 11 }}>
+              <span className="pill" style={{
+                background: `color-mix(in srgb, ${ngColor(job.new_grad_fit)} 14%, transparent)`,
+                color: ngColor(job.new_grad_fit), border: `1px solid ${ngColor(job.new_grad_fit)}`,
+                fontWeight: 800, fontSize: 12, padding: '4px 10px',
+              }}>
+                {job.overall_recommendation}
+              </span>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
             {matchData && (
               <span className={`pill ${matchData.apply_priority === 'High' ? 'pill-gold' : matchData.apply_priority === 'Medium' ? 'pill-primary' : 'pill-neutral'}`} style={{ fontWeight: 700 }}>
@@ -391,9 +411,15 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
             {matchData && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'flex', gap: 8 }}>
+                  <MiniStat label="New Grad Fit" value={`${matchData.new_grad_fit ?? job.new_grad_fit}`} color={ngColor(matchData.new_grad_fit ?? job.new_grad_fit)} />
                   <MiniStat label="Resume Match" value={`${matchData.resume_match}%`} color={matchColor(matchData.resume_match)} />
                   <MiniStat label="Priority" value={matchData.apply_priority} color={priorityColor(matchData.apply_priority)} />
                 </div>
+                {(matchData.overall_recommendation || job.overall_recommendation) && (
+                  <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
+                    Recommendation: <strong style={{ color: ngColor(matchData.new_grad_fit ?? job.new_grad_fit) }}>{matchData.overall_recommendation || job.overall_recommendation}</strong>
+                  </div>
+                )}
 
                 {matchData.match_breakdown && (
                   <div>
@@ -404,6 +430,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
                         ['Experience / level fit', matchData.match_breakdown.experience],
                         ['Project evidence', matchData.match_breakdown.projects],
                         ['Domain alignment', matchData.match_breakdown.domain],
+                        ['Tool / protocol match', matchData.match_breakdown.tool_protocol ?? 0],
                       ] as [string, number][]).map(([label, val]) => (
                         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', width: 130, flexShrink: 0 }}>{label}</span>
@@ -500,24 +527,40 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
 
         {detailTab === 'score' && (
           <div>
-            {/* Score explanation */}
+            {/* Fit Score Breakdown */}
             <div style={{
               background: 'var(--primary-light)',
               border: '1px solid var(--primary-mid)',
-              borderRadius: 8, padding: '10px 14px', marginBottom: 16,
+              borderRadius: 8, padding: '10px 14px', marginBottom: 14,
               fontSize: 12, color: 'var(--primary)', lineHeight: 1.6,
             }}>
-              <strong>Job Relevance Score</strong> — Based on RTL/DV job relevance, title
-              keywords, skills, company priority, seniority, USA location, and posting
-              recency. It is not resume-based yet.
+              <strong>Fit Score Breakdown</strong> — <strong>New Grad Fit</strong> is how
+              realistic this role is for you; <strong>Resume Match</strong> is your skills
+              overlap; <strong>Experienced Fit</strong> is how suited it is to an experienced
+              candidate. USA location and eligibility are validation flags, not score boosters.
             </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+              <MiniStat label="New Grad Fit" value={`${job.new_grad_fit}`} color={ngColor(job.new_grad_fit)} />
+              <MiniStat label="Experienced Fit" value={`${job.experienced_fit}`} color="var(--text-secondary)" />
+              {matchData && <MiniStat label="Resume Match" value={`${matchData.resume_match}%`} color={matchColor(matchData.resume_match)} />}
+            </div>
+            {job.overall_recommendation && (
+              <div style={{ marginBottom: 16 }}>
+                <span className="pill" style={{
+                  background: `color-mix(in srgb, ${ngColor(job.new_grad_fit)} 14%, transparent)`,
+                  color: ngColor(job.new_grad_fit), border: `1px solid ${ngColor(job.new_grad_fit)}`,
+                  fontWeight: 800, fontSize: 12, padding: '4px 10px',
+                }}>{job.overall_recommendation}</span>
+              </div>
+            )}
 
             <div style={{ marginBottom: 16 }}>
               <div style={{
                 fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
                 textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6,
               }}>
-                Job Relevance Score
+                Role relevance · intrinsic RTL/DV quality
               </div>
               <ScoreBar score={job.match_score} />
             </div>

@@ -125,10 +125,14 @@ class JobPosting(SQLModel, table=True):
     missed_scrapes: int = 0
 
     # ── Scoring ───────────────────────────────────────────────────
-    match_score: int = 0   # kept for compat; populated same as relevance_score
+    match_score: int = 0   # intrinsic RTL/DV role relevance (USA not scored)
     matched_keywords: str = ""
     score_breakdown_json: str = ""
     relevance_score_label: str = ""
+    # Job-intrinsic fit scores (resume-independent) — New Grad Fit is the primary
+    # ranking score shown on the card ring; Experienced Fit is secondary.
+    new_grad_fit: int = Field(default=0, index=True)
+    experienced_fit: int = 0
 
     # Description
     description_snippet: str = ""
@@ -168,6 +172,18 @@ class JobPosting(SQLModel, table=True):
         """Company-level H1B sponsorship signal (read by the API response)."""
         from .eligibility import sponsors_h1b as _lookup
         return _lookup(self.company)
+
+    @property
+    def new_grad_fit_label(self) -> str:
+        """Short band label for the card ring (only 'Excellent' at 90+)."""
+        from .scoring import new_grad_fit_label
+        return new_grad_fit_label(self.new_grad_fit)
+
+    @property
+    def overall_recommendation(self) -> str:
+        """Full recommendation label derived from New Grad Fit."""
+        from .scoring import overall_recommendation
+        return overall_recommendation(self.new_grad_fit)
 
     # ── User actions ──────────────────────────────────────────────
     application_status: str = ""   # Saved|Applied|Assessment|Interview|Rejected|Offer|Archived|Ignored

@@ -429,16 +429,10 @@ def calculate_match_score(
     if _entry_hit:
         add("Entry-level / New Grad signal", 20, "entry-level")
 
-    # +15  confirmed USA location
-    if is_usa:
-        add("USA location confirmed", 15, "USA")
-    else:
-        usa_sigs = ["usa", "united states", "remote", " ca,", " tx,", " wa,", " ny,", " ma,"]
-        loc_l = location.lower()
-        for sig in usa_sigs:
-            if sig in loc_l:
-                add("USA location signal", 10, "USA")
-                break
+    # NOTE: USA location is deliberately NOT scored. The app is USA-only by
+    # design, so being in the USA is a hard validation gate (the is_usa filter),
+    # never a relevance booster — and a non-USA job is excluded outright rather
+    # than penalised. Keeping USA out of scoring stops it skewing the relevance.
 
     # +10  high-priority company
     if company_priority in ("S", "A"):
@@ -472,12 +466,7 @@ def calculate_match_score(
     if re.search(r"\b(analog|rf |mixed.signal|layout engineer|power amplifier)\b", title_l):
         add("Pure analog/RF role", -25)
 
-    # −25  non-USA confirmed
-    if not is_usa and location.strip() and location.lower() not in ("", "remote", "worldwide"):
-        from .location_utils import parse_location
-        loc_result = parse_location(location)
-        if loc_result.confidence > 0.8 and not loc_result.is_usa:
-            add("Non-USA location", -25)
+    # (non-USA is handled by the hard is_usa gate, not by a scoring penalty)
 
     return max(0, min(100, score)), matched, breakdown
 
@@ -736,6 +725,118 @@ def detect_years_required(text: str) -> tuple[Optional[int], Optional[int]]:
         n = int(single.group(1))
         return n, n
     return None, None
+
+
+# ── Fit scores (job-intrinsic, resume-independent) ──────────────────────────
+# A New Grad / entry candidate's realistic odds for a role, and (separately) how
+# suited the role is to an experienced candidate. USA is NOT part of these — it
+# is a hard gate elsewhere. These drive the card ring, default ranking, and the
+# Fit Score Breakdown tab.
+
+_NEW_GRAD_CAP = {
+    "New Grad": 100, "Entry Level": 100,
+    "Junior": 85, "Associate": 85,
+    "Mid-Level": 70,
+    "Senior": 55,
+    "Lead": 45, "Staff": 45, "Principal": 45, "Manager": 45,
+    "Unknown": 72,
+}
+
+_SENIOR_TITLE_RE = re.compile(
+    r"\b(staff|principal|lead|manager|director|distinguished|fellow|architect)\b", re.I)
+_NEWGRAD_FRIENDLY_RE = re.compile(
+    r"\b(new\s+grad|new\s+college\s+grad|entry[\s-]level|university\s+grad(uate)?|recent\s+graduate)\b", re.I)
+
+
+def new_grad_fit_score(
+    experience_level: str, is_senior: bool, is_entry_level: bool,
+    is_candidate_friendly: bool, years_required_min: Optional[int],
+    title: str = "", description: str = "",
+) -> int:
+    """How realistic this role is for a New Grad / entry-level candidate (0-100).
+    Seniority, years required, and title level CAP the score so a Staff/Senior or
+    4+ yr role can never read as an Excellent fit (per the scoring spec)."""
+    cap = _NEW_GRAD_CAP.get(experience_level or "Unknown", 72)
+
+    y = years_required_min
+    if y is not None:
+        if y >= 5:
+            cap = min(cap, 50)
+        elif y == 4:
+            cap = min(cap, 60)
+        elif y == 3:
+            cap = min(cap, 70)
+        elif y == 2:
+            cap = min(cap, 82)
+        elif y == 1:
+            cap = min(cap, 90)
+
+    if is_senior:
+        cap = min(cap, 55)
+    if _SENIOR_TITLE_RE.search(title or ""):
+        cap = min(cap, 45)
+
+    # Rare exception: a senior-capped role that EXPLICITLY invites new grads.
+    if cap <= 55 and _NEWGRAD_FRIENDLY_RE.search(f"{title} {description}"):
+        cap = max(cap, 75)
+
+    score = cap
+    # An unknown role with no entry signal shouldn't read as a strong fit.
+    if (experience_level or "Unknown") == "Unknown" and y is None \
+            and not is_entry_level and not is_candidate_friendly:
+        score = min(cap, 66)
+    return max(0, min(100, score))
+
+
+_EXPERIENCED_FIT = {
+    "Staff": 95, "Principal": 95, "Director": 95, "Fellow": 95,
+    "Lead": 90, "Manager": 88, "Senior": 90, "Mid-Level": 80,
+    "Associate": 62, "Junior": 60, "Entry Level": 45, "New Grad": 40,
+    "Unknown": 70,
+}
+
+
+def experienced_fit_score(
+    experience_level: str, is_senior: bool, years_required_min: Optional[int],
+) -> int:
+    """How suited the role is to an EXPERIENCED candidate (0-100). Senior/Staff
+    roles score high here even when New Grad Fit is low."""
+    base = _EXPERIENCED_FIT.get(experience_level or "Unknown", 70)
+    y = years_required_min
+    if y is not None:
+        if y >= 5:
+            base = max(base, 92)
+        elif y >= 3:
+            base = max(base, 82)
+    if is_senior:
+        base = max(base, 88)
+    return max(0, min(100, base))
+
+
+def new_grad_fit_label(score: int) -> str:
+    """Short label for the card ring (only 'Excellent' at 90+)."""
+    if score >= 90:
+        return "Excellent"
+    if score >= 75:
+        return "Strong Fit"
+    if score >= 60:
+        return "Stretch"
+    if score >= 46:
+        return "Weak Fit"
+    return "Not Entry"
+
+
+def overall_recommendation(new_grad_fit: int) -> str:
+    """Full recommendation label for the detail-panel header."""
+    if new_grad_fit >= 90:
+        return "Excellent New Grad Fit"
+    if new_grad_fit >= 75:
+        return "Strong Entry-Level Fit"
+    if new_grad_fit >= 60:
+        return "Possible Junior Stretch"
+    if new_grad_fit >= 46:
+        return "Stretch Role"
+    return "Not Entry-Level Fit"
 
 
 def detect_remote_status(location: str, description: str = "") -> str:

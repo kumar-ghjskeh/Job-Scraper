@@ -31,8 +31,10 @@ from .scoring import (
     detect_remote_status,
     detect_role_category,
     detect_years_required,
+    experienced_fit_score,
     is_candidate_friendly_job,
     is_software_only,
+    new_grad_fit_score,
     normalize_title,
     score_breakdown_json,
     score_to_label,
@@ -178,6 +180,13 @@ async def persist_company_results(
                     seniority_confidence=sen_conf,
                 )
 
+                # Job-intrinsic fit scores (primary ranking signal).
+                ng_fit = new_grad_fit_score(
+                    sen_level, is_senior, is_entry, is_cand_friendly, ymin,
+                    raw.job_title, cleaned_desc,
+                )
+                ex_fit = experienced_fit_score(sen_level, is_senior, ymin)
+
                 import json
                 job = JobPosting(
                     company=company_name,
@@ -214,6 +223,8 @@ async def persist_company_results(
                     last_seen_at=now,
                     active_status=ActiveStatus.active,
                     match_score=score,
+                    new_grad_fit=ng_fit,
+                    experienced_fit=ex_fit,
                     matched_keywords=", ".join(matched_kws),
                     score_breakdown_json=score_breakdown_json(breakdown),
                     relevance_score_label=score_to_label(score),
