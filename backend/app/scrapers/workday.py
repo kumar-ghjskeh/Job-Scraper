@@ -86,8 +86,9 @@ class WorkdayScraper(BaseScraper):
 
     async def _enrich_details(self, jobs: list[JobData], tenant: str, instance: str, career_site: str) -> None:
         site_root = f"https://{tenant}.{instance}.myworkdayjobs.com"
+        prefix = f"{site_root}/{career_site}"  # apply_url now includes the career-site segment
         for j in jobs[:DETAIL_CAP]:
-            ext_path = j.apply_url[len(site_root):] if j.apply_url.startswith(site_root) else ""
+            ext_path = j.apply_url[len(prefix):] if j.apply_url.startswith(prefix) else ""
             if not ext_path:
                 continue
             try:
@@ -142,10 +143,13 @@ class WorkdayScraper(BaseScraper):
                 title = item.get("title", "")
                 location = item.get("locationsText", "") or item.get("primaryLocation", "")
 
-                # Build apply URL from external path
+                # Build the public job deep link. The externalPath is "/job/…";
+                # the working URL needs the career-site segment in front, i.e.
+                # https://{tenant}.{instance}.myworkdayjobs.com/{careerSite}/job/…
                 tenant = self.config.get("workday_tenant", "")
                 instance = self.config.get("workday_instance", "wd1")
-                apply_url = f"https://{tenant}.{instance}.myworkdayjobs.com{ext_path}" if ext_path else ""
+                career_site = self.config.get("workday_career_site", "External")
+                apply_url = f"https://{tenant}.{instance}.myworkdayjobs.com/{career_site}{ext_path}" if ext_path else ""
 
                 # List ships a relative string ("Posted Yesterday"); parse it as a
                 # fallback — _enrich_details will override with the exact startDate.
