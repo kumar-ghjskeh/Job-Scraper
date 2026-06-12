@@ -5,6 +5,7 @@ from __future__ import annotations
 from .amazon import AmazonScraper
 from .ashby import AshbyScraper
 from .base import BaseScraper, JobData
+from .eightfold import EightfoldScraper
 from .generic import GenericScraper
 from .greenhouse import GreenhouseScraper
 from .icims import ICIMSScraper
@@ -20,6 +21,7 @@ SCRAPER_MAP: dict[str, type[BaseScraper]] = {
     "icims": ICIMSScraper,
     "amazon": AmazonScraper,
     "smartrecruiters": SmartRecruitersScraper,
+    "eightfold": EightfoldScraper,
     # All others fall through to GenericScraper
     "generic": GenericScraper,
     "apple": GenericScraper,

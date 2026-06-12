@@ -16,6 +16,9 @@ backend/*.db
 # Env / secrets
 .env
 .env.local
+# Local browser-scrape runner wrapper — holds the prod DATABASE_URL, never commit
+scripts/run_browser_prod.ps1
+*.secret.ps1
 
 # Node / frontend
 node_modules/

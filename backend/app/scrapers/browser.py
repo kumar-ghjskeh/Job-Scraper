@@ -25,6 +25,7 @@ import json
 import logging
 from typing import Any
 
+from .eightfold import EightfoldScraper
 from .workday import WorkdayScraper
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,49 @@ class BrowserWorkdayScraper(WorkdayScraper):
         if not resp.ok:
             raise BrowserBlockedError(f"CXS GET {url} -> HTTP {resp.status}")
         return await resp.json()
+
+
+class BrowserEightfoldScraper(EightfoldScraper):
+    """Eightfold scraper that performs every HTTP call through a live browser
+    session (the pcsx API 403s any plain server-side client)."""
+
+    def __init__(self, company_config: dict, context: Any):
+        super().__init__(company_config)
+        self._ctx = context
+
+    async def fetch_jobs(self) -> list:
+        await self._prime_session()
+        return await super().fetch_jobs()
+
+    async def _prime_session(self) -> None:
+        tenant = self.config.get("eightfold_tenant", "")
+        domain = self.config.get("eightfold_domain", "")
+        url = f"https://{tenant}.eightfold.ai/careers?domain={domain}"
+        page = await self._ctx.new_page()
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            await page.wait_for_timeout(3500)
+            if "unavailable" in (await page.title()).lower():
+                raise BrowserBlockedError(f"{self.company_name}: careers page unavailable")
+        finally:
+            with contextlib.suppress(Exception):
+                await page.close()
+
+    async def _get_json(self, url: str, **kwargs) -> Any:
+        resp = await self._ctx.request.get(
+            url, headers={"Accept": "application/json"}, timeout=45000
+        )
+        if not resp.ok:
+            raise BrowserBlockedError(f"Eightfold GET {url} -> HTTP {resp.status}")
+        return await resp.json()
+
+
+def browser_scraper_for(company_config: dict, context: Any) -> BrowserWorkdayScraper | BrowserEightfoldScraper:
+    """Pick the right browser-backed scraper for a company by ATS platform."""
+    ats = (company_config.get("ats_platform") or "").lower()
+    if ats == "eightfold":
+        return BrowserEightfoldScraper(company_config, context)
+    return BrowserWorkdayScraper(company_config, context)
 
 
 @contextlib.asynccontextmanager

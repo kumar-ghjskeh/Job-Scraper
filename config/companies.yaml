@@ -307,12 +307,12 @@ companies:
     category: "S-Tier"
     priority: "S"
     careers_url: "https://careers.qualcomm.com/careers"
-    ats_platform: "workday"
-    workday_tenant: "qualcomm"
-    workday_instance: "wd5"
-    workday_career_site: "External"
-    search_keywords: ["verification", "rtl", "asic", "modem", "design verification"]
-    notes: "Workday CXS returns 422 (anti-bot). Needs proxy or alternate source."
+    ats_platform: "eightfold"
+    engine: "browser"
+    eightfold_tenant: "qualcomm"
+    eightfold_domain: "qualcomm.com"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "soc", "modem"]
+    notes: "Eightfold pcsx API behind anti-bot — scraped via the local real-browser engine."
     enabled: false
 
   - name: "Arm"
@@ -354,14 +354,12 @@ companies:
   - name: "Western Digital"
     category: "Storage"
     priority: "B"
-    careers_url: "https://westerndigital.wd1.myworkdayjobs.com/External"
-    ats_platform: "workday"
-    workday_tenant: "westerndigital"
-    workday_instance: "wd1"
-    workday_career_site: "External"
+    careers_url: "https://careers.smartrecruiters.com/WesternDigital"
+    ats_platform: "smartrecruiters"
+    smartrecruiters_company: "WesternDigital"
     search_keywords: ["verification", "rtl", "design verification", "storage", "soc"]
-    notes: "Workday CXS returns 422 (anti-bot)."
-    enabled: false
+    notes: "SmartRecruiters public API — verified live."
+    enabled: true
 
   - name: "Cisco"
     category: "Networking"

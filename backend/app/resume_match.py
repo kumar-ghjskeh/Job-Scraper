@@ -132,23 +132,33 @@ _SENIOR_WORDS = ("senior", "sr.", "staff", "principal", "lead", "manager", "dire
 
 
 def _experience_fit(profile: dict, job: dict) -> int:
-    """How realistic the role's seniority is for this candidate (0–100)."""
+    """How realistic the role's seniority is for THIS candidate (0–100).
+
+    Strict for a no-/low-experience resume: a *stated* years requirement the
+    candidate doesn't meet, or a senior title, sharply lowers the fit — even if
+    the posting is loosely tagged "entry level" (many "2+ yrs" roles are). A
+    genuine new-grad role with no years bar scores 100."""
     yrs = profile.get("years_experience", 0) or 0
     level = (job.get("experience_level") or "").lower()
     title = (job.get("job_title") or "").lower()
     req_min = job.get("years_required_min")
     is_senior = job.get("is_senior") or any(w in level or w in title for w in _SENIOR_WORDS)
+    entry_signal = job.get("is_entry_level") or any(
+        k in level for k in ("new grad", "entry", "junior", "intern", "university", "graduate")
+    )
 
-    if yrs <= 1:  # new grad / early career
-        if job.get("is_entry_level") or any(k in level for k in ("new grad", "entry", "junior", "intern")):
-            return 100
+    if yrs <= 1:  # new grad / no professional experience
         if is_senior:
-            return 42  # a stretch — can apply, but not the best fit
+            return 22  # senior / staff / principal — a real stretch
+        # A concrete years requirement the candidate lacks dominates, even when
+        # the posting is tagged entry-level — this is what a recruiter screens on.
+        if req_min is not None and req_min >= 1:
+            return {1: 78, 2: 55, 3: 40}.get(req_min, 26)
+        if entry_signal:
+            return 100  # genuine new-grad / entry role, no years bar
         if job.get("is_candidate_friendly") or "associate" in level or "mid" in level:
-            return 78
-        if req_min and req_min >= 5:
-            return 45
-        return 68
+            return 70
+        return 58  # level unknown, no stated requirement — plausible, unproven
     # experienced candidate
     if req_min is not None:
         if yrs >= req_min:
@@ -156,7 +166,9 @@ def _experience_fit(profile: dict, job: dict) -> int:
         if yrs >= req_min - 2:
             return 75
         return 55
-    return 72
+    if is_senior and yrs < 5:
+        return 66
+    return 78
 
 
 def _domain_score(profile: dict, job: dict) -> int:
@@ -219,6 +231,10 @@ def compute_match(profile: dict, job: dict) -> dict:
     match_pct = round(
         0.42 * skills_score + 0.24 * experience_score + 0.19 * projects_score + 0.15 * domain_score
     )
+    # Reality cap: you can't be a strong match for a role whose level you don't
+    # fit. This keeps a no-experience resume from reading as a 95% match to a
+    # "2+ yrs" or senior role — the experience-fit score ceilings the overall %.
+    match_pct = min(match_pct, experience_score + 15)
     match_breakdown = {
         "skills": skills_score, "experience": experience_score,
         "projects": projects_score, "domain": domain_score,

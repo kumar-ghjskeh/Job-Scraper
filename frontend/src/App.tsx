@@ -247,7 +247,11 @@ export default function App() {
   }
 
   function viewCompanyJobs(companyName: string) {
-    setFilters({ ...filters, company: companyName })
+    // Reset to the canonical All-Jobs view (+ this company) so the list shown
+    // matches the card's "View N Jobs" count exactly — no stale keyword/level
+    // filters carried over from a previous search.
+    setFilters({ usa_only: true, include_senior: true, company: companyName })
+    setSearch('')
     setTab('all'); setPage(1); setSelectedJob(null)
   }
 
@@ -366,10 +370,8 @@ export default function App() {
                       padding: '6px 10px', fontSize: 12.5, color: 'var(--text-primary)', outline: 'none', cursor: 'pointer',
                     }}
                   >
-                    <option value="match">Best overall match</option>
-                    <option value="experience">Experience / level fit</option>
-                    <option value="skills">Skills overlap</option>
-                    <option value="projects">Project evidence</option>
+                    <option value="match">Best match</option>
+                    <option value="experience">Entry-level fit</option>
                     <option value="newest">Newest posted</option>
                   </select>
                 </div>

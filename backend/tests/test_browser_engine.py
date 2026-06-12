@@ -26,9 +26,14 @@ def test_browser_companies_isolated_from_httpx_scheduler():
     for c in browser:
         assert c.get("engine") == "browser"
         assert c["name"] not in httpx_names, f"{c['name']} leaks into httpx scheduler"
-        # each needs a complete Workday config for the browser scraper
-        assert c.get("ats_platform") == "workday"
-        assert c.get("workday_tenant") and c.get("workday_career_site")
+        # each needs a complete config for its browser scraper
+        ats = c.get("ats_platform")
+        if ats == "workday":
+            assert c.get("workday_tenant") and c.get("workday_career_site")
+        elif ats == "eightfold":
+            assert c.get("eightfold_tenant") and c.get("eightfold_domain")
+        else:
+            raise AssertionError(f"{c['name']}: unexpected browser ats {ats!r}")
 
 
 class _FakeResponse:

@@ -39,8 +39,8 @@ from backend.app.database import engine, init_db  # noqa: E402
 from backend.app.models import Company, ScrapeError, ScrapeRun  # noqa: E402
 from backend.app.scrape_engine import persist_company_results  # noqa: E402
 from backend.app.scrapers.browser import (  # noqa: E402
-    BrowserWorkdayScraper,
     browser_context,
+    browser_scraper_for,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -75,7 +75,7 @@ async def run_browser_scrape(headless: bool = True, only: str | None = None) -> 
         for cfg in companies:
             name = cfg["name"]
             try:
-                scraper = BrowserWorkdayScraper(cfg, ctx)
+                scraper = browser_scraper_for(cfg, ctx)
                 async with scraper:
                     raw_jobs = await scraper.fetch_jobs()
 

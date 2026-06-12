@@ -901,13 +901,15 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
         item["missing_skills"] = m["missing_skills"][:6]
         scored.append(item)
     bd = lambda it, k: (it.get("match_breakdown") or {}).get(k, 0)  # noqa: E731
+    # Three recruiter-grade sorts only: overall fit, how realistic the level is
+    # for this candidate, and freshness. Each breaks ties on the other signal so
+    # the orderings are genuinely distinct.
     sort_keys = {
-        "match": lambda it: (it["resume_match"], it["match_score"]),
+        "match": lambda it: (it["resume_match"], bd(it, "experience"), it["match_score"]),
         "experience": lambda it: (bd(it, "experience"), it["resume_match"]),
-        "skills": lambda it: (bd(it, "skills"), it["resume_match"]),
-        "projects": lambda it: (bd(it, "projects"), it["resume_match"]),
-        "newest": lambda it: (it.get("posted_date") or it.get("first_seen_at") or "", it["resume_match"]),
+        "newest": lambda it: (str(it.get("posted_date") or it.get("first_seen_at") or ""), it["resume_match"]),
     }
+    # Back-compat: fold the retired skills/projects options into best-match.
     scored.sort(key=sort_keys.get(sort, sort_keys["match"]), reverse=True)
     total = len(scored)
     start = (page - 1) * limit
@@ -1073,14 +1075,17 @@ def _build_company_response(company: Company, session: Session) -> dict:
         )
     ).one() or 0
 
-    # viewable = what the default /jobs filter actually shows (USA OR unknown-loc, non-senior, non-software)
+    # viewable = EXACTLY what clicking "View Jobs" shows in the All Jobs list, so
+    # the count on the card always equals the number of jobs the user then sees.
+    # The All Jobs default is usa_only + include_unknown_location + non-software,
+    # with senior roles INCLUDED (include_senior defaults true), so mirror that
+    # here — otherwise the card under-counts and the totals never reconcile.
     viewable = session.exec(
         select(func.count(JobPosting.id)).where(
             JobPosting.company == company.name,
             JobPosting.active_status == ActiveStatus.active,
             (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0),
             JobPosting.is_software_only == False,
-            JobPosting.is_senior == False,
         )
     ).one() or 0
 
