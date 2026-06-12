@@ -115,8 +115,16 @@ export interface TailoringSuggestion {
   rationale: string
 }
 
+export interface MatchBreakdown {
+  skills: number
+  experience: number
+  projects: number
+  domain: number
+}
+
 export interface JobMatch {
   resume_match: number
+  match_breakdown?: MatchBreakdown
   defensibility: number
   apply_priority: string
   matched_skills: string[]

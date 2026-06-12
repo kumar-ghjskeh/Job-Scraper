@@ -133,6 +133,18 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
                         if raw.posted_date and not existing.posted_date:
                             existing.posted_date = raw.posted_date
                             existing.posted_date_known = True
+                        # Refresh the apply URL with the current logic so existing rows
+                        # pick up the Workday deep-link fix (no more dead fallbacks).
+                        url_result = process_apply_url(
+                            raw.apply_url, company_cfg.get("ats_platform", ""), company_name,
+                            careers_url=company_cfg.get("careers_url", ""),
+                        )
+                        if url_result.safe_apply_url:
+                            existing.apply_url = url_result.safe_apply_url
+                            existing.safe_apply_url = url_result.safe_apply_url
+                            existing.original_apply_url = url_result.original_apply_url or existing.original_apply_url
+                            existing.apply_url_status = url_result.apply_url_status
+                            existing.apply_url_reason = url_result.apply_url_reason
                         session.add(existing)
                     else:
                         total_new += 1
@@ -152,6 +164,7 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
                             raw.apply_url,
                             company_cfg.get("ats_platform", ""),
                             company_name,
+                            careers_url=company_cfg.get("careers_url", ""),
                         )
 
                         # Scoring (uses cleaned text for accuracy)

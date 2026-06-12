@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
+import { fmtDateLong } from '../lib/datetime'
 import type { Job, JobMatch } from '../lib/types'
 import { Icon } from './Icon'
 import { ScoreGauge, matchColor, priorityColor } from './ScoreGauge'
@@ -78,8 +79,7 @@ function ScoreBar({ score, max = 100 }: { score: number; max?: number }) {
   )
 }
 
-const fmt = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+const fmt = (d: string | null) => fmtDateLong(d)
 
 function MiniStat({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -394,6 +394,28 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
                   <MiniStat label="Resume Match" value={`${matchData.resume_match}%`} color={matchColor(matchData.resume_match)} />
                   <MiniStat label="Priority" value={matchData.apply_priority} color={priorityColor(matchData.apply_priority)} />
                 </div>
+
+                {matchData.match_breakdown && (
+                  <div>
+                    <div className="section-header">How this match is scored</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {([
+                        ['Skills overlap', matchData.match_breakdown.skills],
+                        ['Experience / level fit', matchData.match_breakdown.experience],
+                        ['Project evidence', matchData.match_breakdown.projects],
+                        ['Domain alignment', matchData.match_breakdown.domain],
+                      ] as [string, number][]).map(([label, val]) => (
+                        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', width: 130, flexShrink: 0 }}>{label}</span>
+                          <div style={{ flex: 1, height: 7, background: 'var(--surface-muted)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${val}%`, height: '100%', background: matchColor(val), borderRadius: 4, transition: 'width 0.4s ease' }} />
+                          </div>
+                          <span style={{ fontSize: 11.5, fontWeight: 700, color: matchColor(val), width: 30, textAlign: 'right' }}>{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ background: 'var(--primary-light)', border: '1px solid var(--primary-mid)', borderRadius: 8, padding: '10px 12px' }}>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recommended resume version</div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
+import { parseApiDate } from '../lib/datetime'
 import type { Company } from '../lib/types'
 import { CompanyLogo } from './CompanyLogo'
 import { Icon } from './Icon'
@@ -15,7 +16,7 @@ function priorityColor(p: string): { bg: string; color: string } {
 
 function statusDot(co: Company) {
   if (!co.last_scraped_at) return { color: '#9CA3AF', label: 'Never scraped' }
-  const minsAgo = (Date.now() - new Date(co.last_scraped_at).getTime()) / 60000
+  const minsAgo = (Date.now() - (parseApiDate(co.last_scraped_at)?.getTime() ?? 0)) / 60000
   if (co.scrape_status === 'error' || co.scrape_error_count > 2) return { color: '#DC2626', label: 'Errors' }
   if (minsAgo < 360) return { color: '#16A34A', label: 'Fresh' }
   if (minsAgo < 1440) return { color: '#D97706', label: 'Stale' }
@@ -65,9 +66,10 @@ export function CompaniesPage({ onViewJobs }: Props) {
     grouped[p] = filtered.filter((c) => c.priority === p)
   }
 
-  const fmtDate = (d: string | null) => d
-    ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-    : 'Never'
+  const fmtDate = (d: string | null) => {
+    const date = parseApiDate(d)
+    return date ? date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never'
+  }
 
   if (loading) {
     return (

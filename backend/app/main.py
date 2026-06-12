@@ -773,6 +773,9 @@ def _job_match_input(job: JobPosting) -> dict:
         "match_score": job.match_score, "is_candidate_friendly": job.is_candidate_friendly,
         "eligibility_risk": job.eligibility_risk, "sponsors_h1b": job.sponsors_h1b,
         "is_fresh": is_fresh,
+        # Seniority context for the experience-fit sub-score
+        "experience_level": job.experience_level, "is_senior": job.is_senior,
+        "is_entry_level": job.is_entry_level, "years_required_min": job.years_required_min,
     }
 
 
@@ -874,7 +877,7 @@ def delete_resume(session: SessionDep):
 
 @app.get("/jobs/resume-matches")
 def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(default=50, ge=1, le=200),
-                   include_senior: bool = False, resume_id: Optional[int] = None):
+                   include_senior: bool = False, resume_id: Optional[int] = None, sort: str = "match"):
     profile = _current_profile(session, resume_id)
     if not profile:
         return {"items": [], "total_count": 0, "page": 1, "limit": limit,
@@ -891,15 +894,24 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
         m = compute_match(profile, _job_match_input(job))
         item = JobResponse.model_validate(job).model_dump()
         item["resume_match"] = m["resume_match"]
+        item["match_breakdown"] = m["match_breakdown"]
         item["defensibility"] = m["defensibility"]
         item["apply_priority"] = m["apply_priority"]
         item["matched_skills"] = m["matched_skills"][:6]
         item["missing_skills"] = m["missing_skills"][:6]
-        scored.append((m["resume_match"], job.match_score, item))
-    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        scored.append(item)
+    bd = lambda it, k: (it.get("match_breakdown") or {}).get(k, 0)  # noqa: E731
+    sort_keys = {
+        "match": lambda it: (it["resume_match"], it["match_score"]),
+        "experience": lambda it: (bd(it, "experience"), it["resume_match"]),
+        "skills": lambda it: (bd(it, "skills"), it["resume_match"]),
+        "projects": lambda it: (bd(it, "projects"), it["resume_match"]),
+        "newest": lambda it: (it.get("posted_date") or it.get("first_seen_at") or "", it["resume_match"]),
+    }
+    scored.sort(key=sort_keys.get(sort, sort_keys["match"]), reverse=True)
     total = len(scored)
     start = (page - 1) * limit
-    page_items = [s[2] for s in scored[start:start + limit]]
+    page_items = scored[start:start + limit]
     total_pages = max(1, (total + limit - 1) // limit)
     return {"items": page_items, "total_count": total, "page": page, "limit": limit,
             "total_pages": total_pages, "has_next": page < total_pages, "has_prev": page > 1}

@@ -36,6 +36,7 @@ const DOMAINS: Record<string, string> = {
   'rivos': 'rivosinc.com', 'sima.ai': 'sima.ai', 'recogni': 'recogni.com',
   'mythic': 'mythic.ai', 'blaize': 'blaize.com', 'flex logix': 'flex-logix.com',
   'quadric': 'quadric.io', 'expedera': 'expedera.com', 'tesla': 'tesla.com',
+  'boeing': 'boeing.com', 'honeywell': 'honeywell.com', 'collins aerospace': 'collinsaerospace.com',
 }
 
 // Resilient logo sources, tried in order. icon.horse returns the real brand logo

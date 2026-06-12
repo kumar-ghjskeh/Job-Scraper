@@ -153,6 +153,7 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [matchMap, setMatchMap] = useState<Record<string, { resume_match: number; apply_priority: string }>>({})
+  const [resumeSort, setResumeSort] = useState('match')
   const jobListRef = useRef<HTMLDivElement>(null)
 
   const NO_FETCH: Tab[] = ['companies', 'health']
@@ -168,7 +169,7 @@ export default function App() {
     try {
       let data: PaginatedResponse<Job>
       switch (tab) {
-        case 'resume':      data = await api.getResumeMatches(page, PAGE_SIZE, !!filters.include_senior); break
+        case 'resume':      data = await api.getResumeMatches(page, PAGE_SIZE, !!filters.include_senior, undefined, resumeSort); break
         case 'entry-level': data = await api.getEntryLevelJobs(filters, page, PAGE_SIZE); break
         case 'best':        data = await api.getBestJobs(filters, page, PAGE_SIZE); break
         case 'saved':       data = await api.getSavedJobs(page, PAGE_SIZE); break
@@ -196,7 +197,7 @@ export default function App() {
   useEffect(() => {
     loadJobs()
     loadAnalytics()
-  }, [tab, filters, page]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab, filters, page, resumeSort]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lock body scroll while a mobile drawer or full-screen sheet is open.
   const sheetOpen = isMobile && selectedJob !== null
@@ -354,6 +355,26 @@ export default function App() {
                 totalPages={paginatedJobs?.total_pages ?? 1}
               />
 
+              {tab === 'resume' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 600 }}>Sort by</span>
+                  <select
+                    value={resumeSort}
+                    onChange={(e) => { setResumeSort(e.target.value); setPage(1) }}
+                    style={{
+                      background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+                      padding: '6px 10px', fontSize: 12.5, color: 'var(--text-primary)', outline: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    <option value="match">Best overall match</option>
+                    <option value="experience">Experience / level fit</option>
+                    <option value="skills">Skills overlap</option>
+                    <option value="projects">Project evidence</option>
+                    <option value="newest">Newest posted</option>
+                  </select>
+                </div>
+              )}
+
               {loading ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
@@ -368,6 +389,7 @@ export default function App() {
                       job={g.job}
                       extraLocations={g.extraLocations}
                       resumeMatch={tab === 'resume' ? g.job.resume_match : matchMap[String(g.job.id)]?.resume_match}
+                      resumePrimary={tab === 'resume'}
                       selected={selectedJob?.id === g.job.id}
                       onClick={() => setSelectedJob(selectedJob?.id === g.job.id ? null : g.job)}
                       onQuickAction={(action) => handleQuickAction(g.job, action)}

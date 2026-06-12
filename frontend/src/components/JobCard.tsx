@@ -2,6 +2,7 @@ import type { Job } from '../lib/types'
 import { Icon } from './Icon'
 import { matchColor } from './ScoreGauge'
 import { CompanyLogo } from './CompanyLogo'
+import { fmtDate } from '../lib/datetime'
 
 interface Props {
   job: Job
@@ -10,6 +11,8 @@ interface Props {
   onQuickAction: (action: 'saved' | 'applied' | 'ignored') => void
   extraLocations?: string[]
   resumeMatch?: number
+  /** On the Resume Matches tab, show the resume-match % as the primary ring. */
+  resumePrimary?: boolean
 }
 
 function scoreColor(s: number) {
@@ -44,11 +47,13 @@ function locationPill(label: string): string {
 }
 const isNew = (d: string) => Date.now() - new Date(d).getTime() < 24 * 60 * 60 * 1000
 
-export function JobCard({ job, selected, onClick, onQuickAction, extraLocations = [], resumeMatch }: Props) {
+export function JobCard({ job, selected, onClick, onQuickAction, extraLocations = [], resumeMatch, resumePrimary }: Props) {
   const fresh = isNew(job.first_seen_at)
   const sc = scoreColor(job.match_score)
   const saved = job.active_status === 'saved'
   const rm = resumeMatch ?? job.resume_match
+  // On the Resume tab the ring shows the resume match; elsewhere the relevance score.
+  const showResumeRing = !!resumePrimary && rm !== undefined && rm !== null
   const risk = job.eligibility_risk
   const h1b = job.sponsors_h1b
 
@@ -76,7 +81,7 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{job.company}</span>
             <span className={`badge tier-${(job.company_priority || 'c').toLowerCase()}`}>{job.company_priority}</span>
-            {rm !== undefined && rm !== null && (
+            {!showResumeRing && rm !== undefined && rm !== null && (
               <span className="pill" style={{ background: 'transparent', color: matchColor(rm), border: `1px solid ${matchColor(rm)}`, fontWeight: 700, fontSize: 10.5 }}>
                 <Icon name="target" size={10} color={matchColor(rm)} /> Resume {rm}%
               </span>
@@ -85,15 +90,24 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
           </div>
         </div>
 
-        {/* Score ring */}
-        <div style={{
-          width: 52, height: 52, borderRadius: '50%', background: 'var(--surface-muted)',
-          border: `2.5px solid ${sc}`, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: sc, lineHeight: 1 }}>{job.match_score}</div>
-          <div style={{ fontSize: 8, color: sc, fontWeight: 700, letterSpacing: '0.02em', marginTop: 1 }}>{scoreLabel(job.match_score)}</div>
-        </div>
+        {/* Score ring — resume match on the Resume tab, else relevance score */}
+        {(() => {
+          const ringColor = showResumeRing ? matchColor(rm!) : sc
+          return (
+            <div style={{
+              width: 52, height: 52, borderRadius: '50%', background: 'var(--surface-muted)',
+              border: `2.5px solid ${ringColor}`, display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: ringColor, lineHeight: 1 }}>
+                {showResumeRing ? `${rm}%` : job.match_score}
+              </div>
+              <div style={{ fontSize: 8, color: ringColor, fontWeight: 700, letterSpacing: '0.02em', marginTop: 1 }}>
+                {showResumeRing ? 'MATCH' : scoreLabel(job.match_score)}
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Meta badges */}
@@ -146,9 +160,7 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
           {job.active_status === 'applied' && <span style={{ fontSize: 11.5, color: 'var(--success)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}><Icon name="checkCircle" size={12} color="var(--success)" /> Applied</span>}
           {job.active_status === 'ignored' && <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontWeight: 600 }}>Ignored</span>}
           <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
-            {job.posted_date
-              ? `Posted ${new Date(job.posted_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-              : 'Recently posted'}
+            {job.posted_date ? `Posted ${fmtDate(job.posted_date)}` : 'Recently posted'}
           </span>
         </div>
 

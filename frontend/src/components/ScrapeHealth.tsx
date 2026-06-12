@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
+import { parseApiDate } from '../lib/datetime'
 import type { Company, ScrapeRun } from '../lib/types'
 
 const TZ_OPTIONS: { label: string; value: string }[] = [
@@ -27,10 +28,11 @@ export function ScrapeHealth() {
   function changeTz(v: string) { setTz(v); localStorage.setItem('ashborne-tz', v) }
 
   const fmt = (d: string | null) => {
-    if (!d) return '—'
+    const date = parseApiDate(d)
+    if (!date) return '—'
     const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
     if (tz !== 'local') opts.timeZone = tz
-    return new Date(d).toLocaleString('en-US', opts)
+    return date.toLocaleString('en-US', opts)
   }
 
   const shownRuns = showAllRuns ? runs : runs.slice(0, RUNS_PREVIEW)

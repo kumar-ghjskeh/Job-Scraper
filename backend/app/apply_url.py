@@ -14,8 +14,9 @@ COMPANY_SEARCH_URLS: dict[str, str] = {
     "apple":            "https://jobs.apple.com/en-us/search",
     "qualcomm":         "https://careers.qualcomm.com/careers",
     "intel":            "https://jobs.intel.com/en",
-    "broadcom":         "https://careers.broadcom.com",
-    "marvell":          "https://jobs.marvell.com/careers",
+    "broadcom":         "https://broadcom.wd1.myworkdayjobs.com/External_Career",
+    "globalfoundries":  "https://globalfoundries.wd1.myworkdayjobs.com/External",
+    "marvell":          "https://marvell.wd1.myworkdayjobs.com/MarvellCareers",
     "google":           "https://careers.google.com/jobs/results/",
     "amazon":           "https://www.amazon.jobs/en/search",
     "microsoft":        "https://careers.microsoft.com/us/en/search-results",
@@ -92,11 +93,13 @@ class ApplyURLResult:
     apply_url_reason: str
 
 
-def process_apply_url(raw_url: str, ats_platform: str, company_name: str = "") -> ApplyURLResult:
+def process_apply_url(raw_url: str, ats_platform: str, company_name: str = "", careers_url: str = "") -> ApplyURLResult:
     original = raw_url or ""
+    # Prefer the company's verified careers URL (from companies.yaml) as the
+    # fallback; fall back to the static map only if none was supplied.
+    fallback = careers_url or _get_company_fallback(company_name)
 
     if not original:
-        fallback = _get_company_fallback(company_name)
         return ApplyURLResult(
             safe_apply_url=fallback,
             original_apply_url="",
@@ -107,14 +110,22 @@ def process_apply_url(raw_url: str, ats_platform: str, company_name: str = "") -
     # Strip tracking params
     cleaned, stripped_count = _strip_tracking(original)
 
-    # Workday deep links expire and show "Page not found" — always use company careers search page
+    # Workday: a per-job deep link (…/job/Location/Title_JR123) lands directly on
+    # the posting — exactly like LinkedIn — and is stable, so keep it. Only fall
+    # back to the careers page for generic/non-job Workday URLs.
     if ats_platform == 'workday' or 'myworkdayjobs.com' in cleaned:
-        fallback = _get_company_fallback(company_name)
+        if '/job/' in cleaned and not _is_broken_workday_url(cleaned):
+            return ApplyURLResult(
+                safe_apply_url=cleaned,
+                original_apply_url=original,
+                apply_url_status="ok",
+                apply_url_reason="Workday job deep link",
+            )
         return ApplyURLResult(
             safe_apply_url=fallback or cleaned,
             original_apply_url=original,
             apply_url_status="fallback" if fallback else "ok",
-            apply_url_reason="Workday deep links expire; directing to company careers search page" if fallback else "Workday URL (no fallback configured)",
+            apply_url_reason="generic Workday URL; using company careers page" if fallback else "Workday URL (no fallback configured)",
         )
 
     # Greenhouse, Lever, Ashby URLs are reliable

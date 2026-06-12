@@ -153,9 +153,9 @@ export const api = {
     await axios.delete(`${BASE}/resume`)
   },
 
-  async getResumeMatches(page = 1, limit = 50, includeSenior = false, resumeId?: number): Promise<PaginatedResponse<Job> & { no_resume?: boolean }> {
+  async getResumeMatches(page = 1, limit = 50, includeSenior = false, resumeId?: number, sort = 'match'): Promise<PaginatedResponse<Job> & { no_resume?: boolean }> {
     const { data } = await axios.get(`${BASE}/jobs/resume-matches`, {
-      params: clean({ page, limit, include_senior: includeSenior, resume_id: resumeId }),
+      params: clean({ page, limit, include_senior: includeSenior, resume_id: resumeId, sort }),
     })
     return data
   },

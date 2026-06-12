@@ -128,6 +128,54 @@ def _interview_prep(role_category: str, job_skills: list[str], profile: dict) ->
     return {"technical_topics": topics[:8], "resume_defense": defense[:6]}
 
 
+_SENIOR_WORDS = ("senior", "sr.", "staff", "principal", "lead", "manager", "director", "fellow")
+
+
+def _experience_fit(profile: dict, job: dict) -> int:
+    """How realistic the role's seniority is for this candidate (0–100)."""
+    yrs = profile.get("years_experience", 0) or 0
+    level = (job.get("experience_level") or "").lower()
+    title = (job.get("job_title") or "").lower()
+    req_min = job.get("years_required_min")
+    is_senior = job.get("is_senior") or any(w in level or w in title for w in _SENIOR_WORDS)
+
+    if yrs <= 1:  # new grad / early career
+        if job.get("is_entry_level") or any(k in level for k in ("new grad", "entry", "junior", "intern")):
+            return 100
+        if is_senior:
+            return 42  # a stretch — can apply, but not the best fit
+        if job.get("is_candidate_friendly") or "associate" in level or "mid" in level:
+            return 78
+        if req_min and req_min >= 5:
+            return 45
+        return 68
+    # experienced candidate
+    if req_min is not None:
+        if yrs >= req_min:
+            return 95
+        if yrs >= req_min - 2:
+            return 75
+        return 55
+    return 72
+
+
+def _domain_score(profile: dict, job: dict) -> int:
+    """Role-category alignment with the resume's focus (0–100)."""
+    rc = (job.get("role_category") or "").lower()
+    focus = (profile.get("role_focus") or "").lower()
+    if not rc or rc == "unknown":
+        return 60
+    if focus and (focus.split()[0] in rc or rc.split()[0] in focus):
+        return 100
+    dv = ("verification", "dv", "formal", "validation")
+    if any(t in rc for t in dv) and any(t in focus for t in dv):
+        return 90
+    rtl = ("rtl", "design")
+    if any(t in rc for t in rtl) and any(t in focus for t in rtl):
+        return 85
+    return 55
+
+
 def compute_match(profile: dict, job: dict) -> dict:
     """job is a dict with job_title, cleaned_description, matched_keywords,
     role_category, match_score, is_candidate_friendly, eligibility_risk,
@@ -142,19 +190,16 @@ def compute_match(profile: dict, job: dict) -> dict:
     matched = [s for s in job_skills if s in resume_skills]
     missing = [s for s in job_skills if s not in resume_skills]
 
-    # Resume match % — blend overlap ratio with absolute depth so a job that
-    # mentions only one skill can't outrank a rich, deeply-matched role.
+    # ── Sub-scores (what recruiters actually weigh), each 0–100 ──────────────
+    # 1. Skills: overlap ratio blended with absolute depth.
     if job_skills:
         overlap = len(matched) / len(job_skills)
         depth = min(1.0, len(matched) / 8)
-        match_pct = round(100 * (0.5 * overlap + 0.5 * depth))
+        skills_score = round(100 * (0.5 * overlap + 0.5 * depth))
     else:
-        # no parseable JD skills (e.g. Workday list w/o description) → role-focus
-        rc = (job.get("role_category") or "").lower()
-        focus = (profile.get("role_focus") or "").lower()
-        match_pct = 55 if (focus and focus.split()[0] in rc) else 40
+        skills_score = 45  # no parseable JD skills
 
-    # Matched projects (resume projects that touch the job's areas)
+    # 2. Matched projects (resume projects that touch the job's areas).
     job_signals = [s for s, pats in PROJECT_SIGNALS.items() if any(re.search(p, job_text.lower()) for p in pats)]
     matched_projects = []
     for proj in profile.get("projects", []):
@@ -162,8 +207,24 @@ def compute_match(profile: dict, job: dict) -> dict:
         if any(re.search(p, pl) for s in job_signals for p in PROJECT_SIGNALS[s]) or any(m.lower() in pl for m in matched[:6]):
             matched_projects.append(proj)
     matched_projects = matched_projects[:4]
+    projects_score = [40, 70, 90, 100][min(len(matched_projects), 3)]
 
-    # Defensibility
+    # 3. Experience / seniority fit (how realistic the level is for the candidate).
+    experience_score = _experience_fit(profile, job)
+    # 4. Domain alignment (role category vs resume focus).
+    domain_score = _domain_score(profile, job)
+
+    # Overall match — weighted like a recruiter scan: skills first, then how
+    # realistic the level is, then proof (projects), then domain alignment.
+    match_pct = round(
+        0.42 * skills_score + 0.24 * experience_score + 0.19 * projects_score + 0.15 * domain_score
+    )
+    match_breakdown = {
+        "skills": skills_score, "experience": experience_score,
+        "projects": projects_score, "domain": domain_score,
+    }
+
+    # Defensibility (kept for compatibility; not shown in UI)
     proj_factor = min(1.0, len(matched_projects) / 2)
     defensibility = round(100 * (0.55 * (match_pct / 100) + 0.45 * proj_factor))
 
@@ -171,7 +232,7 @@ def compute_match(profile: dict, job: dict) -> dict:
     rel = job.get("match_score", 0)
     fresh_bonus = 5 if job.get("is_fresh") else 0
     elig_pen = 20 if job.get("eligibility_risk") == "high" else (8 if job.get("eligibility_risk") == "medium" else 0)
-    priority_score = 0.4 * rel + 0.5 * match_pct + fresh_bonus - elig_pen
+    priority_score = 0.35 * rel + 0.55 * match_pct + fresh_bonus - elig_pen
     apply_priority = "High" if priority_score >= 72 else ("Medium" if priority_score >= 52 else "Low")
 
     # Why matches
@@ -197,6 +258,7 @@ def compute_match(profile: dict, job: dict) -> dict:
 
     return {
         "resume_match": match_pct,
+        "match_breakdown": match_breakdown,
         "defensibility": defensibility,
         "apply_priority": apply_priority,
         "matched_skills": matched,
