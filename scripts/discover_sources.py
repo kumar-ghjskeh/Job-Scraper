@@ -29,6 +29,8 @@ TARGETS = [
     "Lattice Semiconductor", "Keysight Technologies", "Cadence",
     "Tenstorrent", "Astera Labs", "Lightmatter", "Rivos", "Axelera AI",
     "EnCharge AI", "Positron", "MatX", "Lemurian Labs", "Baya Systems",
+    "SiMa.ai", "Recogni", "Mythic", "Blaize", "Flex Logix", "Quadric",
+    "Expedera", "Tesla", "Ampere Computing", "Tenstorrent", "Ambarella",
 ]
 
 

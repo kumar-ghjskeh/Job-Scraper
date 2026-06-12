@@ -401,12 +401,12 @@ companies:
   - name: "Arista Networks"
     category: "Networking"
     priority: "A"
-    careers_url: "https://www.arista.com/en/careers"
-    ats_platform: "greenhouse"
-    greenhouse_board: "arista"
+    careers_url: "https://careers.smartrecruiters.com/aristanetworks"
+    ats_platform: "smartrecruiters"
+    smartrecruiters_company: "aristanetworks"
     search_keywords: ["verification", "rtl", "asic", "design verification", "fpga"]
-    notes: "Greenhouse board slug returns 404 — needs verified slug."
-    enabled: false
+    notes: "SmartRecruiters public API — verified live."
+    enabled: true
 
   - name: "Synaptics"
     category: "Tier1"
