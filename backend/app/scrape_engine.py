@@ -48,6 +48,222 @@ logger = logging.getLogger(__name__)
 ERROR_QUARANTINE_THRESHOLD = 8
 
 
+async def persist_company_results(
+    company_cfg: dict, raw_jobs: list, removed_threshold: int
+) -> tuple[int, int]:
+    """Persist one company's scraped jobs and reconcile removals.
+
+    Upserts each raw job (refreshing descriptions / posted dates / apply URLs on
+    existing rows, fully scoring new ones), marks postings that have disappeared
+    across enough consecutive scrapes as removed, and resets the company's scrape
+    status. Returns ``(new_jobs, removed_jobs)``.
+
+    Shared by both the httpx scheduler (:func:`run_scrape`) and the local
+    browser engine runner so persistence/scoring stays identical across engines.
+    """
+    company_name = company_cfg["name"]
+    now = datetime.now(timezone.utc)
+    found_ids: set[str] = set()
+    new_count = 0
+
+    with Session(engine) as session:
+        for raw in raw_jobs:
+            job_id_str = raw.job_id or ""
+            found_ids.add(job_id_str or raw.apply_url)
+
+            existing = find_existing(
+                session,
+                company=company_name,
+                job_title=raw.job_title,
+                location=raw.location,
+                job_id=job_id_str,
+                apply_url=raw.apply_url,
+            )
+
+            if existing:
+                existing.last_seen_at = now
+                existing.active_status = ActiveStatus.active
+                existing.missed_scrapes = 0
+                # Upgrade to a fuller description when the scraper now returns
+                # one (e.g. the Phase 5 Workday detail fetch), and backfill a
+                # real posted date when it was previously unknown.
+                raw_desc = raw.full_description_text or raw.description_snippet or ""
+                if raw_desc:
+                    cleaned = clean_html_description(raw_desc)
+                    if len(cleaned) > len(existing.cleaned_description or "") + 50:
+                        existing.cleaned_description = cleaned
+                        if raw.full_description_text:
+                            existing.full_description_text = raw.full_description_text
+                        existing.description_snippet = truncate_description_cleanly(cleaned, length=300)
+                        existing.data_quality_status = "ok"
+                if raw.posted_date and not existing.posted_date:
+                    existing.posted_date = raw.posted_date
+                    existing.posted_date_known = True
+                # Refresh the apply URL with the current logic so existing rows
+                # pick up the Workday deep-link fix (no more dead fallbacks).
+                url_result = process_apply_url(
+                    raw.apply_url, company_cfg.get("ats_platform", ""), company_name,
+                    careers_url=company_cfg.get("careers_url", ""),
+                )
+                if url_result.safe_apply_url:
+                    existing.apply_url = url_result.safe_apply_url
+                    existing.safe_apply_url = url_result.safe_apply_url
+                    existing.original_apply_url = url_result.original_apply_url or existing.original_apply_url
+                    existing.apply_url_status = url_result.apply_url_status
+                    existing.apply_url_reason = url_result.apply_url_reason
+                session.add(existing)
+            else:
+                new_count += 1
+
+                # Clean HTML from description before any processing
+                raw_desc = raw.full_description_text or raw.description_snippet or ""
+                cleaned_desc = clean_html_description(raw_desc)
+                snippet = truncate_description_cleanly(
+                    raw.description_snippet or raw_desc, length=300
+                )
+
+                # Location parsing
+                loc_result = parse_location(raw.location, snippet)
+
+                # Apply URL safety
+                url_result = process_apply_url(
+                    raw.apply_url,
+                    company_cfg.get("ats_platform", ""),
+                    company_name,
+                    careers_url=company_cfg.get("careers_url", ""),
+                )
+
+                # Scoring (uses cleaned text for accuracy)
+                score, matched_kws, breakdown = calculate_match_score(
+                    job_title=raw.job_title,
+                    description=cleaned_desc,
+                    company_priority=company_cfg.get("priority", "C"),
+                    location=raw.location,
+                    is_usa=loc_result.is_usa,
+                    first_seen_recently=True,
+                    ats_platform=company_cfg.get("ats_platform", ""),
+                )
+
+                exp = detect_experience_level(raw.job_title, cleaned_desc)
+                role_cat = detect_role_category(raw.job_title, cleaned_desc)
+                remote_status = detect_remote_status(raw.location, cleaned_desc)
+                ymin, ymax = detect_years_required(cleaned_desc)
+                is_entry, is_senior = classify_seniority_flags(raw.job_title, cleaned_desc)
+                is_cand_friendly = is_candidate_friendly_job(
+                    raw.job_title, cleaned_desc,
+                    company_cfg.get("priority", "C"),
+                    company_cfg.get("ats_platform", ""),
+                )
+                role_flags = classify_role_flags(raw.job_title, cleaned_desc)
+                sw_only = is_software_only(raw.job_title, cleaned_desc)
+                hw_sw = role_flags.get("is_hardware_software_codesign", False)
+                relevance = build_relevance_reason(raw.job_title, cleaned_desc, breakdown)
+                elig_risk, elig_terms = detect_eligibility_risk(cleaned_desc)
+
+                # Phase 2: granular seniority, location label, data quality
+                sen_level, sen_conf = classify_seniority(raw.job_title, cleaned_desc)
+                role_known = bool(role_cat) and role_cat != "Unknown"
+                src_rel = source_reliability(company_cfg.get("ats_platform", ""))
+                posted_known = raw.posted_date is not None
+                loc_label = canonical_location_label(
+                    raw.location, loc_result.is_usa, loc_result.is_remote_usa,
+                    remote_status, loc_result.confidence,
+                )
+                dq_score, class_conf = compute_data_quality(
+                    has_description=bool(cleaned_desc),
+                    location_confidence=loc_result.confidence,
+                    posted_known=posted_known,
+                    apply_status=url_result.apply_url_status,
+                    role_known=role_known,
+                    seniority_confidence=sen_conf,
+                )
+
+                import json
+                job = JobPosting(
+                    company=company_name,
+                    company_category=company_cfg.get("category", ""),
+                    company_priority=company_cfg.get("priority", "C"),
+                    job_title=raw.job_title,
+                    normalized_title=normalize_title(raw.job_title),
+                    role_category=role_cat,
+                    experience_level=sen_level,
+                    is_entry_level=is_entry,
+                    is_candidate_friendly=is_cand_friendly,
+                    is_senior=is_senior,
+                    years_required_min=ymin,
+                    years_required_max=ymax,
+                    location=raw.location,
+                    location_raw=raw.location,
+                    remote_status=remote_status,
+                    is_usa=loc_result.is_usa,
+                    is_remote_usa=loc_result.is_remote_usa,
+                    country=loc_result.country,
+                    state=loc_result.state,
+                    city=loc_result.city,
+                    location_confidence=loc_result.confidence,
+                    job_id_from_company=job_id_str,
+                    apply_url=url_result.safe_apply_url or raw.apply_url,
+                    original_apply_url=url_result.original_apply_url,
+                    safe_apply_url=url_result.safe_apply_url,
+                    apply_url_status=url_result.apply_url_status,
+                    apply_url_reason=url_result.apply_url_reason,
+                    source_url=raw.source_url,
+                    ats_platform=company_cfg.get("ats_platform", ""),
+                    posted_date=raw.posted_date,
+                    first_seen_at=now,
+                    last_seen_at=now,
+                    active_status=ActiveStatus.active,
+                    match_score=score,
+                    matched_keywords=", ".join(matched_kws),
+                    score_breakdown_json=score_breakdown_json(breakdown),
+                    relevance_score_label=score_to_label(score),
+                    description_snippet=snippet,
+                    full_description_text=raw.full_description_text or "",
+                    cleaned_description=cleaned_desc,
+                    role_flags_json=json.dumps(role_flags),
+                    is_software_only=sw_only,
+                    is_hardware_software_codesign=hw_sw,
+                    relevance_reason=relevance,
+                    matched_positive_terms_json=json.dumps(matched_kws),
+                    data_quality_status="ok" if cleaned_desc else "no_description",
+                    eligibility_risk=elig_risk,
+                    eligibility_terms=", ".join(elig_terms),
+                    seniority_confidence=sen_conf,
+                    classification_confidence=class_conf,
+                    data_quality_score=dq_score,
+                    source_reliability=src_rel,
+                    location_label=loc_label,
+                    posted_date_known=posted_known,
+                )
+                session.add(job)
+                session.commit()
+                session.refresh(job)
+
+                await send_alerts(job)
+                await sync_job_to_notion(job)
+
+        session.commit()
+
+    # Only reconcile removals when the scrape actually returned jobs for this
+    # company — an empty result is almost always a transient hiccup, not the
+    # company closing every posting at once.
+    removed_count = 0
+    if found_ids:
+        removed_count = await _update_removed_status(
+            company_name, found_ids, removed_threshold
+        )
+
+    with Session(engine) as session:
+        co = session.exec(select(Company).where(Company.name == company_name)).first()
+        if co:
+            co.last_scraped_at = now
+            co.scrape_error_count = 0  # reset on success — self-healing
+            session.add(co)
+            session.commit()
+
+    return new_count, removed_count
+
+
 async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | None = None) -> ScrapeRun:
     schedule_cfg = load_schedule()
     delay_between = schedule_cfg.get("rate_limit", {}).get("delay_between_companies_seconds", 5)
@@ -74,11 +290,15 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
     total_errors = 0
     total_removed = 0
     scraped_count = 0
-    found_per_company: dict[str, set[str]] = {}
 
     for company_cfg in companies:
         company_name = company_cfg["name"]
-        found_per_company[company_name] = set()
+
+        # Browser-engine companies are scraped by the separate local runner
+        # (run_browser_scrape) — never by this httpx scheduler, which would only
+        # hit the anti-bot maintenance page. Skip them defensively.
+        if company_cfg.get("engine") == "browser":
+            continue
 
         # Skip auto-quarantined sources (too many prior consecutive failures)
         with Session(engine) as session:
@@ -98,202 +318,12 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
 
             scraped_count += 1
             total_found += len(raw_jobs)
-            now = datetime.now(timezone.utc)
 
-            with Session(engine) as session:
-                for raw in raw_jobs:
-                    job_id_str = raw.job_id or ""
-                    found_per_company[company_name].add(job_id_str or raw.apply_url)
-
-                    existing = find_existing(
-                        session,
-                        company=company_name,
-                        job_title=raw.job_title,
-                        location=raw.location,
-                        job_id=job_id_str,
-                        apply_url=raw.apply_url,
-                    )
-
-                    if existing:
-                        existing.last_seen_at = now
-                        existing.active_status = ActiveStatus.active
-                        existing.missed_scrapes = 0
-                        # Upgrade to a fuller description when the scraper now returns
-                        # one (e.g. the Phase 5 Workday detail fetch), and backfill a
-                        # real posted date when it was previously unknown.
-                        raw_desc = raw.full_description_text or raw.description_snippet or ""
-                        if raw_desc:
-                            cleaned = clean_html_description(raw_desc)
-                            if len(cleaned) > len(existing.cleaned_description or "") + 50:
-                                existing.cleaned_description = cleaned
-                                if raw.full_description_text:
-                                    existing.full_description_text = raw.full_description_text
-                                existing.description_snippet = truncate_description_cleanly(cleaned, length=300)
-                                existing.data_quality_status = "ok"
-                        if raw.posted_date and not existing.posted_date:
-                            existing.posted_date = raw.posted_date
-                            existing.posted_date_known = True
-                        # Refresh the apply URL with the current logic so existing rows
-                        # pick up the Workday deep-link fix (no more dead fallbacks).
-                        url_result = process_apply_url(
-                            raw.apply_url, company_cfg.get("ats_platform", ""), company_name,
-                            careers_url=company_cfg.get("careers_url", ""),
-                        )
-                        if url_result.safe_apply_url:
-                            existing.apply_url = url_result.safe_apply_url
-                            existing.safe_apply_url = url_result.safe_apply_url
-                            existing.original_apply_url = url_result.original_apply_url or existing.original_apply_url
-                            existing.apply_url_status = url_result.apply_url_status
-                            existing.apply_url_reason = url_result.apply_url_reason
-                        session.add(existing)
-                    else:
-                        total_new += 1
-
-                        # Clean HTML from description before any processing
-                        raw_desc = raw.full_description_text or raw.description_snippet or ""
-                        cleaned_desc = clean_html_description(raw_desc)
-                        snippet = truncate_description_cleanly(
-                            raw.description_snippet or raw_desc, length=300
-                        )
-
-                        # Location parsing
-                        loc_result = parse_location(raw.location, snippet)
-
-                        # Apply URL safety
-                        url_result = process_apply_url(
-                            raw.apply_url,
-                            company_cfg.get("ats_platform", ""),
-                            company_name,
-                            careers_url=company_cfg.get("careers_url", ""),
-                        )
-
-                        # Scoring (uses cleaned text for accuracy)
-                        score, matched_kws, breakdown = calculate_match_score(
-                            job_title=raw.job_title,
-                            description=cleaned_desc,
-                            company_priority=company_cfg.get("priority", "C"),
-                            location=raw.location,
-                            is_usa=loc_result.is_usa,
-                            first_seen_recently=True,
-                            ats_platform=company_cfg.get("ats_platform", ""),
-                        )
-
-                        exp = detect_experience_level(raw.job_title, cleaned_desc)
-                        role_cat = detect_role_category(raw.job_title, cleaned_desc)
-                        remote_status = detect_remote_status(raw.location, cleaned_desc)
-                        ymin, ymax = detect_years_required(cleaned_desc)
-                        is_entry, is_senior = classify_seniority_flags(raw.job_title, cleaned_desc)
-                        is_cand_friendly = is_candidate_friendly_job(
-                            raw.job_title, cleaned_desc,
-                            company_cfg.get("priority", "C"),
-                            company_cfg.get("ats_platform", ""),
-                        )
-                        role_flags = classify_role_flags(raw.job_title, cleaned_desc)
-                        sw_only = is_software_only(raw.job_title, cleaned_desc)
-                        hw_sw = role_flags.get("is_hardware_software_codesign", False)
-                        relevance = build_relevance_reason(raw.job_title, cleaned_desc, breakdown)
-                        elig_risk, elig_terms = detect_eligibility_risk(cleaned_desc)
-
-                        # Phase 2: granular seniority, location label, data quality
-                        sen_level, sen_conf = classify_seniority(raw.job_title, cleaned_desc)
-                        role_known = bool(role_cat) and role_cat != "Unknown"
-                        src_rel = source_reliability(company_cfg.get("ats_platform", ""))
-                        posted_known = raw.posted_date is not None
-                        loc_label = canonical_location_label(
-                            raw.location, loc_result.is_usa, loc_result.is_remote_usa,
-                            remote_status, loc_result.confidence,
-                        )
-                        dq_score, class_conf = compute_data_quality(
-                            has_description=bool(cleaned_desc),
-                            location_confidence=loc_result.confidence,
-                            posted_known=posted_known,
-                            apply_status=url_result.apply_url_status,
-                            role_known=role_known,
-                            seniority_confidence=sen_conf,
-                        )
-
-                        import json
-                        job = JobPosting(
-                            company=company_name,
-                            company_category=company_cfg.get("category", ""),
-                            company_priority=company_cfg.get("priority", "C"),
-                            job_title=raw.job_title,
-                            normalized_title=normalize_title(raw.job_title),
-                            role_category=role_cat,
-                            experience_level=sen_level,
-                            is_entry_level=is_entry,
-                            is_candidate_friendly=is_cand_friendly,
-                            is_senior=is_senior,
-                            years_required_min=ymin,
-                            years_required_max=ymax,
-                            location=raw.location,
-                            location_raw=raw.location,
-                            remote_status=remote_status,
-                            is_usa=loc_result.is_usa,
-                            is_remote_usa=loc_result.is_remote_usa,
-                            country=loc_result.country,
-                            state=loc_result.state,
-                            city=loc_result.city,
-                            location_confidence=loc_result.confidence,
-                            job_id_from_company=job_id_str,
-                            apply_url=url_result.safe_apply_url or raw.apply_url,
-                            original_apply_url=url_result.original_apply_url,
-                            safe_apply_url=url_result.safe_apply_url,
-                            apply_url_status=url_result.apply_url_status,
-                            apply_url_reason=url_result.apply_url_reason,
-                            source_url=raw.source_url,
-                            ats_platform=company_cfg.get("ats_platform", ""),
-                            posted_date=raw.posted_date,
-                            first_seen_at=now,
-                            last_seen_at=now,
-                            active_status=ActiveStatus.active,
-                            match_score=score,
-                            matched_keywords=", ".join(matched_kws),
-                            score_breakdown_json=score_breakdown_json(breakdown),
-                            relevance_score_label=score_to_label(score),
-                            description_snippet=snippet,
-                            full_description_text=raw.full_description_text or "",
-                            cleaned_description=cleaned_desc,
-                            role_flags_json=json.dumps(role_flags),
-                            is_software_only=sw_only,
-                            is_hardware_software_codesign=hw_sw,
-                            relevance_reason=relevance,
-                            matched_positive_terms_json=json.dumps(matched_kws),
-                            data_quality_status="ok" if cleaned_desc else "no_description",
-                            eligibility_risk=elig_risk,
-                            eligibility_terms=", ".join(elig_terms),
-                            seniority_confidence=sen_conf,
-                            classification_confidence=class_conf,
-                            data_quality_score=dq_score,
-                            source_reliability=src_rel,
-                            location_label=loc_label,
-                            posted_date_known=posted_known,
-                        )
-                        session.add(job)
-                        session.commit()
-                        session.refresh(job)
-
-                        await send_alerts(job)
-                        await sync_job_to_notion(job)
-
-                session.commit()
-
-            # Only reconcile removals when the scrape actually returned jobs for this
-            # company — an empty result is almost always a transient hiccup, not the
-            # company closing every posting at once.
-            if found_per_company[company_name]:
-                removed = await _update_removed_status(
-                    company_name, found_per_company[company_name], removed_threshold
-                )
-                total_removed += removed
-
-            with Session(engine) as session:
-                co = session.exec(select(Company).where(Company.name == company_name)).first()
-                if co:
-                    co.last_scraped_at = now
-                    co.scrape_error_count = 0  # reset on success — self-healing
-                    session.add(co)
-                    session.commit()
+            new_count, removed_count = await persist_company_results(
+                company_cfg, raw_jobs, removed_threshold
+            )
+            total_new += new_count
+            total_removed += removed_count
 
         except Exception as e:
             total_errors += 1

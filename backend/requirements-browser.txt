@@ -1,0 +1,10 @@
+# Optional dependencies for the LOCAL real-browser scrape engine
+# (backend/app/run_browser_scrape.py). NOT installed on Render — the free web
+# tier has neither Chromium nor enough RAM to run one. Install on your own
+# machine to unlock the anti-bot Workday tenants (Cadence, KLA, Applied
+# Materials, Microchip, …):
+#
+#   pip install -r backend/requirements-browser.txt
+#   python -m playwright install chromium
+#
+playwright>=1.45.0

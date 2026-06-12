@@ -92,6 +92,41 @@ curl -X POST http://localhost:8000/scrape/run-now
 
 ---
 
+## Local real-browser scraping (anti-bot Workday tenants)
+
+Some Workday tenants (Cadence, KLA, Applied Materials, Microchip, …) serve a
+fake *"Workday is currently unavailable"* maintenance page to any server-side
+HTTP client, so the normal httpx scraper can't reach them. A real Chromium
+session loads the careers site normally and the same CXS endpoints then return
+real data. This runs **locally only** (the free Render tier has no Chromium and
+not enough RAM) and writes to whatever `DATABASE_URL` is configured.
+
+**One-time setup:**
+
+```
+pip install -r backend/requirements-browser.txt
+python -m playwright install chromium
+```
+
+**Run it** (companies marked `engine: browser` in `config/companies.yaml`):
+
+```
+py -m backend.app.run_browser_scrape            # all browser companies
+py -m backend.app.run_browser_scrape --only KLA # just one (substring match)
+py -m backend.app.run_browser_scrape --headed   # watch the browser window
+```
+
+By default it writes to the local SQLite DB. To push jobs straight to the
+**live site**, set `DATABASE_URL` to Render's *External* Postgres connection
+string in `backend/.env`, then run the same command — new jobs appear on the
+deployed dashboard within seconds, no redeploy needed. Optionally schedule it
+with Windows Task Scheduler to keep these companies fresh while your PC is on.
+
+The httpx scheduler (and the cloud service) always skip `engine: browser`
+companies, so this is fully isolated from the 24/7 cloud scrapers.
+
+---
+
 ## Scheduled automatic scraping
 
 The scheduler is built into the FastAPI app using APScheduler. It runs automatically

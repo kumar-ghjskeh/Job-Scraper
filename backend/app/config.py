@@ -81,6 +81,15 @@ def load_all_companies() -> list[dict]:
     return list(data.get("companies", []))
 
 
+def load_browser_companies() -> list[dict]:
+    """Companies marked ``engine: browser`` — scraped only by the local
+    real-browser runner (run_browser_scrape), never by the httpx scheduler.
+    Selected by the engine flag regardless of ``enabled`` so they can stay
+    excluded from the cloud scheduler while still being scraped locally."""
+    data = _load_yaml(CONFIG_DIR / "companies.yaml")
+    return [c for c in data.get("companies", []) if c.get("engine") == "browser"]
+
+
 def load_keywords() -> dict:
     return _load_yaml(CONFIG_DIR / "keywords.yaml")
 
