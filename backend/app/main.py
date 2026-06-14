@@ -306,29 +306,16 @@ def _build_job_query(
                for lv in levels):
             include_senior = True
         if levels:
-            from sqlmodel import and_ as sql_and, or_ as sql_or
-            # The seniority classifier only ever emits New Grad / Junior / Mid-Level /
-            # Senior / Staff / Principal / Lead / Manager (no "Entry Level"/"Associate"),
-            # so a plain label match leaves the early-career chips empty. Map the
-            # early-career chips onto the real entry/candidate-friendly signals.
-            level_conds = []
-            for lv in levels:
-                if lv == "New Grad":
-                    level_conds.append(col(JobPosting.experience_level) == "New Grad")
-                    level_conds.append(JobPosting.is_entry_level == True)  # noqa: E712
-                elif lv == "Entry Level":
-                    level_conds.append(col(JobPosting.experience_level).in_(["Entry Level", "New Grad"]))
-                    level_conds.append(JobPosting.is_entry_level == True)  # noqa: E712
-                elif lv in ("Junior", "Associate"):
-                    level_conds.append(col(JobPosting.experience_level) == lv)
-                    level_conds.append(sql_and(
-                        JobPosting.is_candidate_friendly == True,  # noqa: E712
-                        JobPosting.is_senior == False,             # noqa: E712
-                        JobPosting.is_entry_level == False,        # noqa: E712
-                    ))
-                else:
-                    level_conds.append(col(JobPosting.experience_level) == lv)
-            conditions.append(sql_or(*level_conds))
+            from sqlmodel import or_ as sql_or
+            # Each seniority chip returns EXACTLY its level. classify_seniority now
+            # emits every label the UI shows (New Grad / Entry Level / Junior /
+            # Associate / Mid-Level / Senior / Staff / Principal / Lead / Manager)
+            # and is_senior/is_entry are derived from it, so an exact
+            # experience_level match is both precise and self-consistent — no more
+            # "New Grad" and "Entry Level" chips returning the same lumped set.
+            conditions.append(sql_or(*[
+                col(JobPosting.experience_level) == lv for lv in levels
+            ]))
 
     if remote:
         conditions.append(col(JobPosting.remote_status).ilike(f"%{remote}%"))
@@ -926,6 +913,7 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
         item["match_breakdown"] = m["match_breakdown"]
         item["defensibility"] = m["defensibility"]
         item["apply_priority"] = m["apply_priority"]
+        item["apply_priority_score"] = m["apply_priority_score"]
         item["matched_skills"] = m["matched_skills"][:6]
         item["missing_skills"] = m["missing_skills"][:6]
         scored.append(item)
@@ -933,8 +921,11 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
     # Three recruiter-grade sorts only: overall fit, how realistic the level is
     # for this candidate, and freshness. Each breaks ties on the other signal so
     # the orderings are genuinely distinct.
+    #   "match" (Best match) — level-aware apply-priority blend (level fit + resume
+    #     overlap), so a Staff/Senior role with high skill overlap can no longer top
+    #     the list for a no-experience resume; resume_match breaks ties.
     sort_keys = {
-        "match": lambda it: (it["resume_match"], bd(it, "experience"), it["match_score"]),
+        "match": lambda it: (it.get("apply_priority_score", 0), it["resume_match"]),
         "experience": lambda it: (bd(it, "experience"), it["resume_match"]),
         "newest": lambda it: (str(it.get("posted_date") or it.get("first_seen_at") or ""), it["resume_match"]),
     }
@@ -1299,6 +1290,25 @@ def analytics_summary(session: SessionDep):
     remote_count = count(active + USA_VIEW + [
         col(JobPosting.remote_status).in_(["Remote", "remote"]),
     ])
+
+    # ── Inventory funnel (reconciles "Found 760" on Data Health with the ~449
+    # shown on the dashboard, so the counts never look contradictory). ──
+    total_in_db = count([])
+    active_all = count(active)
+    non_usa_filtered = count(active + [
+        JobPosting.is_usa == False, JobPosting.location_confidence != 0.0,
+    ])
+    software_filtered = count(active + [JobPosting.is_software_only == True])
+    senior_filtered = count(active + USA_VIEW + [JobPosting.is_senior == True])
+    job_inventory = {
+        "scanned_last_run": None,          # filled from last_run below
+        "total_in_db": total_in_db,
+        "active": active_all,
+        "usa_relevant": total_active,      # == the dashboard / All Jobs list count
+        "non_usa_filtered": non_usa_filtered,
+        "software_filtered": software_filtered,
+        "senior_roles": senior_filtered,
+    }
     # "High priority" + a dedicated new-grad card are both re-based on New Grad Fit.
     high_score = count(active + USA_VIEW + [JobPosting.new_grad_fit >= 70])
     strong_new_grad = count(active + USA_VIEW + [JobPosting.new_grad_fit >= 75])
@@ -1309,6 +1319,8 @@ def analytics_summary(session: SessionDep):
     last_run = session.exec(
         select(ScrapeRun).order_by(col(ScrapeRun.started_at).desc()).limit(1)
     ).first()
+    if last_run:
+        job_inventory["scanned_last_run"] = last_run.jobs_found
 
     return {
         "total_active": total_active,
@@ -1323,6 +1335,7 @@ def analytics_summary(session: SessionDep):
         "saved_count": saved,
         "applied_count": applied,
         "total_companies": total_companies,
+        "job_inventory": job_inventory,
         "last_run": {
             "id": last_run.id,
             "started_at": last_run.started_at,

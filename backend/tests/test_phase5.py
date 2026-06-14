@@ -44,26 +44,30 @@ def _seed(s, jobs):
 
 # ── Seniority filter remap (the Entry Level / Junior = 0 bug) ────────────────
 
-def test_entry_level_filter_uses_flags_not_label():
+def test_entry_level_chip_is_exact():
+    """Each seniority chip returns EXACTLY its level. The "Entry Level" chip must
+    NOT pull in New Grad (a separate chip) or Unknown-but-flagged jobs — that
+    lumping was the bug. The broad entry+candidate-friendly pool lives in the
+    New Grad TAB (/jobs/entry-level), not the chip."""
     s = _session()
     _seed(s, [
-        _job(experience_level="Unknown", is_entry_level=True),    # flagged entry, no label
-        _job(experience_level="New Grad"),                        # label only
-        _job(experience_level="Senior", is_senior=True),          # not entry
+        _job(experience_level="Entry Level", is_entry_level=True),  # the only match
+        _job(experience_level="New Grad", is_entry_level=True),     # different chip
+        _job(experience_level="Senior", is_senior=True),           # not entry
     ])
-    _, n = M._build_job_query(s, page=1, limit=50, level_filter="Entry Level")
-    assert n == 2  # the flagged-entry job + the New Grad-labelled job
+    items, n = M._build_job_query(s, page=1, limit=50, level_filter="Entry Level")
+    assert n == 1 and all(j.experience_level == "Entry Level" for j in items)
 
 
-def test_junior_filter_includes_candidate_friendly():
+def test_junior_chip_is_exact():
     s = _session()
     _seed(s, [
-        _job(is_candidate_friendly=True),                         # likely-junior signal
-        _job(experience_level="Junior"),                          # explicit label
-        _job(experience_level="Senior", is_senior=True),          # excluded
+        _job(experience_level="Junior", is_candidate_friendly=True),  # the only match
+        _job(experience_level="Unknown", is_candidate_friendly=True),  # candidate-friendly != Junior
+        _job(experience_level="Senior", is_senior=True),              # excluded
     ])
-    _, n = M._build_job_query(s, page=1, limit=50, level_filter="Junior")
-    assert n == 2
+    items, n = M._build_job_query(s, page=1, limit=50, level_filter="Junior")
+    assert n == 1 and all(j.experience_level == "Junior" for j in items)
 
 
 # ── Keyword search lifts the non-senior gate ─────────────────────────────────

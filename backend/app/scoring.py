@@ -627,6 +627,9 @@ def classify_seniority(title: str, description: str = "") -> tuple[str, int]:
         return "Lead", 88
     if re.search(r"\b(senior|sr\.?)\b", t):
         return "Senior", 92
+    # Company-specific senior signals (architect / Member of Technical Staff).
+    if re.search(r"\b(architect|smts|mts|member of technical staff)\b", t):
+        return "Senior", 88
     if re.search(r"\b(new\s+grad|new\s+college\s+grad|recent\s+graduate|university\s+grad(uate)?|early\s+career|campus)\b", c):
         return "New Grad", 92
     if re.search(r"\bassociate\b", t):
@@ -661,24 +664,24 @@ def classify_seniority(title: str, description: str = "") -> tuple[str, int]:
     return "Unknown", 30
 
 
+_SENIOR_TIERS = ("Senior", "Staff", "Principal", "Lead", "Manager")
+_ENTRY_TIERS = ("New Grad", "Entry Level")
+
+
 def classify_seniority_flags(title: str, description: str = "") -> tuple[bool, bool]:
-    """Return (is_entry_level, is_senior)."""
-    exp = detect_experience_level(title, description)
-    is_entry = exp in (ExperienceLevel.new_grad, ExperienceLevel.entry_level, ExperienceLevel.zero_to_three)
-    is_senior = exp == ExperienceLevel.senior
+    """Return (is_entry_level, is_senior), derived from the single authoritative
+    classify_seniority() level.
 
-    # Title senior signals override
-    title_l = title.lower()
-    if re.search(r"\b(senior|sr\b|principal|staff\b|lead\b|director|architect|manager|distinguished)\b", title_l):
-        is_senior = True
-        is_entry = False
-
-    # High year requirements (5+) are effectively senior
-    ymin, _ = detect_years_required(title + " " + description)
-    if ymin is not None and ymin >= 5:
-        is_senior = True
-        is_entry = False
-
+    Both flags come from the same engine that produces the displayed
+    experience_level, so the level shown on a card and the flags the filters /
+    New-Grad tab gate on can never contradict each other (previously a job could
+    read "Entry Level" yet carry is_senior=True because a second engine,
+    detect_experience_level, parsed the description differently). classify_seniority
+    only looks at the *title* for seniority words, so a JD that merely mentions
+    "senior engineers" no longer falsely marks the role itself senior."""
+    level, _ = classify_seniority(title, description)
+    is_senior = level in _SENIOR_TIERS
+    is_entry = level in _ENTRY_TIERS
     return is_entry, is_senior
 
 

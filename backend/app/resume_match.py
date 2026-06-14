@@ -267,11 +267,16 @@ def compute_match(profile: dict, job: dict) -> dict:
     proj_factor = min(1.0, len(matched_projects) / 2)
     defensibility = round(100 * (0.55 * (resume_match / 100) + 0.45 * proj_factor))
 
-    # Apply priority — prioritise roles that are realistic for a new grad AND a
-    # decent resume overlap. Eligibility risk only nudges; it never overrides the
-    # seniority/level reality.
+    # Apply priority — prioritise roles that are realistic for THIS candidate AND
+    # a decent resume overlap. The level-fit term adapts to the resume: a new grad
+    # (0–2 yrs) is ranked by New Grad Fit so senior roles sink; an experienced
+    # candidate is ranked by Experienced Fit. This is what drives the "Best match"
+    # sort, so a Staff role with high skill overlap can no longer top the list for
+    # a no-experience resume. Eligibility risk only nudges.
+    yrs = profile.get("years_experience", 0) or 0
+    level_fit = ng_fit if yrs < 3 else exp_fit
     elig_pen = 12 if job.get("eligibility_risk") == "high" else (5 if job.get("eligibility_risk") == "medium" else 0)
-    priority_score = 0.55 * ng_fit + 0.45 * resume_match - elig_pen
+    priority_score = 0.55 * level_fit + 0.45 * resume_match - elig_pen
     apply_priority = "High" if priority_score >= 72 else ("Medium" if priority_score >= 52 else "Low")
 
     # Why matches
@@ -303,6 +308,7 @@ def compute_match(profile: dict, job: dict) -> dict:
         "match_breakdown": match_breakdown,
         "defensibility": defensibility,
         "apply_priority": apply_priority,
+        "apply_priority_score": round(priority_score, 1),
         "matched_skills": matched,
         "missing_skills": missing,
         "matched_projects": matched_projects,

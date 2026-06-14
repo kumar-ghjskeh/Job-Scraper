@@ -27,7 +27,9 @@ from backend.app.location_utils import parse_location  # noqa: E402
 from backend.app.models import JobPosting  # noqa: E402
 from backend.app.quality import canonical_location_label  # noqa: E402
 from backend.app.scoring import (  # noqa: E402
-    calculate_match_score, experienced_fit_score, new_grad_fit_score,
+    calculate_match_score, classify_seniority, classify_seniority_flags,
+    detect_years_required, experienced_fit_score, is_candidate_friendly_job,
+    new_grad_fit_score,
 )
 
 
@@ -52,10 +54,33 @@ def main() -> None:
     with Session(engine) as s:
         jobs = s.exec(select(JobPosting)).all()
         usa_before = sum(1 for j in jobs if j.is_usa)
+        senior_before = sum(1 for j in jobs if j.is_senior)
         flipped, ng_hist = 0, {"90+": 0, "75-89": 0, "60-74": 0, "46-59": 0, "<46": 0}
+        reclassified = 0
 
         for j in jobs:
             was_usa = j.is_usa
+            title, desc = j.job_title or "", j.cleaned_description or ""
+
+            # ── Re-classify seniority from the SINGLE authoritative engine so the
+            # displayed level and the gating flags can never contradict. ──
+            level, _ = classify_seniority(title, desc)
+            is_entry, is_senior = classify_seniority_flags(title, desc)
+            ymin, ymax = detect_years_required(desc)
+            cand_friendly = is_candidate_friendly_job(
+                title, desc, j.company_priority or "C", j.ats_platform or ""
+            )
+            if (level != (j.experience_level or "") or is_senior != bool(j.is_senior)
+                    or is_entry != bool(j.is_entry_level)
+                    or cand_friendly != bool(j.is_candidate_friendly)):
+                reclassified += 1
+            j.experience_level = level
+            j.is_senior = is_senior
+            j.is_entry_level = is_entry
+            j.is_candidate_friendly = cand_friendly
+            j.years_required_min = ymin
+            j.years_required_max = ymax
+
             loc = parse_location(j.location_raw or j.location or "", j.cleaned_description or "")
             j.is_usa = loc.is_usa
             j.is_remote_usa = loc.is_remote_usa
@@ -78,14 +103,10 @@ def main() -> None:
             j.match_score = score
 
             ng = new_grad_fit_score(
-                j.experience_level, j.is_senior, j.is_entry_level,
-                j.is_candidate_friendly, j.years_required_min,
-                j.job_title, j.cleaned_description or "",
+                level, is_senior, is_entry, cand_friendly, ymin, title, desc,
             )
             j.new_grad_fit = ng
-            j.experienced_fit = experienced_fit_score(
-                j.experience_level, j.is_senior, j.years_required_min
-            )
+            j.experienced_fit = experienced_fit_score(level, is_senior, ymin)
             bucket = ("90+" if ng >= 90 else "75-89" if ng >= 75 else "60-74"
                       if ng >= 60 else "46-59" if ng >= 46 else "<46")
             ng_hist[bucket] += 1
@@ -93,8 +114,10 @@ def main() -> None:
 
         s.commit()
         usa_after = sum(1 for j in jobs if j.is_usa)
+        senior_after = sum(1 for j in jobs if j.is_senior)
         print(f"\nJobs processed   : {len(jobs)}")
         print(f"USA before/after : {usa_before} -> {usa_after}  (flipped foreign-out: {flipped})")
+        print(f"is_senior b/after: {senior_before} -> {senior_after}  (re-classified: {reclassified})")
         print(f"New Grad Fit dist: {ng_hist}")
 
 

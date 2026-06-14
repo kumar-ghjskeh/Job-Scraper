@@ -42,22 +42,31 @@ def _seed(s, jobs):
 
 def test_every_seniority_level_filters_exactly():
     s = _session()
-    levels = ["New Grad", "Junior", "Associate", "Mid-Level", "Senior",
-              "Staff", "Principal", "Lead", "Manager"]
+    levels = ["New Grad", "Entry Level", "Junior", "Associate", "Mid-Level",
+              "Senior", "Staff", "Principal", "Lead", "Manager"]
     jobs = []
     for lv in levels:
         senior = lv in ("Senior", "Staff", "Principal", "Lead", "Manager")
         jobs.append(_job(experience_level=lv, is_senior=senior,
-                         is_entry_level=(lv in ("New Grad",)),
+                         is_entry_level=(lv in ("New Grad", "Entry Level")),
                          is_candidate_friendly=(lv in ("Junior", "Associate"))))
+    # Add a decoy entry-level job so a "New Grad" chip can't pass by lumping the
+    # whole entry bucket together.
     _seed(s, jobs)
     for lv in levels:
-        _, n = M._build_job_query(s, page=1, limit=50, level_filter=lv)
-        assert n >= 1, f"{lv} filter returned 0 (senior gate / mapping bug)"
-        # senior-tier chips must surface their senior roles
-        if lv in ("Staff", "Principal", "Lead", "Manager", "Senior"):
-            items, _ = M._build_job_query(s, page=1, limit=50, level_filter=lv)
-            assert all(j.experience_level == lv for j in items), f"{lv} leaked other levels"
+        items, n = M._build_job_query(s, page=1, limit=50, level_filter=lv)
+        assert n == 1, f"{lv} chip returned {n}, expected exactly 1 (lumping/gate bug)"
+        assert all(j.experience_level == lv for j in items), f"{lv} chip leaked other levels"
+
+    # "New Grad" must NOT return "Entry Level" jobs and vice-versa.
+    ng_items, _ = M._build_job_query(s, page=1, limit=50, level_filter="New Grad")
+    assert all(j.experience_level == "New Grad" for j in ng_items)
+    el_items, _ = M._build_job_query(s, page=1, limit=50, level_filter="Entry Level")
+    assert all(j.experience_level == "Entry Level" for j in el_items)
+
+    # Multi-select still works (comma-separated) and stays exact.
+    multi, mn = M._build_job_query(s, page=1, limit=50, level_filter="New Grad,Senior")
+    assert mn == 2 and {j.experience_level for j in multi} == {"New Grad", "Senior"}
 
 
 def test_posted_within_uses_posted_date_not_first_seen():

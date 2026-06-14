@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { parseApiDate } from '../lib/datetime'
-import type { Company, ScrapeRun } from '../lib/types'
+import type { AnalyticsSummary, Company, ScrapeRun } from '../lib/types'
 
 const TZ_OPTIONS: { label: string; value: string }[] = [
   { label: 'My local time', value: 'local' },
@@ -15,13 +15,14 @@ const RUNS_PREVIEW = 12
 export function ScrapeHealth() {
   const [runs, setRuns] = useState<ScrapeRun[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
+  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [tz, setTz] = useState<string>(() => localStorage.getItem('ashborne-tz') || 'local')
   const [showAllRuns, setShowAllRuns] = useState(false)
 
   useEffect(() => {
-    Promise.all([api.getScrapeRuns(), api.getCompanies()])
-      .then(([r, c]) => { setRuns(r); setCompanies(c) })
+    Promise.all([api.getScrapeRuns(), api.getCompanies(), api.getAnalytics().catch(() => null)])
+      .then(([r, c, a]) => { setRuns(r); setCompanies(c); setAnalytics(a) })
       .finally(() => setLoading(false))
   }, [])
 
@@ -77,10 +78,55 @@ export function ScrapeHealth() {
         ))}
       </div>
 
+      {/* Job inventory funnel — reconciles "Found" (postings scanned) with the
+          USA-relevant count shown on the dashboard so the numbers aren't confusing. */}
+      {analytics?.job_inventory && (() => {
+        const inv = analytics.job_inventory!
+        const steps = [
+          { label: 'Tracked in database', value: inv.active, color: 'var(--primary)',
+            note: `${inv.total_in_db} total ever scraped` },
+          { label: 'Filtered out', value: inv.non_usa_filtered + inv.software_filtered, color: 'var(--warning)',
+            note: `${inv.non_usa_filtered} outside the US · ${inv.software_filtered} software-only` },
+          { label: 'Shown to you', value: inv.usa_relevant, color: 'var(--success)',
+            note: 'US-based / remote-US hardware roles — matches the All Jobs count' },
+        ]
+        return (
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: 'var(--text)' }}>
+              Job Inventory
+            </h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
+              Why “Found” below is larger than the dashboard count: the scraper scans every posting,
+              then keeps only US-based hardware roles for you.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'stretch' }}>
+              {steps.map((st, i) => (
+                <div key={st.label} style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+                  <div style={{
+                    background: 'var(--surface)', border: '1px solid var(--border)',
+                    borderRadius: 10, padding: '12px 16px', minWidth: 150, maxWidth: 220,
+                  }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: st.color }}>{st.value}</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', marginTop: 2 }}>{st.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.35 }}>{st.note}</div>
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div style={{ alignSelf: 'center', color: 'var(--text-faint)', fontSize: 18 }}>→</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Recent runs */}
-      <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 10px', color: 'var(--text)' }}>
+      <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: 'var(--text)' }}>
         Recent Scrape Runs
       </h3>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
+        “Found” = total postings scanned that run (before US / hardware filtering), not jobs added.
+      </p>
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
         borderRadius: 10, overflow: 'hidden', marginBottom: 24,

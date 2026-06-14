@@ -235,7 +235,18 @@ export interface AnalyticsSummary {
   total_companies: number
   strict_entry_count?: number
   candidate_friendly_count?: number
+  job_inventory?: JobInventory
   last_run: ScrapeRun | null
+}
+
+export interface JobInventory {
+  scanned_last_run: number | null
+  total_in_db: number
+  active: number
+  usa_relevant: number
+  non_usa_filtered: number
+  software_filtered: number
+  senior_roles: number
 }
 
 export interface Filters {
