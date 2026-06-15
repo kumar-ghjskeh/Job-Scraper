@@ -1,0 +1,38 @@
+name: Scrape jobs (24/7)
+
+# Free, PC-independent scraping: runs the browserless engines (httpx + curl_cffi)
+# on GitHub's servers on a schedule and writes straight to the production
+# Postgres. Needs one repo secret: DATABASE_URL (Render External connection
+# string). Does NOT touch the Render web service, so there's zero deploy risk.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours (UTC)
+  workflow_dispatch: {}       # manual "Run workflow" button
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install -r backend/requirements-cf.txt
+
+      - name: Run scrapers (httpx + curl_cffi)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m backend.app.run_all

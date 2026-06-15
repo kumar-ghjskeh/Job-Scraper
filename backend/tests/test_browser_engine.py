@@ -11,29 +11,35 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 import asyncio
 import json
 
-from backend.app.config import load_browser_companies, load_companies
+from backend.app.config import load_cf_companies, load_companies
 from backend.app.scrapers.browser import BrowserWorkdayScraper
+from backend.app.scrapers.cf import CfEightfoldScraper, CfWorkdayScraper, cf_scraper_for
+from backend.app.scrapers.jobvite import JobviteScraper
 
 
-def test_browser_companies_isolated_from_httpx_scheduler():
-    """Browser companies are selected by the engine flag and must never appear
-    in the enabled set the httpx scheduler iterates (or they'd hit the anti-bot
-    maintenance page and error out)."""
-    browser = load_browser_companies()
-    assert browser, "expected at least one engine:browser company"
+def test_cf_companies_isolated_from_httpx_scheduler():
+    """Anti-bot companies are scraped by the curl_cffi engine (engine:cf) and
+    must never appear in the enabled set the httpx scheduler iterates (or they'd
+    hit the anti-bot / Cloudflare wall and error out)."""
+    cf = load_cf_companies()
+    assert cf, "expected at least one engine:cf company"
 
     httpx_names = {c["name"] for c in load_companies()}
-    for c in browser:
-        assert c.get("engine") == "browser"
+    for c in cf:
+        assert c.get("engine") == "cf"
         assert c["name"] not in httpx_names, f"{c['name']} leaks into httpx scheduler"
-        # each needs a complete config for its browser scraper
         ats = c.get("ats_platform")
         if ats == "workday":
             assert c.get("workday_tenant") and c.get("workday_career_site")
+            assert isinstance(cf_scraper_for(c), CfWorkdayScraper)
         elif ats == "eightfold":
             assert c.get("eightfold_tenant") and c.get("eightfold_domain")
+            assert isinstance(cf_scraper_for(c), CfEightfoldScraper)
+        elif ats == "jobvite":
+            assert c.get("jobvite_host")
+            assert isinstance(cf_scraper_for(c), JobviteScraper)
         else:
-            raise AssertionError(f"{c['name']}: unexpected browser ats {ats!r}")
+            raise AssertionError(f"{c['name']}: unexpected cf ats {ats!r}")
 
 
 class _FakeResponse:

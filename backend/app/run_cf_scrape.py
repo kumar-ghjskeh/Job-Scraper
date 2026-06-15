@@ -16,14 +16,16 @@ import asyncio
 import logging
 
 from .config import load_cf_companies, load_schedule
+from .database import init_db
 from .scrape_engine import persist_company_results
-from .scrapers import get_scraper
+from .scrapers.cf import cf_scraper_for
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("run_cf_scrape")
 
 
 async def main(only: list[str] | None = None) -> None:
+    init_db()
     threshold = load_schedule().get("removed_job_threshold", 4)
     companies = load_cf_companies()
     if only:
@@ -36,7 +38,7 @@ async def main(only: list[str] | None = None) -> None:
     for cfg in companies:
         name = cfg["name"]
         try:
-            async with get_scraper(cfg) as sc:
+            async with cf_scraper_for(cfg) as sc:
                 raw = await sc.fetch_jobs()
             new, removed = await persist_company_results(cfg, raw, threshold)
             print(f"  {name}: fetched={len(raw)} new={new} removed={removed}")
