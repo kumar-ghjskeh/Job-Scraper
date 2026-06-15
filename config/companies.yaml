@@ -298,10 +298,11 @@ companies:
     category: "S-Tier"
     priority: "S"
     careers_url: "https://careers.amd.com/careers-home/jobs"
-    ats_platform: "icims"
-    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga"]
-    notes: "Moved to iCIMS (careers-amd.icims.com) — needs dedicated iCIMS scraper."
-    enabled: false
+    ats_platform: "phenom"
+    phenom_host: "careers.amd.com"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "fpga"]
+    notes: "Phenom CMS (careers.amd.com/api/jobs) — public JSON, runs on the 24/7 cloud."
+    enabled: true
 
   - name: "Qualcomm"
     category: "S-Tier"
@@ -612,9 +613,11 @@ companies:
     category: "Test / Instruments"
     priority: "C"
     careers_url: "https://careers.keysight.com/"
-    ats_platform: "generic"
-    notes: "Workday anti-bot (422) — direct search."
-    enabled: false
+    ats_platform: "phenom"
+    phenom_host: "careers.keysight.com"
+    search_keywords: ["verification", "rtl", "fpga", "digital design", "asic"]
+    notes: "Phenom CMS (careers.keysight.com/api/jobs) — public JSON, 24/7 cloud."
+    enabled: true
   - name: "Rambus"
     category: "IP / Memory"
     priority: "B"
