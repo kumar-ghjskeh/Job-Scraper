@@ -779,8 +779,17 @@ def new_grad_fit_score(
     if _SENIOR_TITLE_RE.search(title or ""):
         cap = min(cap, 45)
 
-    # Rare exception: a senior-capped role that EXPLICITLY invites new grads.
-    if cap <= 55 and _NEWGRAD_FRIENDLY_RE.search(f"{title} {description}"):
+    # Rare exception: a role capped only by an INFERRED senior signal (years, or
+    # an inferred level) that EXPLICITLY invites new grads can recover. It NEVER
+    # applies when the TITLE itself carries a senior rank (Senior/Sr/Staff/
+    # Principal/Lead/Manager/Director/Architect/…) — that is authoritative and
+    # must not be overridden by description keyword bleed (e.g. a "Principal …
+    # Engineer" whose JD happens to mention 'recent graduate').
+    title_is_senior = bool(re.search(
+        r"\b(senior|sr\.?|staff|principal|lead|manager|director|distinguished|fellow|architect)\b",
+        title or "", re.I))
+    if cap <= 55 and not title_is_senior \
+            and _NEWGRAD_FRIENDLY_RE.search(f"{title} {description}"):
         cap = max(cap, 75)
 
     score = cap

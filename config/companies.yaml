@@ -343,14 +343,12 @@ companies:
   - name: "Samsung Semiconductor"
     category: "Tier1"
     priority: "A"
-    careers_url: "https://semiconductor.samsung.com/us/careers/jobs/"
-    ats_platform: "workday"
-    workday_tenant: "samsungsemiconductor"
-    workday_instance: "wd1"
-    workday_career_site: "Samsung_Semiconductor_Careers"
+    careers_url: "https://boards.greenhouse.io/samsungsemiconductor"
+    ats_platform: "greenhouse"
+    greenhouse_board: "samsungsemiconductor"
     search_keywords: ["verification", "rtl", "asic", "design verification"]
-    notes: "Workday CXS returns 422 (anti-bot)."
-    enabled: false
+    notes: "Greenhouse board (samsungsemiconductor) — public JSON, 24/7 cloud."
+    enabled: true
 
   - name: "Western Digital"
     category: "Storage"
@@ -492,10 +490,12 @@ companies:
   - name: "Renesas Electronics"
     category: "Tier1"
     priority: "B"
-    careers_url: "https://www.renesas.com/en/about/careers"
-    ats_platform: "generic"
-    notes: "Workday anti-bot (422) — direct search."
-    enabled: false
+    careers_url: "https://careers.smartrecruiters.com/RenesasElectronics"
+    ats_platform: "smartrecruiters"
+    smartrecruiters_company: "renesaselectronics"
+    search_keywords: ["verification", "rtl", "asic", "design verification"]
+    notes: "SmartRecruiters Posting API (renesaselectronics) — public JSON, 24/7 cloud."
+    enabled: true
   - name: "Infineon Technologies"
     category: "Tier1"
     priority: "B"
@@ -635,9 +635,11 @@ companies:
   - name: "Kioxia"
     category: "Memory"
     priority: "C"
-    careers_url: "https://www.google.com/search?q=Kioxia+verification+memory+jobs+careers"
-    ats_platform: "generic"
-    notes: "Direct search — custom careers portal."
+    careers_url: "https://careers.smartrecruiters.com/KIOXIAAmerica"
+    ats_platform: "smartrecruiters"
+    smartrecruiters_company: "kioxia"
+    search_keywords: ["verification", "rtl", "asic", "design", "firmware"]
+    notes: "SmartRecruiters API works (slug kioxia) but 0 RTL/DV roles open now — flip enabled when they post."
     enabled: false
   - name: "SK Hynix"
     category: "Memory"

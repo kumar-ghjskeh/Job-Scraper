@@ -26,6 +26,22 @@ def test_four_plus_years_capped():
     assert new_grad_fit_score("Mid-Level", False, False, False, 4, "Verification Engineer") <= 60
 
 
+def test_senior_title_not_lifted_by_newgrad_friendly_description():
+    """A senior TITLE must hard-cap even when the JD mentions 'recent graduate' /
+    'university grad' — the new-grad-friendly exception can't override an explicit
+    senior rank (regression: a Principal role read as ng=75)."""
+    jd = "Work with recent graduate hires; university graduate program mentorship."
+    assert new_grad_fit_score("Principal", True, False, False, None,
+                              "Principal Digital Design Engineer", jd) <= 45
+    assert new_grad_fit_score("Senior", True, False, False, None,
+                              "Senior Verification Engineer", jd) <= 55
+    assert new_grad_fit_score("Staff", True, False, False, 5,
+                              "Staff Design Verification Engineer", jd) <= 45
+    # A genuinely inferred-senior role with NO senior title CAN still recover.
+    assert new_grad_fit_score("Senior", True, False, False, None,
+                              "Verification Engineer, New College Grad", jd) >= 75
+
+
 def test_true_entry_scores_excellent():
     ng = new_grad_fit_score("New Grad", False, True, True, None, "New Grad DV Engineer")
     assert ng == 100 and new_grad_fit_label(ng) == "Excellent"
