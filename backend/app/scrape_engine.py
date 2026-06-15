@@ -305,10 +305,11 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
     for company_cfg in companies:
         company_name = company_cfg["name"]
 
-        # Browser-engine companies are scraped by the separate local runner
-        # (run_browser_scrape) — never by this httpx scheduler, which would only
-        # hit the anti-bot maintenance page. Skip them defensively.
-        if company_cfg.get("engine") == "browser":
+        # Browser-engine (Playwright) and cf-engine (curl_cffi TLS impersonation)
+        # companies are scraped by the separate LOCAL runners — never by this httpx
+        # scheduler, which would only hit the anti-bot / Cloudflare wall. Skip them
+        # defensively (they are also enabled:false, so excluded from load_companies).
+        if company_cfg.get("engine") in ("browser", "cf"):
             continue
 
         # Skip auto-quarantined sources (too many prior consecutive failures)

@@ -9,6 +9,7 @@ from .eightfold import EightfoldScraper
 from .generic import GenericScraper
 from .greenhouse import GreenhouseScraper
 from .icims import ICIMSScraper
+from .jobvite import JobviteScraper
 from .lever import LeverScraper
 from .phenom import PhenomScraper
 from .smartrecruiters import SmartRecruitersScraper
@@ -24,6 +25,7 @@ SCRAPER_MAP: dict[str, type[BaseScraper]] = {
     "smartrecruiters": SmartRecruitersScraper,
     "eightfold": EightfoldScraper,
     "phenom": PhenomScraper,
+    "jobvite": JobviteScraper,
     # All others fall through to GenericScraper
     "generic": GenericScraper,
     "apple": GenericScraper,

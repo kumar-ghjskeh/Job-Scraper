@@ -408,11 +408,12 @@ companies:
   - name: "Synaptics"
     category: "Tier1"
     priority: "B"
-    careers_url: "https://www.synaptics.com/careers"
-    ats_platform: "greenhouse"
-    greenhouse_board: "synaptics"
+    careers_url: "https://careers.synaptics.com/search/jobs"
+    ats_platform: "jobvite"
+    jobvite_host: "careers.synaptics.com"
+    engine: "cf"
     search_keywords: ["verification", "rtl", "design verification", "asic", "soc"]
-    notes: "Greenhouse board slug returns 404 — needs verified slug."
+    notes: "Jobvite Engage behind Cloudflare — scraped via curl_cffi (TLS impersonation) by the local cf runner."
     enabled: false
 
   # Non-API custom career sites (iCIMS / Phenom / Eightfold / in-house).
@@ -628,9 +629,12 @@ companies:
   - name: "Ampere Computing"
     category: "Cloud Silicon"
     priority: "A"
-    careers_url: "https://amperecomputing.com/company/careers"
-    ats_platform: "generic"
-    notes: "Direct search — custom careers portal."
+    careers_url: "https://careers.amperecomputing.com/search/jobs"
+    ats_platform: "jobvite"
+    jobvite_host: "careers.amperecomputing.com"
+    engine: "cf"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "fpga"]
+    notes: "Jobvite Engage behind Cloudflare — scraped via curl_cffi (TLS impersonation) by the local cf runner."
     enabled: false
   - name: "Kioxia"
     category: "Memory"

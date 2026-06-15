@@ -90,6 +90,15 @@ def load_browser_companies() -> list[dict]:
     return [c for c in data.get("companies", []) if c.get("engine") == "browser"]
 
 
+def load_cf_companies() -> list[dict]:
+    """Companies marked ``engine: cf`` — Cloudflare-walled sites scraped via
+    curl_cffi (Chrome TLS impersonation) by the local cf runner (run_cf_scrape),
+    never by the cloud httpx scheduler. Selected by the engine flag regardless of
+    ``enabled``."""
+    data = _load_yaml(CONFIG_DIR / "companies.yaml")
+    return [c for c in data.get("companies", []) if c.get("engine") == "cf"]
+
+
 def load_keywords() -> dict:
     return _load_yaml(CONFIG_DIR / "keywords.yaml")
 
