@@ -65,5 +65,5 @@ def cf_scraper_for(company_config: dict) -> BaseScraper:
         return CfWorkdayScraper(company_config)
     if ats == "eightfold":
         return CfEightfoldScraper(company_config)
-    # jobvite (curl_cffi-native) and any clean-API fallback
+    # jobvite + avature are curl_cffi-native (see get_scraper); clean-API fallback
     return get_scraper(company_config)

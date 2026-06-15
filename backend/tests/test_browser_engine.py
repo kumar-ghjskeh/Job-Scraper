@@ -13,8 +13,10 @@ import json
 
 from backend.app.config import load_cf_companies, load_companies
 from backend.app.scrapers.browser import BrowserWorkdayScraper
+from backend.app.scrapers.avature import AvatureScraper
 from backend.app.scrapers.cf import CfEightfoldScraper, CfWorkdayScraper, cf_scraper_for
 from backend.app.scrapers.jobvite import JobviteScraper
+from backend.app.scrapers.radancy import RadancyScraper
 
 
 def test_cf_companies_isolated_from_httpx_scheduler():
@@ -38,6 +40,12 @@ def test_cf_companies_isolated_from_httpx_scheduler():
         elif ats == "jobvite":
             assert c.get("jobvite_host")
             assert isinstance(cf_scraper_for(c), JobviteScraper)
+        elif ats == "avature":
+            assert c.get("avature_host")
+            assert isinstance(cf_scraper_for(c), AvatureScraper)
+        elif ats == "radancy":
+            assert c.get("radancy_host")
+            assert isinstance(cf_scraper_for(c), RadancyScraper)
         else:
             raise AssertionError(f"{c['name']}: unexpected cf ats {ats!r}")
 

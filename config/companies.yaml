@@ -334,13 +334,12 @@ companies:
   - name: "Synopsys"
     category: "EDA"
     priority: "A"
-    careers_url: "https://synopsys.wd1.myworkdayjobs.com/Synopsys"
-    ats_platform: "workday"
-    workday_tenant: "synopsys"
-    workday_instance: "wd1"
-    workday_career_site: "Synopsys"
-    search_keywords: ["verification", "rtl", "eda", "design verification"]
-    notes: "Workday CXS returns 422 (anti-bot)."
+    careers_url: "https://careers.synopsys.com/search-jobs"
+    ats_platform: "radancy"
+    radancy_host: "careers.synopsys.com"
+    engine: "cf"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "dft"]
+    notes: "Radancy (TalentBrew) behind Cloudflare — scraped via curl_cffi (engine:cf)."
     enabled: false
 
   - name: "Samsung Semiconductor"
@@ -658,9 +657,12 @@ companies:
   - name: "TSMC"
     category: "Foundry"
     priority: "A"
-    careers_url: "https://www.tsmc.com/english/careers"
-    ats_platform: "generic"
-    notes: "Direct search — custom careers portal."
+    careers_url: "https://careers.tsmc.com/careers/SearchJobs"
+    ats_platform: "avature"
+    avature_host: "careers.tsmc.com"
+    engine: "cf"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "dft"]
+    notes: "Avature behind Cloudflare — scraped via curl_cffi (engine:cf); mostly Taiwan, US fab roles only."
     enabled: false
   - name: "Achronix"
     category: "FPGA"
