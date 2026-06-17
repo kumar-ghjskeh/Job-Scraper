@@ -36,10 +36,10 @@ def _seed() -> Session:
     SQLModel.metadata.create_all(eng)
     s = Session(eng)
     s.add_all([
-        _job(company="Acme", new_grad_fit=90),
-        _job(company="Acme", new_grad_fit=70),
+        _job(company="Acme", new_grad_fit=90, remote_status="Remote", role_category="Design Verification"),
+        _job(company="Acme", new_grad_fit=70, remote_status="Onsite", role_category="RTL Design"),
         _job(company="Acme", is_senior=True, is_entry_level=False, experience_level="Senior", new_grad_fit=45),
-        _job(company="Other", new_grad_fit=85),
+        _job(company="Other", new_grad_fit=85, remote_status="Remote", role_category="Design Verification"),
         _job(company="Acme", is_usa=False, location="Cambridge, United Kingdom",
              location_confidence=0.9, new_grad_fit=88),  # non-US -> must be excluded
     ])
@@ -94,3 +94,53 @@ def test_resume_matches_keyword_and_sort():
     ng = M.resume_matches(s, sort="new_grad_fit", include_senior=True, limit=50)
     fits = [it["new_grad_fit"] for it in ng["items"]]
     assert fits == sorted(fits, reverse=True)
+
+
+# ── COMBINED filters must AND together identically on every tab ────────────────
+
+def test_combined_company_and_remote_all_tabs():
+    s = _seed()
+    # Acme + Remote -> only Acme remote jobs, on every tab.
+    j = M.list_jobs(s, company="Acme", remote="Remote", include_senior=True, limit=50)["items"]
+    assert j and all(x.company == "Acme" and "remote" in (x.remote_status or "").lower() for x in j)
+    e = M.entry_level_jobs(s, company="Acme", remote="Remote", limit=50)["items"]
+    assert all(x.company == "Acme" and "remote" in (x.remote_status or "").lower() for x in e)
+    r = M.resume_matches(s, company="Acme", remote="Remote", include_senior=True, limit=50)["items"]
+    assert all(x["company"] == "Acme" and "remote" in (x.get("remote_status") or "").lower() for x in r)
+
+
+def test_combined_minscore_and_role_all_tabs():
+    s = _seed()
+    for items in (M.list_jobs(s, min_score=80, role_category="Verification", include_senior=True, limit=50)["items"],
+                  M.entry_level_jobs(s, min_score=80, role_category="Verification", limit=50)["items"]):
+        assert all((x.new_grad_fit or 0) >= 80 and "verification" in (x.role_category or "").lower() for x in items)
+    r = M.resume_matches(s, min_score=80, role_category="Verification", include_senior=True, limit=50)["items"]
+    assert all((x["new_grad_fit"] or 0) >= 80 and "verification" in (x.get("role_category") or "").lower() for x in r)
+
+
+def test_resume_sorts_each_reorder_distinctly():
+    s = _seed()
+    for sort, key in (("new_grad_fit", "new_grad_fit"), ("resume_match", "resume_match")):
+        items = M.resume_matches(s, sort=sort, include_senior=True, limit=50)["items"]
+        vals = [it[key] for it in items]
+        assert vals == sorted(vals, reverse=True), f"{sort} not descending: {vals}"
+
+
+def test_list_jobs_sort_by_options_work():
+    s = _seed()
+    for sort_by, attr in (("new_grad_fit", "new_grad_fit"), ("match_score", "match_score")):
+        items = M.list_jobs(s, sort_by=sort_by, include_senior=True, limit=50)["items"]
+        vals = [getattr(j, attr) for j in items]
+        assert vals == sorted(vals, reverse=True), f"{sort_by} not descending"
+
+
+def test_counts_match_list_total_across_tabs():
+    """The total_count a tab reports must equal the number of items it would return
+    unfiltered (no silent count/list divergence)."""
+    s = _seed()
+    for fn in (lambda: M.list_jobs(s, include_senior=True, limit=500),
+               lambda: M.entry_level_jobs(s, limit=500)):
+        d = fn()
+        assert d["total_count"] == len(d["items"])
+    rm = M.resume_matches(s, include_senior=True, limit=500)
+    assert rm["total_count"] == len(rm["items"])

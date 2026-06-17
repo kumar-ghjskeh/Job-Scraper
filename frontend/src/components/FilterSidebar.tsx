@@ -10,6 +10,8 @@ interface Props {
   /** When rendered inside the mobile drawer: full-width, non-sticky, with a close button. */
   mobile?: boolean
   onClose?: () => void
+  /** Hide the Sort-By control (the Resume Matches tab has its own resume-specific sort). */
+  hideSort?: boolean
 }
 
 const CATEGORIES = [
@@ -66,7 +68,7 @@ function Toggle({ on, onToggle, label, sub }: { on: boolean; onToggle: () => voi
   )
 }
 
-export function FilterSidebar({ filters, onChange, totalCount, mobile = false, onClose }: Props) {
+export function FilterSidebar({ filters, onChange, totalCount, mobile = false, onClose, hideSort = false }: Props) {
   const [facets, setFacets] = useState<JobFacets | null>(null)
   const [watchlists, setWatchlists] = useState<Watchlist[]>([])
 
@@ -208,19 +210,22 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
           )}
         </div>
 
-        {/* Sort */}
-        <div style={{ marginBottom: 16 }}>
-          <SectionHead title="Sort By" />
-          <select
-            value={filters.sort_by || 'match_score'}
-            onChange={(e) => set('sort_by', e.target.value)}
-            style={inp}
-          >
-            <option value="match_score">Best fit (relevance)</option>
-            <option value="posted_date">Newest posted</option>
-            <option value="first_seen_at">Recently added</option>
-          </select>
-        </div>
+        {/* Sort — hidden on the Resume Matches tab (it has its own resume sort). */}
+        {!hideSort && (
+          <div style={{ marginBottom: 16 }}>
+            <SectionHead title="Sort By" />
+            <select
+              value={filters.sort_by || 'new_grad_fit'}
+              onChange={(e) => set('sort_by', e.target.value)}
+              style={inp}
+            >
+              <option value="new_grad_fit">Best New Grad Fit</option>
+              <option value="match_score">Most relevant</option>
+              <option value="posted_date">Newest posted</option>
+              <option value="first_seen_at">Recently added</option>
+            </select>
+          </div>
+        )}
 
         {/* H1B sponsorship */}
         <div style={{ marginBottom: 14 }}>

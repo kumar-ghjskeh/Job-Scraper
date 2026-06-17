@@ -153,7 +153,10 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [matchMap, setMatchMap] = useState<Record<string, { resume_match: number; apply_priority: string }>>({})
-  const [resumeSort, setResumeSort] = useState('match')
+  // Default to New Grad Fit: for a new grad, "show me the roles I can realistically
+  // get, best fit first" is the most intuitive ranking (a ng=100 New-College-Grad
+  // role surfaces at the top instead of being buried by the resume-overlap blend).
+  const [resumeSort, setResumeSort] = useState('new_grad_fit')
   const jobListRef = useRef<HTMLDivElement>(null)
 
   const NO_FETCH: Tab[] = ['companies', 'health']
@@ -290,7 +293,8 @@ export default function App() {
     loadJobs(); loadAnalytics()
   }
 
-  const showSidebar = !['companies', 'health', 'saved', 'applied', 'resume'].includes(tab)
+  // Resume Matches gets the filter sidebar too (consistent filtering across tabs).
+  const showSidebar = !['companies', 'health', 'saved', 'applied'].includes(tab)
   const showPanel = selectedJob !== null
   const activeFilterCount = Object.entries(filters).filter(([k, v]) => {
     if (k === 'usa_only' && v === true) return false
@@ -336,7 +340,16 @@ export default function App() {
         ) : (
           <div style={{ display: 'flex', gap: isMobile ? 12 : 16, alignItems: 'flex-start', flexDirection: isMobile ? 'column' : 'row' }}>
             {tab === 'resume' ? (
-              <ResumeIntel onChanged={() => { loadJobs(); loadAnalytics() }} />
+              // Resume Matches gets the SAME filters as every other tab (so filtering
+              // is consistent), with the resume version/skill-gap rail stacked below.
+              !isMobile && showSidebar ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0 }}>
+                  <FilterSidebar filters={filters} onChange={changeFilters} totalCount={paginatedJobs?.total_count ?? 0} hideSort />
+                  <ResumeIntel onChanged={() => { loadJobs(); loadAnalytics() }} />
+                </div>
+              ) : (
+                <ResumeIntel onChanged={() => { loadJobs(); loadAnalytics() }} />
+              )
             ) : !isMobile && showSidebar ? (
               <FilterSidebar filters={filters} onChange={changeFilters} totalCount={paginatedJobs?.total_count ?? 0} />
             ) : null}
@@ -370,8 +383,8 @@ export default function App() {
                       padding: '6px 10px', fontSize: 12.5, color: 'var(--text-primary)', outline: 'none', cursor: 'pointer',
                     }}
                   >
-                    <option value="match">Best match (overall)</option>
                     <option value="new_grad_fit">Best New Grad Fit</option>
+                    <option value="match">Best match (overall)</option>
                     <option value="resume_match">Best Resume Match</option>
                     <option value="apply_priority">Apply Priority</option>
                     <option value="newest">Newest posted</option>

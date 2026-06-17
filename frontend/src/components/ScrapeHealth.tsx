@@ -64,7 +64,7 @@ export function ScrapeHealth() {
       <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
         {[
           { label: 'Total Runs', value: runs.length, color: 'var(--primary)' },
-          { label: 'Companies Enabled', value: companies.filter(c => c.enabled).length, color: 'var(--success)' },
+          { label: 'Auto-Connected', value: companies.filter(c => c.auto_connected ?? c.enabled).length, color: 'var(--success)' },
           { label: 'Companies with Errors', value: errCompanies.length, color: errCompanies.length > 0 ? 'var(--error)' : 'var(--success)' },
           { label: 'Last Run New Jobs', value: runs[0]?.new_jobs ?? 0, color: 'var(--teal)' },
         ].map(({ label, value, color }) => (
