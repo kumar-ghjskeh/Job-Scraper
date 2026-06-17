@@ -90,6 +90,15 @@ def load_browser_companies() -> list[dict]:
     return [c for c in data.get("companies", []) if c.get("engine") == "browser"]
 
 
+def company_engines() -> dict[str, str]:
+    """Map lowercased company name -> engine flag ('' = httpx cloud, 'cf' =
+    curl_cffi runner, 'browser' = Playwright). Used to tell the directory which
+    'enabled:false' companies are actually auto-connected via a local/CI runner
+    (so they aren't mislabeled 'Direct search')."""
+    data = _load_yaml(CONFIG_DIR / "companies.yaml")
+    return {c["name"].lower(): (c.get("engine") or "") for c in data.get("companies", [])}
+
+
 def load_cf_companies() -> list[dict]:
     """Companies marked ``engine: cf`` — Cloudflare-walled sites scraped via
     curl_cffi (Chrome TLS impersonation) by the local cf runner (run_cf_scrape),

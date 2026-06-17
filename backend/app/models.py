@@ -185,6 +185,19 @@ class JobPosting(SQLModel, table=True):
         from .scoring import overall_recommendation
         return overall_recommendation(self.new_grad_fit)
 
+    @property
+    def display_location(self) -> str:
+        """Clean, human location for the card. The parser already extracts a
+        tidy city/state even from messy raw strings like
+        'USA-CA Irvine Alton Parkway Bldg 2' (-> 'Irvine, CA'); fall back to the
+        raw string with any trailing building/suite noise stripped."""
+        import re
+        if self.is_usa and self.city and self.state:
+            return f"{self.city}, {self.state}"
+        raw = (self.location or "").strip()
+        raw = re.sub(r"\s+(?:Bldg|Building|Suite|Ste|Floor|Fl)\b.*$", "", raw, flags=re.I).strip()
+        return raw or self.country or ""
+
     # ── User actions ──────────────────────────────────────────────
     application_status: str = ""   # Saved|Applied|Assessment|Interview|Rejected|Offer|Archived|Ignored
     notes: str = ""

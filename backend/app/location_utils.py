@@ -91,6 +91,9 @@ FOREIGN_COUNTRIES: tuple[str, ...] = (
     "australia", "new zealand", "vietnam", "philippines", "thailand",
     "indonesia", "turkey", "ukraine", "uae", "united arab emirates",
     "saudi arabia", "egypt", "morocco", "south africa", "uk",
+    # Clearly non-US regions (e.g. "Remote - Europe", "Remote, EMEA"). Deliberately
+    # excludes "Americas"/"North America" which can include the US.
+    "europe", "emea", "apac", "latam", "asia pacific",
 )
 
 USA_EXPLICIT: tuple[str, ...] = (

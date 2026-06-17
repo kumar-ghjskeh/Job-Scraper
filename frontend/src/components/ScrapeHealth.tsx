@@ -10,7 +10,7 @@ const TZ_OPTIONS: { label: string; value: string }[] = [
   { label: 'Mountain (MT)', value: 'America/Denver' },
   { label: 'Pacific (PT)', value: 'America/Los_Angeles' },
 ]
-const RUNS_PREVIEW = 12
+const RUNS_PREVIEW = 15
 
 export function ScrapeHealth() {
   const [runs, setRuns] = useState<ScrapeRun[]>([])
@@ -210,16 +210,16 @@ export function ScrapeHealth() {
         </div>
       )}
 
-      {/* All companies */}
+      {/* All auto-connected companies (httpx cloud + curl_cffi/browser runners) */}
       <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 10px', color: 'var(--text)' }}>
-        All Enabled Companies ({companies.filter(c => c.enabled).length})
+        Auto-Connected Companies ({companies.filter(c => c.auto_connected ?? c.enabled).length})
       </h3>
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
         gap: 6,
       }}>
-        {companies.filter(c => c.enabled).map((c) => {
+        {companies.filter(c => c.auto_connected ?? c.enabled).map((c) => {
           const scraped = !!c.last_scraped_at
           return (
             <div key={c.id} style={{
@@ -232,7 +232,9 @@ export function ScrapeHealth() {
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {c.name}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.ats_platform}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {c.ats_platform}{c.engine ? ` · ${c.engine}` : ''}
+                </div>
               </div>
               <div style={{
                 width: 8, height: 8, borderRadius: '50%',

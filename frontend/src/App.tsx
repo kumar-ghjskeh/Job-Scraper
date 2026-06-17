@@ -169,7 +169,7 @@ export default function App() {
     try {
       let data: PaginatedResponse<Job>
       switch (tab) {
-        case 'resume':      data = await api.getResumeMatches(page, PAGE_SIZE, !!filters.include_senior, undefined, resumeSort); break
+        case 'resume':      data = await api.getResumeMatches(page, PAGE_SIZE, !!filters.include_senior, undefined, resumeSort, filters); break
         case 'entry-level': data = await api.getEntryLevelJobs(filters, page, PAGE_SIZE); break
         case 'best':        data = await api.getBestJobs(filters, page, PAGE_SIZE); break
         case 'saved':       data = await api.getSavedJobs(page, PAGE_SIZE); break
@@ -370,9 +370,12 @@ export default function App() {
                       padding: '6px 10px', fontSize: 12.5, color: 'var(--text-primary)', outline: 'none', cursor: 'pointer',
                     }}
                   >
-                    <option value="match">Best match</option>
-                    <option value="experience">Entry-level fit</option>
+                    <option value="match">Best match (overall)</option>
+                    <option value="new_grad_fit">Best New Grad Fit</option>
+                    <option value="resume_match">Best Resume Match</option>
+                    <option value="apply_priority">Apply Priority</option>
                     <option value="newest">Newest posted</option>
+                    <option value="recent">Recently added</option>
                   </select>
                 </div>
               )}

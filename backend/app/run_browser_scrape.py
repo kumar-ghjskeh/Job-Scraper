@@ -61,6 +61,8 @@ async def run_browser_scrape(headless: bool = True, only: str | None = None) -> 
 
     run = ScrapeRun(triggered_by="browser")
     with Session(engine) as session:
+        from .scrape_engine import maintain_scrape_runs
+        maintain_scrape_runs(session)  # drop zombie runs + FIFO-prune
         session.add(run)
         session.commit()
         session.refresh(run)

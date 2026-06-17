@@ -17,6 +17,7 @@ export interface Job {
 
   location: string
   location_raw: string
+  display_location?: string
   remote_status: string
   is_usa: boolean
   is_remote_usa: boolean
@@ -196,6 +197,8 @@ export interface Company {
   new_jobs_today?: number
   scrape_status?: string
   parser_confidence?: number
+  engine?: string
+  auto_connected?: boolean
 }
 
 export interface JobFacets {

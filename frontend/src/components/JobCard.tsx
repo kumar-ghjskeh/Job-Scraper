@@ -105,7 +105,7 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
       <div style={{ display: 'flex', gap: 7, marginTop: 11, flexWrap: 'wrap', alignItems: 'center' }}>
         {job.location && (
           <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Icon name="mapPin" size={13} color="var(--text-tertiary)" /> {job.location}
+            <Icon name="mapPin" size={13} color="var(--text-tertiary)" /> {job.display_location || job.location}
             {extraLocations.length > 0 && (
               <span style={{ color: 'var(--primary)', fontWeight: 600 }}>&nbsp;+{extraLocations.length} {extraLocations.length === 1 ? 'location' : 'locations'}</span>
             )}

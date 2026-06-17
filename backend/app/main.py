@@ -63,6 +63,10 @@ async def startup():
                 existing.enabled = cfg.get("enabled", existing.enabled)
                 session.add(existing)
         session.commit()
+        # Clean up the run history on every boot: drop zombie "running" rows left
+        # by a crashed runner and FIFO-prune to the most recent 15.
+        from .scrape_engine import maintain_scrape_runs
+        maintain_scrape_runs(session)
     scheduler = create_scheduler()
     scheduler.start()
 
@@ -107,6 +111,7 @@ class JobResponse(BaseModel):
     is_senior: bool
     location: str
     location_raw: str = ""
+    display_location: str = ""
     remote_status: str
     is_usa: bool
     is_remote_usa: bool
@@ -563,70 +568,45 @@ def best_jobs(
 @app.get("/jobs/entry-level", response_model=PaginatedJobResponse)
 def entry_level_jobs(
     session: SessionDep,
-    include_candidate_friendly: bool = True,
     page: int = 1,
     limit: int = Query(default=50, ge=1, le=200),
-    # Full filter set — same as /jobs
-    keyword: Optional[str] = None,
+    # ── Identical filter contract to /jobs ──
+    status: Optional[str] = None,
     company: Optional[str] = None,
+    company_ids: Optional[str] = None,
     priority: Optional[str] = None,
     role_category: Optional[str] = None,
+    experience_level: Optional[str] = None,
+    level_filter: Optional[str] = None,
     remote: Optional[str] = None,
     min_score: Optional[int] = None,
     new_since_hours: Optional[int] = None,
-    state: Optional[str] = None,
+    first_seen_days: Optional[int] = None,
+    posted_within_hours: Optional[int] = None,
+    keyword: Optional[str] = None,
+    skills: Optional[str] = None,
     usa_only: bool = True,
-    include_senior: bool = False,
+    include_unknown_location: bool = True,
     include_software: bool = False,
+    role_flags: Optional[str] = None,
+    state: Optional[str] = None,
+    h1b_only: bool = False,
+    sort_by: str = "new_grad_fit",
+    sort_order: str = "desc",
 ):
-    stmt = select(JobPosting).where(
-        JobPosting.active_status == ActiveStatus.active,
-        JobPosting.is_senior == False,
+    """New Grad tab — the SAME shared filter contract as /jobs (every chip, sort,
+    posted-within, min-score-on-New-Grad-Fit, H1B, …), then the entry-level gate
+    (view='entry_level': non-senior AND entry-level-or-candidate-friendly)."""
+    items, total = _build_job_query(
+        session, view="entry_level", status=status, company=company, company_ids=company_ids,
+        priority=priority, role_category=role_category, experience_level=experience_level,
+        level_filter=level_filter, remote=remote, min_score=min_score,
+        new_since_hours=new_since_hours, first_seen_days=first_seen_days,
+        posted_within_hours=posted_within_hours, keyword=keyword, skills=skills,
+        usa_only=usa_only, include_unknown_location=include_unknown_location,
+        include_software=include_software, role_flags=role_flags, state=state,
+        h1b_only=h1b_only, sort_by=sort_by, sort_order=sort_order, page=page, limit=limit,
     )
-    if include_candidate_friendly:
-        stmt = stmt.where(
-            (JobPosting.is_entry_level == True) | (JobPosting.is_candidate_friendly == True)
-        )
-    else:
-        stmt = stmt.where(JobPosting.is_entry_level == True)
-
-    if not include_software:
-        stmt = stmt.where(JobPosting.is_software_only == False)
-
-    # Apply optional filters
-    if usa_only:
-        stmt = stmt.where(
-            (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0)
-        )
-    if keyword:
-        kw = f"%{keyword}%"
-        stmt = stmt.where(
-            col(JobPosting.job_title).ilike(kw)
-            | col(JobPosting.matched_keywords).ilike(kw)
-            | col(JobPosting.description_snippet).ilike(kw)
-            | col(JobPosting.company).ilike(kw)
-        )
-    if company:
-        stmt = stmt.where(col(JobPosting.company).ilike(f"%{company}%"))
-    if priority:
-        stmt = stmt.where(JobPosting.company_priority == priority)
-    if role_category:
-        stmt = stmt.where(col(JobPosting.role_category).ilike(f"%{role_category}%"))
-    if remote:
-        stmt = stmt.where(col(JobPosting.remote_status).ilike(f"%{remote}%"))
-    if min_score is not None:
-        stmt = stmt.where(JobPosting.match_score >= min_score)
-    if state:
-        stmt = stmt.where(col(JobPosting.state).ilike(f"%{state}%"))
-    if new_since_hours:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=new_since_hours)
-        stmt = stmt.where(JobPosting.first_seen_at >= cutoff)
-
-    count_stmt = select(func.count()).select_from(stmt.subquery())
-    total = session.exec(count_stmt).one()
-    stmt = stmt.order_by(col(JobPosting.match_score).desc(), col(JobPosting.first_seen_at).desc())
-    stmt = stmt.offset((page - 1) * limit).limit(limit)
-    items = session.exec(stmt).all()
     return _paginate(items, total, page, limit)
 
 
@@ -890,18 +870,34 @@ def delete_resume(session: SessionDep):
 
 @app.get("/jobs/resume-matches")
 def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(default=50, ge=1, le=200),
-                   include_senior: bool = False, resume_id: Optional[int] = None, sort: str = "match"):
+                   include_senior: bool = False, resume_id: Optional[int] = None, sort: str = "match",
+                   # ── Same shared filter contract as /jobs ──
+                   company: Optional[str] = None, company_ids: Optional[str] = None,
+                   priority: Optional[str] = None, role_category: Optional[str] = None,
+                   level_filter: Optional[str] = None, remote: Optional[str] = None,
+                   min_score: Optional[int] = None, posted_within_hours: Optional[int] = None,
+                   new_since_hours: Optional[int] = None, keyword: Optional[str] = None,
+                   skills: Optional[str] = None, usa_only: bool = True,
+                   include_unknown_location: bool = True, include_software: bool = False,
+                   role_flags: Optional[str] = None, state: Optional[str] = None,
+                   h1b_only: bool = False):
     profile = _current_profile(session, resume_id)
     if not profile:
         return {"items": [], "total_count": 0, "page": 1, "limit": limit,
                 "total_pages": 1, "has_next": False, "has_prev": False, "no_resume": True}
     from .resume_match import compute_match
-    conds = [JobPosting.active_status == "active",
-             (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0),
-             JobPosting.is_software_only == False]
-    if not include_senior:
-        conds.append(JobPosting.is_senior == False)
-    jobs = session.exec(select(JobPosting).where(*conds)).all()
+    # 1. Apply ALL active filters through the shared query builder (same contract as
+    # /jobs), then 2. compute the resume match, then 3. rank. Pull the full filtered
+    # set (high limit) so ranking/pagination happen over the filtered jobs.
+    jobs, _ = _build_job_query(
+        session, company=company, company_ids=company_ids, priority=priority,
+        role_category=role_category, level_filter=level_filter, remote=remote,
+        min_score=min_score, posted_within_hours=posted_within_hours,
+        new_since_hours=new_since_hours, keyword=keyword, skills=skills,
+        usa_only=usa_only, include_senior=include_senior,
+        include_unknown_location=include_unknown_location, include_software=include_software,
+        role_flags=role_flags, state=state, h1b_only=h1b_only, page=1, limit=5000,
+    )
     scored = []
     for job in jobs:
         m = compute_match(profile, _job_match_input(job))
@@ -918,18 +914,24 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
         item["missing_skills"] = m["missing_skills"][:6]
         scored.append(item)
     bd = lambda it, k: (it.get("match_breakdown") or {}).get(k, 0)  # noqa: E731
-    # Three recruiter-grade sorts only: overall fit, how realistic the level is
-    # for this candidate, and freshness. Each breaks ties on the other signal so
-    # the orderings are genuinely distinct.
-    #   "match" (Best match) — level-aware apply-priority blend (level fit + resume
-    #     overlap), so a Staff/Senior role with high skill overlap can no longer top
-    #     the list for a no-experience resume; resume_match breaks ties.
+    _fresh = lambda it: str(it.get("posted_date") or it.get("first_seen_at") or "")  # noqa: E731
+    # Recruiter-grade sorts. New Grad Fit is the primary candidate signal; each
+    # breaks ties on a second signal so the orderings are genuinely distinct.
+    #   new_grad_fit — most realistic for a new grad first
+    #   match        — level-aware apply-priority blend (default "Best match")
+    #   resume_match — raw resume↔JD overlap, regardless of level
+    #   apply_priority / experience — alias of the blend / level realism
+    #   newest       — by trusted posted date
+    #   recent       — by when we first saw it
     sort_keys = {
+        "new_grad_fit": lambda it: (it["new_grad_fit"], it["resume_match"]),
         "match": lambda it: (it.get("apply_priority_score", 0), it["resume_match"]),
+        "resume_match": lambda it: (it["resume_match"], it["new_grad_fit"]),
+        "apply_priority": lambda it: (it.get("apply_priority_score", 0), it["new_grad_fit"]),
         "experience": lambda it: (bd(it, "experience"), it["resume_match"]),
-        "newest": lambda it: (str(it.get("posted_date") or it.get("first_seen_at") or ""), it["resume_match"]),
+        "newest": lambda it: (_fresh(it), it["resume_match"]),
+        "recent": lambda it: (str(it.get("first_seen_at") or ""), it["resume_match"]),
     }
-    # Back-compat: fold the retired skills/projects options into best-match.
     scored.sort(key=sort_keys.get(sort, sort_keys["match"]), reverse=True)
     total = len(scored)
     start = (page - 1) * limit
@@ -1139,6 +1141,14 @@ def _build_company_response(company: Company, session: Session) -> dict:
     ).one()
     parser_confidence = int(round(avg_quality)) if avg_quality else 0
 
+    # Auto-connected = scraped automatically by SOME engine: the httpx cloud
+    # scheduler (enabled:true) OR a local/CI runner (engine cf/browser). The latter
+    # are enabled:false in the YAML so the cloud scheduler skips them, but they ARE
+    # auto-scraped — so they must not be mislabeled "Direct search".
+    from .config import company_engines
+    engine = company_engines().get(company.name.lower(), "")
+    auto_connected = bool(company.enabled) or engine in ("cf", "browser")
+
     return {
         "id": company.id,
         "name": company.name,
@@ -1148,6 +1158,8 @@ def _build_company_response(company: Company, session: Session) -> dict:
         "company_search_url": getattr(company, "company_search_url", "") or "",
         "ats_platform": company.ats_platform,
         "enabled": company.enabled,
+        "engine": engine,
+        "auto_connected": auto_connected,
         "last_scraped_at": company.last_scraped_at,
         "scrape_error_count": company.scrape_error_count,
         "total_active_jobs": total,
@@ -1201,7 +1213,7 @@ def company_jobs(
 # ── Scrape endpoints ────────────────────────────────────────────────────────────
 
 @app.get("/scrape-runs", response_model=list[ScrapeRunResponse])
-def list_scrape_runs(session: SessionDep, limit: int = 20):
+def list_scrape_runs(session: SessionDep, limit: int = 15):
     stmt = select(ScrapeRun).order_by(col(ScrapeRun.started_at).desc()).limit(limit)
     return session.exec(stmt).all()
 
@@ -1224,7 +1236,7 @@ def scrape_errors(session: SessionDep, limit: int = 50):
 @app.get("/scrape-health")
 def scrape_health(session: SessionDep):
     runs = session.exec(
-        select(ScrapeRun).order_by(col(ScrapeRun.started_at).desc()).limit(10)
+        select(ScrapeRun).order_by(col(ScrapeRun.started_at).desc()).limit(15)
     ).all()
     recent_errors = session.exec(
         select(ScrapeError).order_by(col(ScrapeError.occurred_at).desc()).limit(20)
@@ -1314,7 +1326,13 @@ def analytics_summary(session: SessionDep):
     strong_new_grad = count(active + USA_VIEW + [JobPosting.new_grad_fit >= 75])
     saved = count([JobPosting.active_status == ActiveStatus.saved])
     applied = count([JobPosting.active_status == ActiveStatus.applied])
-    total_companies = co_count([Company.enabled == True])
+    # Auto-connected = httpx cloud (enabled) + curl_cffi/browser runner companies.
+    from .config import company_engines
+    _engines = company_engines()
+    total_companies = sum(
+        1 for c in session.exec(select(Company)).all()
+        if c.enabled or _engines.get(c.name.lower(), "") in ("cf", "browser")
+    )
 
     last_run = session.exec(
         select(ScrapeRun).order_by(col(ScrapeRun.started_at).desc()).limit(1)

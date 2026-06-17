@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from .apply_url import process_apply_url
 from .config import load_companies, load_schedule
@@ -275,6 +275,29 @@ async def persist_company_results(
     return new_count, removed_count
 
 
+def maintain_scrape_runs(session: Session, keep: int = 15, stale_minutes: int = 60) -> None:
+    """Keep the Data Health run history clean and trustworthy:
+
+    1. Delete *zombie* runs — ones that never recorded ``finished_at`` and started
+       more than ``stale_minutes`` ago (a runner crashed/was killed mid-run, so the
+       row is stuck showing "running" forever and carries no useful data).
+    2. FIFO-prune to the most recent ``keep`` *finished* runs (never deletes a run
+       that is still legitimately in progress).
+    """
+    cutoff = datetime.utcnow() - timedelta(minutes=stale_minutes)
+    for r in session.exec(
+        select(ScrapeRun).where(ScrapeRun.finished_at == None, ScrapeRun.started_at < cutoff)  # noqa: E711
+    ).all():
+        session.delete(r)
+    all_runs = session.exec(
+        select(ScrapeRun).order_by(col(ScrapeRun.started_at).desc())
+    ).all()
+    for r in all_runs[keep:]:
+        if r.finished_at is not None:  # never prune a run that's still running
+            session.delete(r)
+    session.commit()
+
+
 async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | None = None) -> ScrapeRun:
     schedule_cfg = load_schedule()
     delay_between = schedule_cfg.get("rate_limit", {}).get("delay_between_companies_seconds", 5)
@@ -287,6 +310,7 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
 
     run = ScrapeRun(triggered_by=triggered_by)
     with Session(engine) as session:
+        maintain_scrape_runs(session)  # drop zombie runs + FIFO-prune to last 15
         session.add(run)
         session.commit()
         session.refresh(run)

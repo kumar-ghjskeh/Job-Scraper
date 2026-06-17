@@ -366,12 +366,9 @@ companies:
     category: "Networking"
     priority: "A"
     careers_url: "https://jobs.cisco.com/jobs/SearchJobs"
-    ats_platform: "workday"
-    workday_tenant: "cisco"
-    workday_instance: "wd5"
-    workday_career_site: "Cisco"
+    ats_platform: "generic"
     search_keywords: ["verification", "rtl", "asic", "design verification", "silicon"]
-    notes: "Workday career-site name unverified (404). Needs correct site slug."
+    notes: "Phenom CMS but careers.cisco.com/api/jobs returns HTTP 500 to the standard query — needs param reverse-engineering before enabling."
     enabled: false
 
   # Greenhouse/Ashby boards whose slug could not be auto-resolved.

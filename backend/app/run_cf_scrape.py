@@ -14,10 +14,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+from datetime import datetime, timezone
+
+from sqlmodel import Session
 
 from .config import load_cf_companies, load_schedule
-from .database import init_db
-from .scrape_engine import persist_company_results
+from .database import engine, init_db
+from .models import ScrapeRun
+from .scrape_engine import maintain_scrape_runs, persist_company_results
 from .scrapers.cf import cf_scraper_for
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -34,16 +38,38 @@ async def main(only: list[str] | None = None) -> None:
     if not companies:
         print("No engine:cf companies matched."); return
 
+    # Log this as a ScrapeRun so curl_cffi scrapes show up in Data Health like the
+    # httpx/browser runs (and clean up zombie/old runs first).
+    run = ScrapeRun(triggered_by="cf")
+    with Session(engine) as s:
+        maintain_scrape_runs(s)
+        s.add(run); s.commit(); s.refresh(run)
+        run_id = run.id
+
     print(f"cf runner: {len(companies)} company(ies)")
+    found = new_total = removed_total = errors = scraped = 0
     for cfg in companies:
         name = cfg["name"]
         try:
             async with cf_scraper_for(cfg) as sc:
                 raw = await sc.fetch_jobs()
             new, removed = await persist_company_results(cfg, raw, threshold)
+            found += len(raw); new_total += new; removed_total += removed; scraped += 1
             print(f"  {name}: fetched={len(raw)} new={new} removed={removed}")
         except Exception as e:
+            errors += 1
             print(f"  {name}: FAILED {type(e).__name__}: {e}")
+
+    with Session(engine) as s:
+        r = s.get(ScrapeRun, run_id)
+        if r:
+            r.finished_at = datetime.now(timezone.utc)
+            r.companies_scraped = scraped
+            r.jobs_found = found
+            r.new_jobs = new_total
+            r.removed_jobs = removed_total
+            r.errors = errors
+            s.add(r); s.commit()
 
 
 if __name__ == "__main__":

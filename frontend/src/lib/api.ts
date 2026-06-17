@@ -153,9 +153,12 @@ export const api = {
     await axios.delete(`${BASE}/resume`)
   },
 
-  async getResumeMatches(page = 1, limit = 50, includeSenior = false, resumeId?: number, sort = 'match'): Promise<PaginatedResponse<Job> & { no_resume?: boolean }> {
+  async getResumeMatches(page = 1, limit = 50, includeSenior = false, resumeId?: number, sort = 'match', filters: Filters = {}): Promise<PaginatedResponse<Job> & { no_resume?: boolean }> {
+    // Forward the SAME active filters as the other tabs so Resume Matches respects
+    // them (the backend routes them through the shared query builder). The tab's own
+    // include_senior + sort take precedence over any in `filters`.
     const { data } = await axios.get(`${BASE}/jobs/resume-matches`, {
-      params: clean({ page, limit, include_senior: includeSenior, resume_id: resumeId, sort }),
+      params: clean({ ...filters, page, limit, include_senior: includeSenior, resume_id: resumeId, sort }),
     })
     return data
   },
