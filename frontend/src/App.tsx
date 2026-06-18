@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './index.css'
 import { CompaniesPage } from './components/CompaniesPage'
+import { ActiveFilters } from './components/ActiveFilters'
 import { FilterSidebar } from './components/FilterSidebar'
 import { JobCard } from './components/JobCard'
 import { JobDetailsPanel } from './components/JobDetailsPanel'
@@ -371,6 +372,10 @@ export default function App() {
                 page={paginatedJobs?.page ?? 1}
                 totalPages={paginatedJobs?.total_pages ?? 1}
               />
+
+              {/* Active-filter chips — visible on every filter tab so the user always
+                  sees (and can remove) exactly what's narrowing the list. */}
+              {showSidebar && <ActiveFilters filters={filters} onChange={changeFilters} />}
 
               {tab === 'resume' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>

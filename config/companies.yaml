@@ -584,9 +584,14 @@ companies:
   - name: "Silicon Labs"
     category: "IoT / MCU"
     priority: "C"
-    careers_url: "https://www.silabs.com/about-us/careers"
-    ats_platform: "generic"
-    notes: "Workday anti-bot (422) — direct search."
+    careers_url: "https://silabs.wd1.myworkdayjobs.com/SiliconlabsCareers"
+    ats_platform: "workday"
+    workday_tenant: "silabs"
+    workday_instance: "wd1"
+    workday_career_site: "SiliconlabsCareers"
+    engine: "cf"
+    search_keywords: ["verification", "rtl", "design verification", "fpga", "digital design"]
+    notes: "Workday behind anti-bot — scraped via curl_cffi (engine:cf)."
     enabled: false
   - name: "Ambarella"
     category: "AI Vision"
