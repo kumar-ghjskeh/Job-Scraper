@@ -456,7 +456,7 @@ export default function App() {
             </div>
 
             {!isMobile && showPanel && (
-              <JobDetailsPanel job={selectedJob} onClose={() => setSelectedJob(null)} onUpdate={reload} />
+              <JobDetailsPanel job={selectedJob} onClose={() => setSelectedJob(null)} onUpdate={reload} onSelectJob={setSelectedJob} />
             )}
           </div>
         )}
@@ -486,6 +486,7 @@ export default function App() {
             job={selectedJob}
             onClose={() => setSelectedJob(null)}
             onUpdate={reload}
+            onSelectJob={setSelectedJob}
           />
         </div>
       )}

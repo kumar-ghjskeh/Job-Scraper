@@ -9,11 +9,13 @@ interface Props {
   job: Job | null
   onClose: () => void
   onUpdate: () => void
+  /** Open another job (used by the Similar-jobs list). */
+  onSelectJob?: (job: Job) => void
   /** When rendered as a full-screen sheet on mobile: fill the sheet, no sticky/border. */
   mobile?: boolean
 }
 
-type DetailTab = 'overview' | 'match' | 'score' | 'description' | 'source' | 'notes'
+type DetailTab = 'overview' | 'match' | 'score' | 'description' | 'similar' | 'source' | 'notes'
 
 const TIER_STYLE: Record<string, string> = {
   'Safe to Add': 'pill-success',
@@ -99,7 +101,7 @@ function MiniStat({ label, value, color }: { label: string; value: string; color
   )
 }
 
-export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Props) {
+export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = false }: Props) {
   const [detailTab, setDetailTab] = useState<DetailTab>('overview')
   const [notes, setNotes] = useState('')
   const [appStatus, setAppStatus] = useState('')
@@ -111,6 +113,8 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
   const [copied, setCopied] = useState(false)
   const [matchData, setMatchData] = useState<JobMatch | null>(null)
   const [matchLoading, setMatchLoading] = useState(false)
+  const [similar, setSimilar] = useState<Job[]>([])
+  const [similarLoading, setSimilarLoading] = useState(false)
 
   useEffect(() => {
     if (!job) { setMatchData(null); return }
@@ -120,6 +124,17 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
       .then((m) => { if (!cancelled) setMatchData(m) })
       .catch(() => { if (!cancelled) setMatchData(null) })
       .finally(() => { if (!cancelled) setMatchLoading(false) })
+    return () => { cancelled = true }
+  }, [job?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!job) { setSimilar([]); return }
+    let cancelled = false
+    setSimilarLoading(true); setSimilar([])
+    api.getSimilarJobs(job.id)
+      .then((s) => { if (!cancelled) setSimilar(s) })
+      .catch(() => { if (!cancelled) setSimilar([]) })
+      .finally(() => { if (!cancelled) setSimilarLoading(false) })
     return () => { cancelled = true }
   }, [job?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -177,6 +192,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
     { id: 'match', label: 'Match' },
     { id: 'score', label: 'Score' },
     { id: 'description', label: 'Description' },
+    { id: 'similar', label: similar.length ? `Similar (${similar.length})` : 'Similar' },
     { id: 'source', label: 'Source' },
     { id: 'notes', label: 'Application' },
   ]
@@ -659,6 +675,49 @@ export function JobDetailsPanel({ job, onClose, onUpdate, mobile = false }: Prop
             ) : (
               <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', paddingTop: 20 }}>
                 No description available.
+              </div>
+            )}
+          </div>
+        )}
+
+        {detailTab === 'similar' && (
+          <div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>
+              Other open roles like <strong style={{ color: 'var(--text-primary)' }}>{job.job_title}</strong> — ranked by role, seniority, and skill overlap.
+            </div>
+            {similarLoading ? (
+              <div style={{ color: 'var(--text-tertiary)', fontSize: 12.5, textAlign: 'center', padding: '20px 0' }}>Finding similar jobs…</div>
+            ) : similar.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 12.5, textAlign: 'center', padding: '20px 0' }}>No similar roles found right now.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {similar.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => onSelectJob?.(s)}
+                    style={{
+                      textAlign: 'left', background: 'var(--surface-muted)', border: '1px solid var(--border)',
+                      borderRadius: 8, padding: '10px 12px', cursor: 'pointer', width: '100%',
+                      display: 'flex', alignItems: 'center', gap: 10,
+                    }}
+                  >
+                    <div style={{
+                      flexShrink: 0, width: 38, height: 38, borderRadius: '50%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: `color-mix(in srgb, ${ngColor(s.new_grad_fit)} 16%, transparent)`,
+                      color: ngColor(s.new_grad_fit), fontWeight: 800, fontSize: 13,
+                    }}>{s.new_grad_fit}</div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {s.job_title}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {s.company} · {s.display_location || s.location || 'Location TBD'}
+                      </div>
+                    </div>
+                    <Icon name="chevronRight" size={15} color="var(--text-tertiary)" />
+                  </button>
+                ))}
               </div>
             )}
           </div>

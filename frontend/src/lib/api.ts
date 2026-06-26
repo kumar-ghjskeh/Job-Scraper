@@ -74,6 +74,11 @@ export const api = {
     return data
   },
 
+  async getSimilarJobs(id: number, limit = 6): Promise<Job[]> {
+    const { data } = await axios.get(`${BASE}/jobs/${id}/similar`, { params: { limit } })
+    return data
+  },
+
   async getCompanies(): Promise<Company[]> {
     const { data } = await axios.get(`${BASE}/companies`)
     return data

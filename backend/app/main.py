@@ -405,9 +405,9 @@ def _build_job_query(
     if keyword:
         # Accurate multi-token search (portable SQLite + Postgres). Each token must
         # appear in at least one field (AND of tokens, OR of fields). High-signal
-        # fields (company/title/skills/role/location) match as substrings; the free
-        # text description matches on WHOLE WORDS only — so e.g. "intel" returns
-        # Intel, not every job whose description says "intelligence".
+        # fields (company/title/skills/role/location) match as substrings; the FULL
+        # free-text description is searched on WHOLE WORDS only — so e.g. "intel"
+        # returns Intel, not every job whose description says "intelligence".
         from sqlalchemy import literal
         from sqlmodel import or_ as sql_or
         substr_fields = [
@@ -416,19 +416,32 @@ def _build_job_query(
             JobPosting.experience_level, JobPosting.state, JobPosting.location,
             JobPosting.ats_platform,
         ]
-        word_fields = [JobPosting.cleaned_description, JobPosting.description_snippet]
+        # Search the COMPLETE description text (cleaned + full), so a term that only
+        # appears deep in the posting (e.g. "PCIe", "coverage closure") still hits.
+        word_fields = [
+            JobPosting.cleaned_description, JobPosting.full_description_text,
+            JobPosting.description_snippet,
+        ]
+        # Punctuation chars normalised to spaces before the word-boundary match so a
+        # term adjacent to punctuation — "PCIe,", "(UVM)", "AXI/AHB", "coverage." —
+        # still matches as a whole word. REPLACE is portable (SQLite + Postgres).
+        _PUNCT = [",", ".", ";", ":", "(", ")", "/", "[", "]", "{", "}", "-", "|",
+                  "\n", "\r", "\t", "\"", "'", "*", "•", "·"]
+
+        def _word_in(field, token: str):
+            expr = col(field)
+            for ch in _PUNCT:
+                expr = func.replace(expr, ch, " ")
+            padded = literal(" ").concat(expr).concat(literal(" "))
+            return padded.ilike(f"% {token} %")
+
         for tok in keyword.split():
             tok = tok.strip()
             if not tok:
                 continue
             kw = f"%{tok}%"
             ors = [col(f).ilike(kw) for f in substr_fields]
-            # Word-boundary on description: pad with spaces and require " token ".
-            word = f"% {tok} %"
-            ors += [
-                (literal(" ").concat(col(f)).concat(literal(" "))).ilike(word)
-                for f in word_fields
-            ]
+            ors += [_word_in(f, tok) for f in word_fields]
             conditions.append(sql_or(*ors))
 
     if skills:
@@ -1035,6 +1048,58 @@ def get_job(job_id: int, session: SessionDep):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@app.get("/jobs/{job_id}/similar", response_model=list[JobResponse])
+def similar_jobs(job_id: int, session: SessionDep, limit: int = Query(default=6, ge=1, le=20)):
+    """Content-based 'more like this': ranks active, USA-relevant roles that share
+    this job's role category, seniority, company tier, and matched keywords.
+    Cheap (one candidate query + in-Python scoring) — no ML/embeddings needed."""
+    src = session.get(JobPosting, job_id)
+    if not src:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    src_kws = {k.strip().lower() for k in (src.matched_keywords or "").split(",") if k.strip()}
+
+    # Candidate pool: active, browseable (USA-or-unknown, non-software), and either
+    # the same role category or the same company — keeps the scan small and relevant.
+    pool = session.exec(
+        select(JobPosting).where(
+            JobPosting.active_status == ActiveStatus.active,
+            JobPosting.id != src.id,
+            (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0),
+            JobPosting.is_software_only == False,
+            (JobPosting.role_category == src.role_category) | (JobPosting.company == src.company),
+        ).limit(500)
+    ).all()
+
+    def score(j: JobPosting) -> tuple[int, int]:
+        s = 0
+        if j.role_category == src.role_category and src.role_category != "Unknown":
+            s += 4
+        if j.experience_level == src.experience_level:
+            s += 2
+        if j.is_senior == src.is_senior:
+            s += 1
+        if j.company_priority == src.company_priority:
+            s += 1
+        j_kws = {k.strip().lower() for k in (j.matched_keywords or "").split(",") if k.strip()}
+        s += min(4, len(src_kws & j_kws))
+        if j.company != src.company:   # mild nudge to broaden beyond the same company
+            s += 1
+        return (s, j.new_grad_fit)
+
+    seen: set = set()
+    out: list[JobPosting] = []
+    for j in sorted(pool, key=score, reverse=True):
+        key = (j.company, j.normalized_title or j.job_title.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(j)
+        if len(out) >= limit:
+            break
+    return out
 
 
 @app.patch("/jobs/{job_id}/status")
