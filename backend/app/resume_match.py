@@ -232,14 +232,6 @@ def compute_match(profile: dict, job: dict) -> dict:
     matched_tools = [s for s in job_tools if s in resume_skills]
     tool_protocol_score = round(100 * len(matched_tools) / len(job_tools)) if job_tools else 60
 
-    # Resume Match = PURE resume↔JD overlap. Deliberately has NO seniority
-    # component and NO cap — it must not be dragged up/down by level fit. Whether
-    # the role is realistic for a new grad is a SEPARATE score (New Grad Fit).
-    resume_match = round(
-        0.50 * skills_score + 0.20 * projects_score
-        + 0.20 * domain_score + 0.10 * tool_protocol_score
-    )
-
     # ── Job-intrinsic fit scores (seniority reality, resume-independent) ──────
     lvl = job.get("experience_level", "") or ""
     is_sen = bool(job.get("is_senior"))
@@ -255,6 +247,23 @@ def compute_match(profile: dict, job: dict) -> dict:
         exp_fit = experienced_fit_score(lvl, is_sen, job.get("years_required_min"))
     recommendation = overall_recommendation(ng_fit)
 
+    # Raw résumé↔JD overlap (skills / projects / domain / tools) — no level term.
+    overlap_match = round(
+        0.50 * skills_score + 0.20 * projects_score
+        + 0.20 * domain_score + 0.10 * tool_protocol_score
+    )
+
+    # ── Resume Match (what the user sees) = a PERSONALIZED, realistic match ──
+    # Skills overlap dominates, but the role's seniority fit pulls it toward
+    # reality so a Staff/Senior role can't read as a 97% match for a new-grad
+    # résumé. Level fit adapts to the résumé: ranked by New Grad Fit for a
+    # 0–2-yr candidate (senior roles drop), by Experienced Fit beyond that
+    # (senior roles fit). This is what makes "Best Resume Match" accurate for
+    # YOU rather than surfacing high-overlap roles you can't realistically get.
+    yrs = profile.get("years_experience", 0) or 0
+    level_fit = ng_fit if yrs < 3 else exp_fit
+    resume_match = round(0.55 * overlap_match + 0.45 * level_fit)
+
     match_breakdown = {
         "skills": skills_score,
         "experience": ng_fit,          # "Experience / level fit" row = New Grad Fit
@@ -263,20 +272,15 @@ def compute_match(profile: dict, job: dict) -> dict:
         "tool_protocol": tool_protocol_score,
     }
 
-    # Defensibility (kept for compatibility; not shown in UI)
+    # Defensibility (kept for compatibility; not shown in UI) — uses raw overlap.
     proj_factor = min(1.0, len(matched_projects) / 2)
-    defensibility = round(100 * (0.55 * (resume_match / 100) + 0.45 * proj_factor))
+    defensibility = round(100 * (0.55 * (overlap_match / 100) + 0.45 * proj_factor))
 
-    # Apply priority — prioritise roles that are realistic for THIS candidate AND
-    # a decent resume overlap. The level-fit term adapts to the resume: a new grad
-    # (0–2 yrs) is ranked by New Grad Fit so senior roles sink; an experienced
-    # candidate is ranked by Experienced Fit. This is what drives the "Best match"
-    # sort, so a Staff role with high skill overlap can no longer top the list for
-    # a no-experience resume. Eligibility risk only nudges.
-    yrs = profile.get("years_experience", 0) or 0
-    level_fit = ng_fit if yrs < 3 else exp_fit
+    # Apply priority — realistic roles for THIS candidate with a decent overlap.
+    # Uses the RAW overlap (not the personalized resume_match) so level fit is not
+    # double-counted. Eligibility risk only nudges.
     elig_pen = 12 if job.get("eligibility_risk") == "high" else (5 if job.get("eligibility_risk") == "medium" else 0)
-    priority_score = 0.55 * level_fit + 0.45 * resume_match - elig_pen
+    priority_score = 0.55 * level_fit + 0.45 * overlap_match - elig_pen
     apply_priority = "High" if priority_score >= 72 else ("Medium" if priority_score >= 52 else "Low")
 
     # Why matches

@@ -140,11 +140,11 @@ export function ResumeStudio({ job }: { job: Job }) {
 
       {/* Option 1 — hand-off */}
       <div style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)', borderRadius: 10, padding: '13px 14px' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3 }}>
-          1 · Tailor with Claude or ChatGPT <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>— best quality, uses your Pro plan</span>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+          1 · Tailor with Claude or ChatGPT
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 10, lineHeight: 1.5 }}>
-          Copy the ready-made prompt, paste it into your Claude/ChatGPT chat, and drop the LaTeX it returns into Overleaf.
+        <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 10, lineHeight: 1.6 }}>
+          Click <strong>Copy prompt</strong> — it copies a complete instruction (this job's details + your master résumé) to your clipboard. Then click <strong>Open Claude</strong> or <strong>Open ChatGPT</strong> to start a new chat, paste it (<strong>Ctrl + V</strong>), and press Enter. The AI replies with your tailored résumé written in LaTeX — copy that and paste it into Overleaf to compile.
         </div>
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
           <button onClick={copyPrompt} disabled={copyingPrompt} className="btn btn-primary" style={{ fontSize: 12.5 }}>
@@ -161,13 +161,13 @@ export function ResumeStudio({ job }: { job: Job }) {
 
       {/* Option 2 — in-app */}
       <div style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)', borderRadius: 10, padding: '13px 14px' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3 }}>
-          2 · Generate in-app <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>— one click, free (Gemini)</span>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+          2 · Generate here in the app
         </div>
         {geminiEnabled ? (
           <>
-            <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 10, lineHeight: 1.5 }}>
-              Generate the tailored LaTeX right here, then copy it into Overleaf.
+            <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 10, lineHeight: 1.6 }}>
+              Click <strong>Generate</strong> and the app writes your tailored résumé as LaTeX in the box below — you never leave the app. When it finishes, click <strong>Copy LaTeX</strong> and paste it into Overleaf to compile.
             </div>
             <button onClick={generate} disabled={generating || !hasMaster} className="btn btn-primary" style={{ fontSize: 12.5 }}>
               <Icon name="sparkles" size={14} color="var(--on-primary)" /> {generating ? 'Generating…' : 'Generate with Gemini'}
@@ -190,7 +190,7 @@ export function ResumeStudio({ job }: { job: Job }) {
           </>
         ) : (
           <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            In-app generation needs a <strong>free Google Gemini API key</strong> (no credit card). Once it's added, this button generates the tailored LaTeX without leaving the app. Until then, use option 1 above — it's the same result via your Claude/ChatGPT Pro.
+            This button writes your tailored résumé as LaTeX without leaving the app, but it first needs a <strong>free Google Gemini API key</strong> (no credit card). Get one at <strong>aistudio.google.com/apikey</strong>, then add it to your backend as <code>GEMINI_API_KEY</code> and reopen the app. Until then, use <strong>option 1 above</strong> — it produces the same tailored résumé through your Claude or ChatGPT chat.
           </div>
         )}
       </div>
