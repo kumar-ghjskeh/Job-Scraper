@@ -3,6 +3,7 @@ import { api } from '../lib/api'
 import { fmtDateLong } from '../lib/datetime'
 import type { Job, JobMatch } from '../lib/types'
 import { Icon } from './Icon'
+import { ResumeStudio } from './ResumeStudio'
 import { ScoreGauge, matchColor, priorityColor } from './ScoreGauge'
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
   mobile?: boolean
 }
 
-type DetailTab = 'overview' | 'match' | 'score' | 'description' | 'similar' | 'source' | 'notes'
+type DetailTab = 'overview' | 'match' | 'score' | 'description' | 'tailor' | 'similar' | 'source' | 'notes'
 
 const TIER_STYLE: Record<string, string> = {
   'Safe to Add': 'pill-success',
@@ -192,6 +193,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
     { id: 'match', label: 'Match' },
     { id: 'score', label: 'Score' },
     { id: 'description', label: 'Description' },
+    { id: 'tailor', label: 'Tailor' },
     { id: 'similar', label: similar.length ? `Similar (${similar.length})` : 'Similar' },
     { id: 'source', label: 'Source' },
     { id: 'notes', label: 'Application' },
@@ -340,6 +342,19 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
             style={{ borderColor: 'var(--border)' }}
           >
             <Icon name="eyeOff" size={14} /> Ignore
+          </button>
+          <button
+            onClick={() => setDetailTab('tailor')}
+            className="btn"
+            title="Tailor your résumé to this job"
+            style={{
+              background: detailTab === 'tailor' ? 'var(--primary)' : 'var(--primary-light)',
+              border: `1px solid var(--primary-mid)`,
+              color: detailTab === 'tailor' ? 'var(--on-primary)' : 'var(--primary)',
+              fontWeight: 700,
+            }}
+          >
+            <Icon name="sparkles" size={14} color={detailTab === 'tailor' ? 'var(--on-primary)' : 'var(--primary)'} /> Tailor Résumé
           </button>
         </div>
       </div>
@@ -679,6 +694,8 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
             )}
           </div>
         )}
+
+        {detailTab === 'tailor' && <ResumeStudio job={job} />}
 
         {detailTab === 'similar' && (
           <div>

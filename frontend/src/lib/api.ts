@@ -192,4 +192,21 @@ export const api = {
     const { data } = await axios.get(`${BASE}/resume/skill-gaps`)
     return data
   },
+
+  // ── Résumé Studio (per-job tailoring) ──
+  async getMasterResume(): Promise<{ master_latex: string; instructions: string; gemini_enabled: boolean }> {
+    const { data } = await axios.get(`${BASE}/resume-studio/master`)
+    return data
+  },
+  async saveMasterResume(master_latex: string, instructions: string): Promise<void> {
+    await axios.put(`${BASE}/resume-studio/master`, { master_latex, instructions })
+  },
+  async getTailorPrompt(jobId: number, body: { master_latex?: string; instructions?: string }): Promise<{ prompt: string; missing_keywords: string[]; job_title: string; company: string }> {
+    const { data } = await axios.post(`${BASE}/jobs/${jobId}/tailor-prompt`, body)
+    return data
+  },
+  async generateTailored(jobId: number, body: { master_latex?: string; instructions?: string }): Promise<{ latex: string; missing_keywords: string[] }> {
+    const { data } = await axios.post(`${BASE}/jobs/${jobId}/tailor/generate`, body)
+    return data
+  },
 }

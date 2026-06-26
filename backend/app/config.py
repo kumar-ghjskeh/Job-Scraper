@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_subject: str = "mailto:alerts@ashbornesilicon.app"
 
+    # Résumé Studio — optional free in-app generation via Google Gemini. Set
+    # GEMINI_API_KEY to your free Google AI Studio key to enable the in-app
+    # "Generate" button; without it, the copy-prompt (Claude/ChatGPT) flow still
+    # works fully. The model name can be overridden if Google rotates free models.
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
+
     # Scraper
     scraper_user_agent: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

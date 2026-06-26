@@ -15,7 +15,7 @@ from sqlmodel import Session, col, func, select
 
 from .config import settings
 from .database import get_session, init_db
-from .models import ActiveStatus, Company, JobPosting, PushSubscription, ResumeProfile, ScrapeError, ScrapeRun, Watchlist
+from .models import ActiveStatus, Company, JobPosting, PushSubscription, ResumeProfile, ScrapeError, ScrapeRun, Setting, Watchlist
 from .scheduler import create_scheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -1605,6 +1605,117 @@ def push_test(session: SessionDep):
                    body="🔔 Push notifications are working — you'll get alerts for your saved searches.",
                    url="/")
     return {"ok": True, "sent": n}
+
+
+# ── Résumé Studio — per-job résumé tailoring ─────────────────────────────────
+
+_MASTER_LATEX_KEY = "master_resume_latex"
+_TAILOR_INSTRUCTIONS_KEY = "tailor_instructions"
+
+
+def _get_setting(session: Session, key: str, default: str = "") -> str:
+    s = session.get(Setting, key)
+    return s.value if s else default
+
+
+def _set_setting(session: Session, key: str, value: str) -> None:
+    s = session.get(Setting, key)
+    if s:
+        s.value = value
+        s.updated_at = datetime.now(timezone.utc)
+    else:
+        s = Setting(key=key, value=value)
+    session.add(s)
+
+
+def _missing_keywords_for(session: Session, job: JobPosting) -> list[str]:
+    """The keywords/skills this job wants that the active résumé doesn't surface.
+    Reuses the exact resume-match engine; falls back to the job's own matched
+    keywords when no résumé is uploaded — so the feature is accurate either way."""
+    profile = _current_profile(session)
+    if profile:
+        try:
+            from .resume_match import compute_match
+            result = compute_match(profile, _job_match_input(job))
+            missing = [m for m in (result.get("missing_skills") or []) if m]
+            if missing:
+                return missing[:20]
+        except Exception:
+            logger.exception("missing-keyword computation failed; falling back to job keywords")
+    # Fallback: the role-relevant terms the scraper already matched on this job.
+    kws = [k.strip() for k in (job.matched_keywords or "").split(",") if k.strip()]
+    NOISE = {"usa", "us", "united states", "recent", "fresh", "new"}
+    return [k for k in kws if k.lower() not in NOISE and not k.lower().startswith("priority-")][:20]
+
+
+class MasterResumeIn(BaseModel):
+    master_latex: str = ""
+    instructions: str = ""
+
+
+def _gemini_enabled() -> bool:
+    from .services.resume_studio import gemini_enabled
+    return gemini_enabled()
+
+
+@app.get("/resume-studio/master")
+def get_master_resume(session: SessionDep):
+    return {
+        "master_latex": _get_setting(session, _MASTER_LATEX_KEY),
+        "instructions": _get_setting(session, _TAILOR_INSTRUCTIONS_KEY),
+        "gemini_enabled": _gemini_enabled(),
+    }
+
+
+@app.put("/resume-studio/master")
+def save_master_resume(payload: MasterResumeIn, session: SessionDep):
+    _set_setting(session, _MASTER_LATEX_KEY, payload.master_latex or "")
+    _set_setting(session, _TAILOR_INSTRUCTIONS_KEY, payload.instructions or "")
+    session.commit()
+    return {"ok": True}
+
+
+class TailorIn(BaseModel):
+    master_latex: Optional[str] = None     # falls back to saved master when omitted
+    instructions: Optional[str] = None
+
+
+def _assemble_tailor(session: Session, job_id: int, payload: TailorIn):
+    job = session.get(JobPosting, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    master = payload.master_latex if payload.master_latex is not None else _get_setting(session, _MASTER_LATEX_KEY)
+    instructions = payload.instructions if payload.instructions is not None else _get_setting(session, _TAILOR_INSTRUCTIONS_KEY)
+    missing = _missing_keywords_for(session, job)
+    from .services.resume_studio import build_tailor_prompt
+    prompt = build_tailor_prompt(
+        job_title=job.job_title, company=job.company,
+        description=job.cleaned_description or job.full_description_text or job.description_snippet or "",
+        master_latex=master or "", missing_keywords=missing, instructions=instructions or "",
+    )
+    return job, prompt, missing
+
+
+@app.post("/jobs/{job_id}/tailor-prompt")
+def tailor_prompt(job_id: int, payload: TailorIn, session: SessionDep):
+    """Assemble the copy-paste prompt for Claude/ChatGPT (Option 1). No AI call."""
+    job, prompt, missing = _assemble_tailor(session, job_id, payload)
+    return {"prompt": prompt, "missing_keywords": missing,
+            "job_title": job.job_title, "company": job.company}
+
+
+@app.post("/jobs/{job_id}/tailor/generate")
+def tailor_generate(job_id: int, payload: TailorIn, session: SessionDep):
+    """Generate the tailored LaTeX in-app via Gemini (Option 2)."""
+    from .services.resume_studio import generate_with_gemini, gemini_enabled
+    if not gemini_enabled():
+        raise HTTPException(status_code=400, detail="In-app generation is not configured. Add a free GEMINI_API_KEY to enable it.")
+    _, prompt, missing = _assemble_tailor(session, job_id, payload)
+    try:
+        latex = generate_with_gemini(prompt)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"latex": latex, "missing_keywords": missing}
 
 
 # ── Email digest (Phase 4) ───────────────────────────────────────────────────

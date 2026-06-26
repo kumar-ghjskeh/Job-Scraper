@@ -225,6 +225,16 @@ class ResumeProfile(SQLModel, table=True):
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class Setting(SQLModel, table=True):
+    """Generic single-user key/value store (e.g. the master résumé LaTeX and the
+    default tailoring instructions used by Résumé Studio)."""
+    __tablename__ = "settings"
+
+    key: str = Field(primary_key=True)
+    value: str = ""
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class PushSubscription(SQLModel, table=True):
     """A browser Web-Push subscription (one per device/browser that opted in).
     Used to deliver saved-search alerts as native notifications, for free (VAPID)."""
