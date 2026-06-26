@@ -15,7 +15,7 @@ from sqlmodel import Session, col, func, select
 
 from .config import settings
 from .database import get_session, init_db
-from .models import ActiveStatus, Company, JobPosting, ResumeProfile, ScrapeError, ScrapeRun, Watchlist
+from .models import ActiveStatus, Company, JobPosting, PushSubscription, ResumeProfile, ScrapeError, ScrapeRun, Watchlist
 from .scheduler import create_scheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -1534,6 +1534,77 @@ def check_watchlist(wl_id: int, session: SessionDep):
     w.last_checked_at = datetime.now(timezone.utc)
     session.add(w); session.commit()
     return {"ok": True}
+
+
+def check_watchlists_and_notify(session: Session) -> int:
+    """For each alert-enabled saved search, find jobs newer than its last check
+    that match its filters and push a notification. Advances last_checked_at so a
+    match is only ever announced once. Returns the number of alerts sent. Called
+    by the scraper (run_all) after each scrape — that's the only time data changes."""
+    now = datetime.now(timezone.utc)
+    sent = 0
+    wls = session.exec(select(Watchlist).where(Watchlist.alert_enabled == True)).all()
+    for w in wls:
+        try:
+            filters = json.loads(w.filters_json) if w.filters_json else {}
+        except Exception:
+            filters = {}
+        f = {k: v for k, v in filters.items() if k in _WL_FILTER_KEYS and v not in (None, "", [])}
+        since = w.last_checked_at
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+        hours = max(1, int((now - since).total_seconds() // 3600) + 1)
+        items, new = _build_job_query(session, page=1, limit=5, new_since_hours=hours,
+                                      sort_by="first_seen_at", **f)
+        if new > 0:
+            from .services.push import notify_all
+            top = items[0] if items else None
+            title = f"{new} new {w.name} job{'s' if new != 1 else ''}"
+            body = f"{top.job_title} @ {top.company}" if top else "New matches for your saved search"
+            sent += 1 if notify_all(session, title=title, body=body, url="/", tag=f"wl-{w.id}") else 0
+        w.last_checked_at = now
+        session.add(w)
+    session.commit()
+    return sent
+
+
+# ── Web Push (VAPID) — free saved-search alerts ───────────────────────────────
+
+class PushSubIn(BaseModel):
+    endpoint: str
+    keys: dict = {}
+
+
+@app.get("/push/public-key")
+def push_public_key():
+    return {"key": settings.vapid_public_key, "enabled": bool(settings.vapid_private_key)}
+
+
+@app.post("/push/subscribe")
+def push_subscribe(sub: PushSubIn, session: SessionDep):
+    keys = sub.keys or {}
+    existing = session.exec(
+        select(PushSubscription).where(PushSubscription.endpoint == sub.endpoint)
+    ).first()
+    if existing:
+        existing.p256dh = keys.get("p256dh", "")
+        existing.auth = keys.get("auth", "")
+        session.add(existing)
+    else:
+        session.add(PushSubscription(
+            endpoint=sub.endpoint, p256dh=keys.get("p256dh", ""), auth=keys.get("auth", ""),
+        ))
+    session.commit()
+    return {"ok": True}
+
+
+@app.post("/push/test")
+def push_test(session: SessionDep):
+    from .services.push import notify_all
+    n = notify_all(session, title="Ashborne Silicon",
+                   body="🔔 Push notifications are working — you'll get alerts for your saved searches.",
+                   url="/")
+    return {"ok": True, "sent": n}
 
 
 # ── Email digest (Phase 4) ───────────────────────────────────────────────────

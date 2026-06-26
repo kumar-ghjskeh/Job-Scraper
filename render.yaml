@@ -29,3 +29,7 @@ services:
         value: "false"
       - key: ENABLE_SCHEDULER
         value: "false"
+      # Optional: VAPID private key enables Web Push saved-search alerts. The
+      # public key ships in config; set this secret to the matching private key.
+      - key: VAPID_PRIVATE_KEY
+        sync: false

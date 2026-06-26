@@ -56,6 +56,20 @@ async def _run() -> None:
     except Exception as e:
         logger.error("curl_cffi pass FAILED: %s", e)
 
+    # Saved-search alerts: after the data is refreshed, push a notification for any
+    # watchlist that gained new matching jobs (free, via Web Push). No-op if no one
+    # has subscribed or the VAPID private key isn't configured.
+    logger.info("=== saved-search alerts ===")
+    try:
+        from .database import engine as _engine
+        from sqlmodel import Session as _Session
+        from .main import check_watchlists_and_notify
+        with _Session(_engine) as s:
+            sent = check_watchlists_and_notify(s)
+        logger.info("saved-search alerts sent: %s", sent)
+    except Exception as e:
+        logger.error("saved-search alert check FAILED: %s", e)
+
     logger.info("=== run_all complete ===")
 
 

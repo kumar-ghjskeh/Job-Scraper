@@ -225,6 +225,18 @@ class ResumeProfile(SQLModel, table=True):
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class PushSubscription(SQLModel, table=True):
+    """A browser Web-Push subscription (one per device/browser that opted in).
+    Used to deliver saved-search alerts as native notifications, for free (VAPID)."""
+    __tablename__ = "push_subscriptions"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    endpoint: str = Field(index=True, unique=True)
+    p256dh: str = ""
+    auth: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Watchlist(SQLModel, table=True):
     """A saved search (filter set) with new-since-last-check tracking."""
     __tablename__ = "watchlists"

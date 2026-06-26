@@ -69,6 +69,15 @@ export const api = {
     await axios.post(`${BASE}/watchlists/${id}/check`)
   },
 
+  // ── Web Push alerts ──
+  async getPushPublicKey(): Promise<{ key: string; enabled: boolean }> {
+    const { data } = await axios.get(`${BASE}/push/public-key`)
+    return data
+  },
+  async subscribePush(sub: PushSubscriptionJSON): Promise<void> {
+    await axios.post(`${BASE}/push/subscribe`, { endpoint: sub.endpoint, keys: sub.keys })
+  },
+
   async getJob(id: number): Promise<Job> {
     const { data } = await axios.get(`${BASE}/jobs/${id}`)
     return data

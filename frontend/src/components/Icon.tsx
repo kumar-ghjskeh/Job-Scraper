@@ -7,7 +7,7 @@ type IconName =
   | 'checkCircle' | 'mapPin' | 'building' | 'activity' | 'star' | 'graduation'
   | 'briefcase' | 'globe' | 'home' | 'x' | 'copy' | 'external' | 'chevronLeft'
   | 'chevronRight' | 'sliders' | 'target' | 'clipboard' | 'sparkles' | 'bolt'
-  | 'layers' | 'eyeOff' | 'cpu' | 'list' | 'sun' | 'moon' | 'shield' | 'passport' | 'fileText' | 'clock'
+  | 'layers' | 'eyeOff' | 'cpu' | 'list' | 'sun' | 'moon' | 'shield' | 'passport' | 'fileText' | 'clock' | 'bell'
 
 interface Props {
   name: IconName
@@ -28,6 +28,7 @@ const PATHS: Record<IconName, { d?: string; el?: React.ReactNode; fill?: boolean
   checkCircle: { el: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></> },
   mapPin: { el: <><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></> },
   clock: { el: <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></> },
+  bell: { el: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></> },
   building: { el: <><rect x="4" y="2" width="16" height="20" rx="1" /><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01" /></> },
   activity: { el: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /> },
   star: { el: <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /> },

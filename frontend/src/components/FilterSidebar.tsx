@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import type { Filters, JobFacets, Watchlist } from '../lib/types'
 import { Icon } from './Icon'
+import { enablePushAlerts, pushPermission } from '../lib/push'
 
 interface Props {
   filters: Filters
@@ -71,12 +72,23 @@ function Toggle({ on, onToggle, label, sub }: { on: boolean; onToggle: () => voi
 export function FilterSidebar({ filters, onChange, totalCount, mobile = false, onClose, hideSort = false }: Props) {
   const [facets, setFacets] = useState<JobFacets | null>(null)
   const [watchlists, setWatchlists] = useState<Watchlist[]>([])
+  const [alertState, setAlertState] = useState<'idle' | 'enabling' | 'on' | 'error'>(
+    () => (pushPermission() === 'granted' ? 'on' : 'idle'),
+  )
+  const [alertMsg, setAlertMsg] = useState('')
 
   const loadWatchlists = useCallback(() => {
     api.getWatchlists().then(setWatchlists).catch(() => {/* non-fatal */})
   }, [])
 
   useEffect(() => { loadWatchlists() }, [loadWatchlists])
+
+  async function enableAlerts() {
+    setAlertState('enabling'); setAlertMsg('')
+    const r = await enablePushAlerts()
+    if (r.ok) { setAlertState('on'); setAlertMsg('Alerts on — you’ll be notified of new matches.') }
+    else { setAlertState('error'); setAlertMsg(r.message) }
+  }
 
   async function saveWatchlist() {
     const name = window.prompt('Name this saved search (e.g. "New Grad DV in CA/TX"):')
@@ -206,6 +218,26 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Browser push alerts for saved searches (free). */}
+          {pushPermission() !== 'unsupported' && (
+            <div style={{ marginTop: 8 }}>
+              {alertState === 'on' ? (
+                <div style={{ fontSize: 11, color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+                  <Icon name="bell" size={12} color="var(--success)" /> Alerts on
+                </div>
+              ) : (
+                <button onClick={enableAlerts} disabled={alertState === 'enabling'}
+                  style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Icon name="bell" size={12} color="var(--primary)" />
+                  {alertState === 'enabling' ? 'Enabling…' : 'Enable new-job alerts'}
+                </button>
+              )}
+              {alertMsg && (
+                <div style={{ fontSize: 10.5, color: alertState === 'error' ? 'var(--warning)' : 'var(--text-tertiary)', marginTop: 3, lineHeight: 1.4 }}>{alertMsg}</div>
+              )}
             </div>
           )}
         </div>

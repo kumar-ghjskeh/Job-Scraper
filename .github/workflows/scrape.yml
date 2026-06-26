@@ -42,7 +42,9 @@ jobs:
           pip install -r backend/requirements.txt
           pip install -r backend/requirements-cf.txt
 
-      - name: Run scrapers (httpx + curl_cffi)
+      - name: Run scrapers (httpx + curl_cffi) + saved-search alerts
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Optional: set this secret to enable Web Push saved-search alerts.
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: python -m backend.app.run_all

@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
+    # Web Push (VAPID) for free saved-search alerts. The PUBLIC key is safe to ship
+    # (clients use it to subscribe); the PRIVATE key signs pushes and must be set as
+    # a secret env var on Render + as a GitHub Actions secret (where alerts are sent).
+    vapid_public_key: str = "BFGl3xHEYmULnKoKoE9Xgwdt8GeLmOADJLrB03-O8coaKFI15J1IjClMsIydFhxsKZeS6FRoXtWHP91EoB-_eog"
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:alerts@ashbornesilicon.app"
+
     # Scraper
     scraper_user_agent: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

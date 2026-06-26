@@ -13,6 +13,9 @@ notion-client>=2.2.1
 aiosmtplib>=3.0.0
 beautifulsoup4>=4.12.0
 
+# Web Push (VAPID) for free saved-search alerts
+pywebpush>=1.14.0
+
 # Resume parsing (Phase 3)
 pymupdf>=1.23.0
 python-docx>=1.1.0
