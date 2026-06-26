@@ -623,6 +623,33 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
 
         {detailTab === 'score' && (
           <div>
+            {/* Prominent verdict banner — the realistic, at-a-glance call. */}
+            <div style={{
+              background: `color-mix(in srgb, ${ngColor(job.new_grad_fit)} 12%, var(--surface))`,
+              border: `1.5px solid ${ngColor(job.new_grad_fit)}`,
+              borderRadius: 10, padding: '14px 16px', marginBottom: 16,
+              display: 'flex', alignItems: 'center', gap: 13,
+            }}>
+              <div style={{
+                width: 58, height: 58, borderRadius: '50%', flexShrink: 0,
+                border: `3px solid ${ngColor(job.new_grad_fit)}`, background: 'var(--surface)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: ngColor(job.new_grad_fit), lineHeight: 1 }}>{job.new_grad_fit}</div>
+                <div style={{ fontSize: 7.5, fontWeight: 700, color: ngColor(job.new_grad_fit), letterSpacing: '0.03em', marginTop: 1 }}>NG FIT</div>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: ngColor(job.new_grad_fit), lineHeight: 1.25 }}>
+                  {job.overall_recommendation || 'Fit assessment'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.5 }}>
+                  {matchData
+                    ? <><strong style={{ color: matchColor(matchData.resume_match) }}>{matchData.resume_match}%</strong> match for you · <strong style={{ color: priorityColor(matchData.apply_priority) }}>{matchData.apply_priority}</strong> apply priority · {job.experience_level}</>
+                    : <>{job.experience_level} role · upload a résumé in <strong style={{ color: 'var(--primary)' }}>Resume Matches</strong> for your personalized match</>}
+                </div>
+              </div>
+            </div>
+
             {/* Fit Score Breakdown */}
             <div style={{
               background: 'var(--primary-light)',
