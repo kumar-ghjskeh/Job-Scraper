@@ -40,14 +40,19 @@ interface Props {
   onViewJobs?: (companyName: string) => void
 }
 
+// Module-level cache so re-opening the Companies tab paints instantly while it
+// refreshes in the background (survives tab switches within a session).
+let _companiesCache: Company[] | null = null
+
 export function CompaniesPage({ onViewJobs }: Props) {
-  const [companies, setCompanies] = useState<Company[]>([])
-  const [loading, setLoading] = useState(true)
+  const [companies, setCompanies] = useState<Company[]>(() => _companiesCache ?? [])
+  const [loading, setLoading] = useState(() => _companiesCache === null)
   const [search, setSearch] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
 
   useEffect(() => {
     api.getCompanies().then((data) => {
+      _companiesCache = data
       setCompanies(data)
       setLoading(false)
     }).catch(() => setLoading(false))

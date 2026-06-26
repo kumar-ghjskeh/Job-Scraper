@@ -12,17 +12,21 @@ const TZ_OPTIONS: { label: string; value: string }[] = [
 ]
 const RUNS_PREVIEW = 15
 
+// Module-level cache so re-opening Data Health paints instantly while it
+// refreshes in the background (survives tab switches within a session).
+let _healthCache: { runs: ScrapeRun[]; companies: Company[]; analytics: AnalyticsSummary | null } | null = null
+
 export function ScrapeHealth() {
-  const [runs, setRuns] = useState<ScrapeRun[]>([])
-  const [companies, setCompanies] = useState<Company[]>([])
-  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [runs, setRuns] = useState<ScrapeRun[]>(() => _healthCache?.runs ?? [])
+  const [companies, setCompanies] = useState<Company[]>(() => _healthCache?.companies ?? [])
+  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(() => _healthCache?.analytics ?? null)
+  const [loading, setLoading] = useState(() => _healthCache === null)
   const [tz, setTz] = useState<string>(() => localStorage.getItem('ashborne-tz') || 'local')
   const [showAllRuns, setShowAllRuns] = useState(false)
 
   useEffect(() => {
     Promise.all([api.getScrapeRuns(), api.getCompanies(), api.getAnalytics().catch(() => null)])
-      .then(([r, c, a]) => { setRuns(r); setCompanies(c); setAnalytics(a) })
+      .then(([r, c, a]) => { _healthCache = { runs: r, companies: c, analytics: a }; setRuns(r); setCompanies(c); setAnalytics(a) })
       .finally(() => setLoading(false))
   }, [])
 
