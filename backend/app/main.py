@@ -33,8 +33,10 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-async def startup():
+def _seed_and_maintain() -> None:
+    """One-time boot DB work: ensure schema, sync the company directory, and
+    prune stale scrape-run rows. Isolated so the startup handler can call it
+    inside a guard — a transient DB outage must never abort app startup."""
     init_db()
     from .config import load_all_companies
     from .database import engine
@@ -67,22 +69,46 @@ async def startup():
         # by a crashed runner and FIFO-prune to the most recent 15.
         from .scrape_engine import maintain_scrape_runs
         maintain_scrape_runs(session)
-    scheduler = create_scheduler()
-    scheduler.start()
+
+
+@app.on_event("startup")
+async def startup():
+    # CRITICAL: the startup handler must never raise. If it does, uvicorn aborts
+    # with "Application startup failed" (exit code 3) and the host (Render) just
+    # restarts into the same crash loop forever — taking down even /health. A
+    # database that's briefly unreachable (cold Postgres, expired free instance,
+    # rotated credentials) is exactly the kind of thing that used to kill the
+    # whole service; instead we log it, come up healthy, and let the scheduled
+    # scrapes reconcile the DB once it's back.
+    try:
+        _seed_and_maintain()
+    except Exception:
+        logger.exception("Startup DB seeding failed — serving in degraded mode; "
+                         "scheduled scrapes will reconcile once the DB is reachable")
+
+    try:
+        scheduler = create_scheduler()
+        scheduler.start()
+    except Exception:
+        logger.exception("Scheduler failed to start — API still serving")
 
     # On a fresh cloud deploy, populate the database without waiting for the
     # first scheduled run. Empty DB → scrape; already-populated → skip.
     if settings.run_scrape_on_startup:
         import asyncio
+        from .database import engine
 
         async def _initial_scrape():
             await asyncio.sleep(5)  # let the server finish coming up
-            with Session(engine) as s:
-                count = s.exec(select(func.count(JobPosting.id))).one()
-            if count == 0:
-                logger.info("Empty database on startup — running initial scrape")
-                from .scrape_engine import run_scrape
-                await run_scrape(triggered_by="startup")
+            try:
+                with Session(engine) as s:
+                    count = s.exec(select(func.count(JobPosting.id))).one()
+                if count == 0:
+                    logger.info("Empty database on startup — running initial scrape")
+                    from .scrape_engine import run_scrape
+                    await run_scrape(triggered_by="startup")
+            except Exception:
+                logger.exception("Initial startup scrape failed — non-fatal")
 
         asyncio.create_task(_initial_scrape())
 
