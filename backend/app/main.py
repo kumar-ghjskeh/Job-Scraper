@@ -1097,64 +1097,58 @@ def update_notes(job_id: int, notes: str, session: SessionDep):
 
 # ── Company endpoints ──────────────────────────────────────────────────────────
 
-def _build_company_response(company: Company, session: Session) -> dict:
-    now = datetime.now(timezone.utc)
-    cutoff_24h = now - timedelta(hours=24)
+def _company_stats_map(session: Session) -> dict[str, dict]:
+    """All per-company active-job aggregates in ONE grouped query, keyed by
+    company name. Replaces ~7 queries PER company (≈600 round trips across 87
+    companies — the reason the Companies / Data Health tabs took ages) with a
+    single GROUP BY scan."""
+    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+    active = JobPosting.active_status == ActiveStatus.active
+    rows = session.exec(
+        select(
+            JobPosting.company,
+            func.count().label("total"),
+            func.count().filter(JobPosting.is_usa == True).label("usa"),
+            func.count().filter(
+                (JobPosting.is_entry_level == True) | (JobPosting.is_candidate_friendly == True)
+            ).label("entry"),
+            func.count().filter(and_(
+                JobPosting.is_usa == True,
+                JobPosting.is_software_only == False,
+                JobPosting.is_senior == False,
+            )).label("relevant"),
+            # viewable = EXACTLY what clicking "View Jobs" shows in All Jobs
+            # (usa-or-unknown-location, non-software, senior included) so the
+            # card count always equals the list the user then sees.
+            func.count().filter(and_(
+                (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0),
+                JobPosting.is_software_only == False,
+            )).label("viewable"),
+            func.count().filter(JobPosting.first_seen_at >= cutoff_24h).label("new_today"),
+            func.avg(JobPosting.data_quality_score).label("avg_quality"),
+        ).where(active).group_by(JobPosting.company)
+    ).all()
+    out: dict[str, dict] = {}
+    for r in rows:
+        out[r[0]] = {
+            "total": r[1] or 0, "usa": r[2] or 0, "entry": r[3] or 0,
+            "relevant": r[4] or 0, "viewable": r[5] or 0, "new_today": r[6] or 0,
+            "parser_confidence": int(round(r[7])) if r[7] else 0,
+        }
+    return out
 
-    total = session.exec(
-        select(func.count(JobPosting.id)).where(
-            JobPosting.company == company.name,
-            JobPosting.active_status == ActiveStatus.active,
-        )
-    ).one() or 0
 
-    usa = session.exec(
-        select(func.count(JobPosting.id)).where(
-            JobPosting.company == company.name,
-            JobPosting.active_status == ActiveStatus.active,
-            JobPosting.is_usa == True,
-        )
-    ).one() or 0
-
-    entry = session.exec(
-        select(func.count(JobPosting.id)).where(
-            JobPosting.company == company.name,
-            JobPosting.active_status == ActiveStatus.active,
-            (JobPosting.is_entry_level == True) | (JobPosting.is_candidate_friendly == True),
-        )
-    ).one() or 0
-
-    relevant = session.exec(
-        select(func.count(JobPosting.id)).where(
-            JobPosting.company == company.name,
-            JobPosting.active_status == ActiveStatus.active,
-            JobPosting.is_usa == True,
-            JobPosting.is_software_only == False,
-            JobPosting.is_senior == False,
-        )
-    ).one() or 0
-
-    # viewable = EXACTLY what clicking "View Jobs" shows in the All Jobs list, so
-    # the count on the card always equals the number of jobs the user then sees.
-    # The All Jobs default is usa_only + include_unknown_location + non-software,
-    # with senior roles INCLUDED (include_senior defaults true), so mirror that
-    # here — otherwise the card under-counts and the totals never reconcile.
-    viewable = session.exec(
-        select(func.count(JobPosting.id)).where(
-            JobPosting.company == company.name,
-            JobPosting.active_status == ActiveStatus.active,
-            (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0),
-            JobPosting.is_software_only == False,
-        )
-    ).one() or 0
-
-    new_today = session.exec(
-        select(func.count(JobPosting.id)).where(
-            JobPosting.company == company.name,
-            JobPosting.active_status == ActiveStatus.active,
-            JobPosting.first_seen_at >= cutoff_24h,
-        )
-    ).one() or 0
+def _build_company_response(company: Company, stats: dict[str, dict], engine: str) -> dict:
+    """Pure assembly from precomputed stats — does NO database queries. Pass the
+    map from _company_stats_map() and the engine flag (computed once per request)."""
+    s = stats.get(company.name, {})
+    total = s.get("total", 0)
+    relevant = s.get("relevant", 0)
+    viewable = s.get("viewable", 0)
+    usa = s.get("usa", 0)
+    entry = s.get("entry", 0)
+    new_today = s.get("new_today", 0)
+    parser_confidence = s.get("parser_confidence", 0)
 
     # Scrape status
     if company.scrape_error_count > 3:
@@ -1166,24 +1160,10 @@ def _build_company_response(company: Company, session: Session) -> dict:
     else:
         scrape_status = "never"
 
-    # Parser confidence — how complete/trustworthy the parsed records are for this
-    # company, derived from the average per-job data-quality score (0–100) across its
-    # active postings. A low value flags a parser that is extracting thin/garbled data
-    # even when the scrape itself "succeeds".
-    avg_quality = session.exec(
-        select(func.avg(JobPosting.data_quality_score)).where(
-            JobPosting.company == company.name,
-            JobPosting.active_status == ActiveStatus.active,
-        )
-    ).one()
-    parser_confidence = int(round(avg_quality)) if avg_quality else 0
-
     # Auto-connected = scraped automatically by SOME engine: the httpx cloud
     # scheduler (enabled:true) OR a local/CI runner (engine cf/browser). The latter
     # are enabled:false in the YAML so the cloud scheduler skips them, but they ARE
     # auto-scraped — so they must not be mislabeled "Direct search".
-    from .config import company_engines
-    engine = company_engines().get(company.name.lower(), "")
     auto_connected = bool(company.enabled) or engine in ("cf", "browser")
 
     return {
@@ -1214,7 +1194,10 @@ def _build_company_response(company: Company, session: Session) -> dict:
 def list_companies(session: SessionDep, with_counts: bool = True):
     companies = session.exec(select(Company).order_by(Company.priority, Company.name)).all()
     if with_counts:
-        return [_build_company_response(c, session) for c in companies]
+        from .config import company_engines
+        stats = _company_stats_map(session)
+        engines = company_engines()
+        return [_build_company_response(c, stats, engines.get(c.name.lower(), "")) for c in companies]
     return [{"id": c.id, "name": c.name, "category": c.category, "priority": c.priority,
              "careers_url": c.careers_url, "ats_platform": c.ats_platform,
              "enabled": c.enabled, "last_scraped_at": c.last_scraped_at} for c in companies]
@@ -1225,7 +1208,9 @@ def get_company(company_id: int, session: SessionDep):
     company = session.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    return _build_company_response(company, session)
+    from .config import company_engines
+    stats = _company_stats_map(session)
+    return _build_company_response(company, stats, company_engines().get(company.name.lower(), ""))
 
 
 @app.get("/companies/{company_id}/jobs", response_model=PaginatedJobResponse)
@@ -1278,8 +1263,11 @@ def scrape_health(session: SessionDep):
     recent_errors = session.exec(
         select(ScrapeError).order_by(col(ScrapeError.occurred_at).desc()).limit(20)
     ).all()
+    from .config import company_engines
     companies = session.exec(select(Company)).all()
-    company_data = [_build_company_response(c, session) for c in companies]
+    stats = _company_stats_map(session)
+    engines = company_engines()
+    company_data = [_build_company_response(c, stats, engines.get(c.name.lower(), "")) for c in companies]
 
     return {
         "recent_runs": [
