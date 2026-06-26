@@ -33,3 +33,7 @@ services:
       # public key ships in config; set this secret to the matching private key.
       - key: VAPID_PRIVATE_KEY
         sync: false
+      # Optional: free Google Gemini key enables Résumé Studio's in-app "Generate"
+      # button. Without it, the copy-prompt (Claude/ChatGPT) flow still works.
+      - key: GEMINI_API_KEY
+        sync: false
