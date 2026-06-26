@@ -142,7 +142,12 @@ export interface JobMatch {
   recommended_resume: string
   why_matches: string[]
   tailoring_suggestions: TailoringSuggestion[]
-  interview_prep: { technical_topics: string[]; resume_defense: string[] }
+  interview_prep: {
+    rounds?: { name: string; what: string }[]
+    company_focus?: string
+    technical_topics: string[]
+    resume_defense: string[]
+  }
 }
 
 export interface SkillGap { skill: string; count: number }

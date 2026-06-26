@@ -583,6 +583,24 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
                 )}
 
                 <div>
+                  {matchData.interview_prep.company_focus && (
+                    <div style={{ background: 'var(--primary-light)', border: '1px solid var(--primary-mid)', borderRadius: 8, padding: '9px 12px', marginBottom: 12, fontSize: 12, color: 'var(--primary)', lineHeight: 1.6 }}>
+                      <strong>What {job.company} tends to test:</strong> {matchData.interview_prep.company_focus}
+                    </div>
+                  )}
+                  {!!matchData.interview_prep.rounds?.length && (
+                    <div style={{ marginBottom: 14 }}>
+                      <div className="section-header">Likely interview rounds</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                        {matchData.interview_prep.rounds!.map((r, i) => (
+                          <div key={i} style={{ background: 'var(--surface-muted)', borderRadius: 7, padding: '8px 11px' }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>{r.name}</div>
+                            <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.5 }}>{r.what}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="section-header">Interview prep · likely technical topics</div>
                   <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
                     {matchData.interview_prep.technical_topics.map((t, i) => <li key={i}>{t}</li>)}

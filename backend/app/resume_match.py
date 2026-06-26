@@ -114,12 +114,75 @@ _INTERVIEW_TOPICS = {
 }
 
 
-def _interview_prep(role_category: str, job_skills: list[str], profile: dict) -> dict:
+# Per-company interview emphasis for the top semiconductor employers (what their
+# loops tend to stress). Generic fallback for everyone else.
+_COMPANY_FOCUS = {
+    "nvidia": "GPU/accelerator verification at scale — expect deep UVM, performance/coverage rigor, and demanding computer-architecture questions.",
+    "amd": "CPU/GPU pipelines — strong computer-architecture and RTL/DV depth; cache coherence and high-speed protocols come up.",
+    "intel": "Broad SoC/CPU — fundamentals-heavy loops, debug scenarios, and methodology depth.",
+    "qualcomm": "Mobile SoC/modem — low-power, protocols (AXI/MIPI), and DV methodology; an online assessment is common.",
+    "apple": "Custom silicon — a very high bar on fundamentals and project depth; keep answers concise and precise.",
+    "broadcom": "Networking/connectivity ASICs — protocol-heavy (Ethernet/PCIe/SerDes) with DV rigor.",
+    "marvell": "Infrastructure silicon — protocols, DV methodology, and architecture.",
+    "micron": "Memory subsystems — DDR/LPDDR/HBM, controllers, and verification depth.",
+    "tesla": "Custom autonomy/datacenter silicon — strong fundamentals and end-to-end ownership.",
+    "arm": "IP/CPU — microarchitecture, AMBA/CHI, and crisp design reasoning.",
+    "synopsys": "EDA/IP — verification methodology, formal/coverage depth, and tool fluency.",
+    "cadence": "EDA/IP — verification methodology and protocol-IP depth.",
+    "nxp": "Automotive/edge SoC — safety, protocols (CAN/Ethernet), and DV methodology.",
+    "texas instruments": "Analog/mixed-signal & embedded — fundamentals, mixed-signal awareness, and rigor.",
+    "cerebras": "Wafer-scale AI silicon — large-scale verification, performance, and systems thinking.",
+    "tenstorrent": "RISC-V AI silicon — RISC-V architecture, RTL/DV depth, and open methodology.",
+}
+
+
+def _interview_rounds(tier: str, role_category: str) -> list[dict]:
+    """Curated likely interview loop, adapted to company tier and role. Reflects
+    the common shape of semiconductor RTL/DV loops (recruiter → OA/phone → onsite
+    panels → behavioral); smaller companies run shorter loops."""
+    rc = (role_category or "RTL Design").lower()
+    is_dv = "verification" in rc or "formal" in rc or "validation" in rc
+    core = ("SystemVerilog/UVM coding — build or extend a testbench component "
+            "(driver/monitor/scoreboard), write an assertion or a coverage point." if is_dv else
+            "RTL design problem — code a synthesizable block (FSM, FIFO, arbiter), then reason about timing and corner cases.")
+    fundamentals = "Digital design & computer-architecture fundamentals — FSMs, pipelining, hazards, CDC, setup/hold, caches, number systems."
+    deepdive = "Résumé & project deep-dive — walk your strongest project end-to-end: design decisions, bugs you found, coverage, and what you'd improve."
+    debug = ("Debug / scenario round — given a failing simulation or waveform, methodically isolate the bug." if is_dv else
+             "Debug / timing round — given a failing path or waveform, find the root cause and propose a fix.")
+    behavioral = "Behavioral / hiring-manager — teamwork, ownership, why this team, handling conflict, and learning from a failure."
+    recruiter = "15–30 min — background, logistics, work authorization/relocation, and role fit."
+
+    if tier in ("S", "A"):
+        return [
+            {"name": "1 · Recruiter screen", "what": recruiter},
+            {"name": "2 · Online assessment / technical phone", "what": "Timed HDL coding + fundamentals (SystemVerilog/Verilog, basic " + ("DV" if is_dv else "RTL") + ")."},
+            {"name": "3 · Onsite — " + ("DV core" if is_dv else "RTL core"), "what": core},
+            {"name": "4 · Onsite — fundamentals", "what": fundamentals},
+            {"name": "5 · Onsite — project deep-dive", "what": deepdive},
+            {"name": "6 · Onsite — debug", "what": debug},
+            {"name": "7 · Behavioral / hiring manager", "what": behavioral},
+        ]
+    if tier == "B":
+        return [
+            {"name": "1 · Recruiter screen", "what": recruiter},
+            {"name": "2 · Technical phone", "what": core},
+            {"name": "3 · Onsite — fundamentals + project", "what": fundamentals + " Plus a project deep-dive."},
+            {"name": "4 · Hiring manager / behavioral", "what": behavioral},
+        ]
+    return [
+        {"name": "1 · Recruiter / founder screen", "what": recruiter},
+        {"name": "2 · Technical", "what": core + " Expect fundamentals mixed in."},
+        {"name": "3 · Team / behavioral", "what": behavioral},
+    ]
+
+
+def _interview_prep(role_category: str, job_skills: list[str], profile: dict,
+                    tier: str = "", company: str = "") -> dict:
     base = _INTERVIEW_TOPICS.get(role_category, _INTERVIEW_TOPICS["RTL Design"])
-    # add JD-specific protocol topics
+    # JD-specific protocol topics on top of the role baseline.
     extra = [s for s in job_skills if s in PROTOCOLS][:3]
     topics = base + [f"{p} protocol details" for p in extra if f"{p} protocol details" not in base]
-    # resume-defense questions from the candidate's own projects
+    # Résumé-defense questions from the candidate's own projects.
     defense = []
     for proj in profile.get("projects", [])[:4]:
         short = proj.split("—")[0].split("-")[0].strip()[:70]
@@ -128,7 +191,14 @@ def _interview_prep(role_category: str, job_skills: list[str], profile: dict) ->
     if profile.get("project_signals"):
         for sig in profile["project_signals"][:3]:
             defense.append(f"Be ready to defend your {sig} work in depth.")
-    return {"technical_topics": topics[:8], "resume_defense": defense[:6]}
+    company_focus = _COMPANY_FOCUS.get((company or "").lower().strip(),
+        f"Review {company}'s products and recent silicon, and connect your projects to what this team builds." if company else "")
+    return {
+        "rounds": _interview_rounds(tier, role_category),
+        "company_focus": company_focus,
+        "technical_topics": topics[:8],
+        "resume_defense": defense[:6],
+    }
 
 
 _SENIOR_WORDS = ("senior", "sr.", "staff", "principal", "lead", "manager", "director", "fellow")
@@ -319,5 +389,8 @@ def compute_match(profile: dict, job: dict) -> dict:
         "recommended_resume": _recommended_resume(job.get("role_category", ""), profile),
         "why_matches": why,
         "tailoring_suggestions": suggestions,
-        "interview_prep": _interview_prep(rc if rc in _INTERVIEW_TOPICS else "RTL Design", job_skills, profile),
+        "interview_prep": _interview_prep(
+            rc if rc in _INTERVIEW_TOPICS else "RTL Design", job_skills, profile,
+            tier=job.get("company_priority", "") or "", company=job.get("company", "") or "",
+        ),
     }

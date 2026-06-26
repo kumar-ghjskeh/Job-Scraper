@@ -812,6 +812,7 @@ def _job_match_input(job: JobPosting) -> dict:
     return {
         "job_title": job.job_title, "cleaned_description": job.cleaned_description,
         "matched_keywords": job.matched_keywords, "role_category": job.role_category,
+        "company": job.company, "company_priority": job.company_priority,
         "match_score": job.match_score, "is_candidate_friendly": job.is_candidate_friendly,
         "eligibility_risk": job.eligibility_risk, "sponsors_h1b": job.sponsors_h1b,
         "is_fresh": is_fresh,
