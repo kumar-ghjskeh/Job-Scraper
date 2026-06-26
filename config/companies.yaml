@@ -118,9 +118,10 @@ companies:
   - name: "Cerebras Systems"
     category: "AI Accelerator"
     priority: "A"
-    careers_url: "https://job-boards.greenhouse.io/cerebrassystems"
-    ats_platform: "greenhouse"
-    greenhouse_board: "cerebrassystems"
+    # Moved off Greenhouse (board 'cerebrassystems' now 404s) to Ashby.
+    careers_url: "https://jobs.ashbyhq.com/cerebras"
+    ats_platform: "ashby"
+    ashby_org: "cerebras"
     search_keywords: ["verification", "rtl", "design verification", "asic", "chip", "soc"]
     locations_of_interest: ["Sunnyvale", "Remote"]
     enabled: true
@@ -375,12 +376,13 @@ companies:
   - name: "Groq"
     category: "AI Accelerator"
     priority: "A"
-    careers_url: "https://groq.com/careers/"
-    ats_platform: "greenhouse"
-    greenhouse_board: "groq"
+    # Moved off Greenhouse (slug 404s) to SmartRecruiters (slug 'Groq'). API is
+    # live; enabled so RTL/DV roles auto-appear the moment they post.
+    careers_url: "https://jobs.smartrecruiters.com/Groq"
+    ats_platform: "smartrecruiters"
+    smartrecruiters_company: "Groq"
     search_keywords: ["verification", "rtl", "design verification", "asic"]
-    notes: "Greenhouse board slug returns 404 — needs verified slug."
-    enabled: false
+    enabled: true
 
   - name: "SiFive"
     category: "RISC-V"
@@ -647,8 +649,8 @@ companies:
     ats_platform: "smartrecruiters"
     smartrecruiters_company: "kioxia"
     search_keywords: ["verification", "rtl", "asic", "design", "firmware"]
-    notes: "SmartRecruiters API works (slug kioxia) but 0 RTL/DV roles open now — flip enabled when they post."
-    enabled: false
+    notes: "SmartRecruiters API (slug kioxia) — enabled; RTL/DV roles auto-appear when posted."
+    enabled: true
   - name: "SK Hynix"
     category: "Memory"
     priority: "C"
