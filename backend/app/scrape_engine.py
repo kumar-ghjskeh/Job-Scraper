@@ -275,7 +275,7 @@ async def persist_company_results(
     return new_count, removed_count
 
 
-def maintain_scrape_runs(session: Session, keep: int = 15, stale_minutes: int = 60) -> None:
+def maintain_scrape_runs(session: Session, keep: int = 20, stale_minutes: int = 60) -> None:
     """Keep the Data Health run history clean and trustworthy:
 
     1. Delete *zombie* runs — ones that never recorded ``finished_at`` and started

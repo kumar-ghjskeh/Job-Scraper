@@ -10,7 +10,7 @@ const TZ_OPTIONS: { label: string; value: string }[] = [
   { label: 'Mountain (MT)', value: 'America/Denver' },
   { label: 'Pacific (PT)', value: 'America/Los_Angeles' },
 ]
-const RUNS_PREVIEW = 15
+const RUNS_PREVIEW = 20
 
 // Module-level cache so re-opening Data Health paints instantly while it
 // refreshes in the background (survives tab switches within a session).

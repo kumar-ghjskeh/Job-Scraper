@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
 import { fmtDateLong } from '../lib/datetime'
 import type { Job, JobMatch } from '../lib/types'
@@ -116,6 +116,36 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
   const [matchLoading, setMatchLoading] = useState(false)
   const [similar, setSimilar] = useState<Job[]>([])
   const [similarLoading, setSimilarLoading] = useState(false)
+  // Draggable panel width (desktop). Persisted so it sticks across sessions.
+  const [panelWidth, setPanelWidth] = useState<number>(() => {
+    const v = Number(localStorage.getItem('ashborne-panel-width'))
+    return v >= 320 && v <= 1000 ? v : 384
+  })
+  const widthRef = useRef(panelWidth)
+  const [resizeHover, setResizeHover] = useState(false)
+
+  function startResize(e: React.MouseEvent) {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = widthRef.current
+    const onMove = (ev: MouseEvent) => {
+      const max = Math.min(1000, window.innerWidth - 460)
+      const w = Math.min(Math.max(startW + (startX - ev.clientX), 320), max)
+      widthRef.current = w
+      setPanelWidth(w)
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      localStorage.setItem('ashborne-panel-width', String(Math.round(widthRef.current)))
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+  }
 
   useEffect(() => {
     if (!job) { setMatchData(null); return }
@@ -207,7 +237,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
         overflow: 'hidden',
       }
     : {
-        width: 'var(--panel-width)', flexShrink: 0,
+        width: panelWidth, flexShrink: 0,
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 10,
@@ -221,6 +251,21 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
 
   return (
     <aside style={rootStyle}>
+      {/* Drag-to-resize handle on the panel's left edge (desktop only). */}
+      {!mobile && (
+        <div
+          onMouseDown={startResize}
+          onMouseEnter={() => setResizeHover(true)}
+          onMouseLeave={() => setResizeHover(false)}
+          title="Drag to resize"
+          style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0, width: 10, zIndex: 6,
+            cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div style={{ width: 3, height: 44, borderRadius: 3, background: resizeHover ? 'var(--primary)' : 'transparent', transition: 'background 0.15s' }} />
+        </div>
+      )}
       {/* Panel header */}
       <div style={{
         padding: '16px 20px 12px',

@@ -1300,7 +1300,7 @@ def company_jobs(
 # ── Scrape endpoints ────────────────────────────────────────────────────────────
 
 @app.get("/scrape-runs", response_model=list[ScrapeRunResponse])
-def list_scrape_runs(session: SessionDep, limit: int = 15):
+def list_scrape_runs(session: SessionDep, limit: int = 20):
     stmt = select(ScrapeRun).order_by(col(ScrapeRun.started_at).desc()).limit(limit)
     return session.exec(stmt).all()
 
@@ -1323,7 +1323,7 @@ def scrape_errors(session: SessionDep, limit: int = 50):
 @app.get("/scrape-health")
 def scrape_health(session: SessionDep):
     runs = session.exec(
-        select(ScrapeRun).order_by(col(ScrapeRun.started_at).desc()).limit(15)
+        select(ScrapeRun).order_by(col(ScrapeRun.started_at).desc()).limit(20)
     ).all()
     recent_errors = session.exec(
         select(ScrapeError).order_by(col(ScrapeError.occurred_at).desc()).limit(20)

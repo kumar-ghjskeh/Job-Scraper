@@ -362,12 +362,13 @@ export default function App() {
         ) : (
           <div style={{ display: 'flex', gap: isMobile ? 12 : 16, alignItems: 'flex-start', flexDirection: isMobile ? 'column' : 'row' }}>
             {tab === 'resume' ? (
-              // Resume Matches gets the SAME filters as every other tab (so filtering
-              // is consistent), with the resume version/skill-gap rail stacked below.
+              // Resume Matches: the résumé upload/version manager sits at the TOP of
+              // the left column (dedicated, can't be missed), with the SAME filters
+              // as every other tab stacked beneath it for consistent filtering.
               !isMobile && showSidebar ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0 }}>
-                  <FilterSidebar filters={filters} onChange={changeFilters} totalCount={paginatedJobs?.total_count ?? 0} hideSort />
                   <ResumeIntel onChanged={reload} />
+                  <FilterSidebar filters={filters} onChange={changeFilters} totalCount={paginatedJobs?.total_count ?? 0} hideSort />
                 </div>
               ) : (
                 <ResumeIntel onChanged={reload} />
