@@ -10,6 +10,7 @@ from typing import Annotated, Any, Optional
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy import and_
 from sqlmodel import Session, col, func, select
 
 from .config import settings
@@ -1305,63 +1306,70 @@ def analytics_summary(session: SessionDep):
     now = datetime.now(timezone.utc)
     cutoff_24h = now - timedelta(hours=24)
 
-    def count(q):
-        return session.exec(select(func.count(JobPosting.id)).where(*q)).one() or 0
-
-    def co_count(q):
-        return session.exec(select(func.count(Company.id)).where(*q)).one() or 0
-
-    # All browseable cards count the SAME USA-relevant pool the All Jobs list
-    # shows (USA or unknown-location, non-software), so "Verified Active" always
-    # equals the list count and the cards reconcile. USA is a hard gate here.
-    USA_VIEW = [
+    active_cond = JobPosting.active_status == ActiveStatus.active
+    # USA-relevant browseable pool (USA or unknown-location, non-software) — the
+    # SAME pool the All Jobs list shows, so "Verified Active" always equals the
+    # list count and every card reconciles. USA is a hard gate here.
+    usa_view = and_(
         (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0),
         JobPosting.is_software_only == False,
+    )
+
+    # Each dashboard number is one COUNT(*) FILTER (WHERE …) column inside a
+    # SINGLE query. Render (Oregon) and Neon (us-east) are far apart, so each
+    # separate query cost a ~70 ms cross-country round trip — 16 of them made
+    # this endpoint ~2.5 s. One query = one round trip = one table scan.
+    specs = [
+        ("total_active",       [active_cond, usa_view]),
+        ("new_24h",            [active_cond, usa_view, JobPosting.first_seen_at >= cutoff_24h]),
+        ("entry_level",        [active_cond, usa_view,
+                                (JobPosting.is_entry_level == True) | (JobPosting.is_candidate_friendly == True),
+                                JobPosting.is_senior == False]),
+        ("strict_entry",       [active_cond, usa_view, JobPosting.is_entry_level == True, JobPosting.is_senior == False]),
+        ("candidate_friendly", [active_cond, usa_view, JobPosting.is_candidate_friendly == True,
+                                JobPosting.is_entry_level == False, JobPosting.is_senior == False]),
+        ("usa_count",          [active_cond, JobPosting.is_usa == True]),
+        ("remote_count",       [active_cond, usa_view, col(JobPosting.remote_status).in_(["Remote", "remote"])]),
+        ("total_in_db",        []),
+        ("active_all",         [active_cond]),
+        ("non_usa_filtered",   [active_cond, JobPosting.is_usa == False, JobPosting.location_confidence != 0.0]),
+        ("software_filtered",  [active_cond, JobPosting.is_software_only == True]),
+        ("senior_filtered",    [active_cond, usa_view, JobPosting.is_senior == True]),
+        ("high_score",         [active_cond, usa_view, JobPosting.new_grad_fit >= 70]),
+        ("strong_new_grad",    [active_cond, usa_view, JobPosting.new_grad_fit >= 75]),
+        ("saved",              [JobPosting.active_status == ActiveStatus.saved]),
+        ("applied",            [JobPosting.active_status == ActiveStatus.applied]),
     ]
-    active = [JobPosting.active_status == ActiveStatus.active]
+    cols = [
+        (func.count().filter(and_(*conds)) if conds else func.count()).label(name)
+        for name, conds in specs
+    ]
+    row = session.exec(select(*cols)).one()
+    v = {name: (val or 0) for name, val in zip([s[0] for s in specs], row)}
 
-    total_active = count(active + USA_VIEW)
-    new_24h = count(active + USA_VIEW + [JobPosting.first_seen_at >= cutoff_24h])
-    entry_level = count(active + USA_VIEW + [
-        (JobPosting.is_entry_level == True) | (JobPosting.is_candidate_friendly == True),
-        JobPosting.is_senior == False,
-    ])
-    # Honest split: explicitly entry-level vs. inferred "likely junior"
-    strict_entry = count(active + USA_VIEW + [
-        JobPosting.is_entry_level == True, JobPosting.is_senior == False,
-    ])
-    candidate_friendly = count(active + USA_VIEW + [
-        JobPosting.is_candidate_friendly == True,
-        JobPosting.is_entry_level == False, JobPosting.is_senior == False,
-    ])
-    usa_count = count(active + [JobPosting.is_usa == True])
-    remote_count = count(active + USA_VIEW + [
-        col(JobPosting.remote_status).in_(["Remote", "remote"]),
-    ])
+    total_active = v["total_active"]
+    new_24h = v["new_24h"]
+    entry_level = v["entry_level"]
+    strict_entry = v["strict_entry"]
+    candidate_friendly = v["candidate_friendly"]
+    usa_count = v["usa_count"]
+    remote_count = v["remote_count"]
+    high_score = v["high_score"]
+    strong_new_grad = v["strong_new_grad"]
+    saved = v["saved"]
+    applied = v["applied"]
 
-    # ── Inventory funnel (reconciles "Found 760" on Data Health with the ~449
-    # shown on the dashboard, so the counts never look contradictory). ──
-    total_in_db = count([])
-    active_all = count(active)
-    non_usa_filtered = count(active + [
-        JobPosting.is_usa == False, JobPosting.location_confidence != 0.0,
-    ])
-    software_filtered = count(active + [JobPosting.is_software_only == True])
-    senior_filtered = count(active + USA_VIEW + [JobPosting.is_senior == True])
+    # ── Inventory funnel (reconciles "Found N" on Data Health with the count
+    # shown on the dashboard, so the numbers never look contradictory). ──
     job_inventory = {
         "scanned_last_run": None,          # filled from last_run below
-        "total_in_db": total_in_db,
-        "active": active_all,
+        "total_in_db": v["total_in_db"],
+        "active": v["active_all"],
         "usa_relevant": total_active,      # == the dashboard / All Jobs list count
-        "non_usa_filtered": non_usa_filtered,
-        "software_filtered": software_filtered,
-        "senior_roles": senior_filtered,
+        "non_usa_filtered": v["non_usa_filtered"],
+        "software_filtered": v["software_filtered"],
+        "senior_roles": v["senior_filtered"],
     }
-    # "High priority" + a dedicated new-grad card are both re-based on New Grad Fit.
-    high_score = count(active + USA_VIEW + [JobPosting.new_grad_fit >= 70])
-    strong_new_grad = count(active + USA_VIEW + [JobPosting.new_grad_fit >= 75])
-    saved = count([JobPosting.active_status == ActiveStatus.saved])
-    applied = count([JobPosting.active_status == ActiveStatus.applied])
     # Auto-connected = httpx cloud (enabled) + curl_cffi/browser runner companies.
     from .config import company_engines
     _engines = company_engines()
