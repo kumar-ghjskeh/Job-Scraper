@@ -90,6 +90,25 @@ export function ResumeStudio({ job }: { job: Job }) {
     })
   }
 
+  // Open the given LaTeX in a fresh Overleaf project (compile + download PDF there).
+  function openInOverleaf(latex: string) {
+    const form = document.createElement('form')
+    form.method = 'POST'
+    form.action = 'https://www.overleaf.com/docs'
+    form.target = '_blank'
+    form.style.display = 'none'
+    const snip = document.createElement('textarea')
+    snip.name = 'snip'
+    snip.value = latex
+    form.appendChild(snip)
+    const eng = document.createElement('input')
+    eng.type = 'hidden'; eng.name = 'engine'; eng.value = 'pdflatex'
+    form.appendChild(eng)
+    document.body.appendChild(form)
+    form.submit()
+    document.body.removeChild(form)
+  }
+
   const hasMaster = masterLatex.trim().length > 0
 
   return (
@@ -180,11 +199,20 @@ export function ResumeStudio({ job }: { job: Job }) {
               <div style={{ marginTop: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <span style={{ ...sectionLabel, marginBottom: 0 }}>Tailored LaTeX</span>
-                  <button onClick={copyLatex} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <Icon name={latexCopied ? 'check' : 'copy'} size={12} /> {latexCopied ? 'Copied' : 'Copy LaTeX'}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <button onClick={copyLatex} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Icon name={latexCopied ? 'check' : 'copy'} size={12} /> {latexCopied ? 'Copied' : 'Copy LaTeX'}
+                    </button>
+                    <button onClick={() => openInOverleaf(genLatex)} title="Open in a new Overleaf project to compile & download the PDF"
+                      style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Icon name="external" size={12} /> Open in Overleaf
+                    </button>
+                  </div>
                 </div>
                 <textarea readOnly value={genLatex} rows={10} style={ta} />
+                <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                  <strong>Open in Overleaf</strong> creates a new project with this résumé — press <strong>Recompile</strong> there, then download the PDF.
+                </div>
               </div>
             )}
           </>
