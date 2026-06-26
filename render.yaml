@@ -1,12 +1,8 @@
-# Render Blueprint — deploys the Job Scraper backend + Postgres.
-# Push this repo to GitHub, then in Render: New → Blueprint → pick this repo.
-# The frontend deploys separately to Vercel (see frontend/vercel.json).
-
-databases:
-  - name: job-scraper-db
-    plan: free
-    databaseName: jobscraper
-    user: jobscraper
+# Render Blueprint — deploys the Job Scraper backend (FastAPI + APScheduler).
+# The database is NEON (free, persistent Postgres) — NOT Render's free Postgres,
+# which auto-deletes ~30 days after creation. Set DATABASE_URL in the Render
+# dashboard to the Neon connection string. The frontend deploys separately to
+# Vercel; scraping runs 24/7 in GitHub Actions writing straight to Neon.
 
 services:
   - type: web
@@ -21,12 +17,10 @@ services:
     autoDeploy: true
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: job-scraper-db
-          property: connectionString
+        sync: false   # ← set to your NEON connection string in the Render dashboard
       - key: PYTHON_VERSION
         value: "3.12.4"
       - key: CORS_ORIGINS
-        sync: false   # set to your Vercel URL, e.g. https://job-scraper.vercel.app
+        sync: false   # set to your Vercel URL, e.g. https://job-scraper-tau-teal.vercel.app
       - key: RUN_SCRAPE_ON_STARTUP
         value: "true"

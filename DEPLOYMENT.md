@@ -1,11 +1,18 @@
 # Deploying Job Scraper
 
 Architecture: **Vercel** hosts the React frontend, **Render** hosts the Python
-backend (FastAPI + APScheduler) and a managed **Postgres** database. The backend
-auto-scrapes the verified company APIs 4× per day and the frontend reads from it.
+backend (FastAPI), and **Neon** hosts a free, persistent **Postgres** database.
+**GitHub Actions** scrapes the verified company APIs 6× per day (every 4 h),
+writing straight to Neon; the frontend reads through the Render API.
+
+> Why Neon and not Render's Postgres: Render auto-deletes free Postgres ~30 days
+> after creation. Neon's free tier is persistent (it never deletes your data and
+> auto-wakes in <1 s), so the database never disappears out from under the app.
 
 ```
- Browser ──> Vercel (frontend)  ──HTTPS──>  Render (FastAPI + scheduler) ──> Postgres
+ Browser ─> Vercel (frontend) ─HTTPS─> Render (FastAPI API) ─┐
+                                                             ├─> Neon Postgres
+                       GitHub Actions (scraper, 6×/day) ─────┘
 ```
 
 ---
