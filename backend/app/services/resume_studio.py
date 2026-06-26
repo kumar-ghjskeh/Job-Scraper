@@ -60,6 +60,30 @@ HARD RULES:
 - Output ONLY the complete, compilable LaTeX document, from \\documentclass to \\end{{document}} — no commentary, no explanations, no markdown code fences.{extra}"""
 
 
+def build_interview_prompt(*, job_title: str, company: str, description: str, role_category: str) -> str:
+    """Assemble an elite, company+role-specific interview-prep prompt. The model
+    draws on its knowledge of widely-reported interview experiences — no scraping."""
+    desc = (description or "").strip() or "(no description captured)"
+    return f"""You are an expert technical-interview coach for semiconductor RTL design and design-verification roles, with deep knowledge of how companies like {company} actually interview (drawing on widely-reported experiences from Glassdoor, Blind, and Reddit communities such as r/chipdesign, r/FPGA, and r/ECE).
+
+Produce a focused, realistic interview-prep guide for this specific role.
+
+ROLE: {job_title} at {company}
+ROLE TYPE: {role_category}
+
+JOB DESCRIPTION:
+{desc}
+
+Cover the following, concise and specific to {company} and THIS role (use clear headings, skimmable):
+1. The likely interview loop — the rounds in order (recruiter screen, online assessment / technical phone, onsite/virtual panels, behavioral), what each round tests, and rough duration. Note anything {company} is specifically known for (take-home, OA platform, panel style).
+2. Per-round technical focus — the exact topics plus 3–5 example questions for each technical round, grounded in the protocols, methodologies, and concepts this JD names.
+3. Coding / whiteboard prep — the kind of SystemVerilog/Verilog/UVM (or RTL) coding problems to expect, with 3–4 concrete practice problems.
+4. Behavioral prep — the themes {company} tends to probe and 3 example questions.
+5. A 1-week prep plan — what to study each day to be ready.
+
+Be concrete and specific — name real topics and questions, not generic advice. Base everything on publicly reported interview patterns; never fabricate confidential or company-internal information."""
+
+
 def gemini_enabled() -> bool:
     return bool(settings.gemini_api_key)
 

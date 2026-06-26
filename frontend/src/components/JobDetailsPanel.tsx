@@ -3,6 +3,7 @@ import { api } from '../lib/api'
 import { fmtDateLong } from '../lib/datetime'
 import type { Job, JobMatch } from '../lib/types'
 import { Icon } from './Icon'
+import { InterviewPrepAI } from './InterviewPrepAI'
 import { ResumeStudio } from './ResumeStudio'
 import { ScoreGauge, matchColor, priorityColor } from './ScoreGauge'
 
@@ -613,6 +614,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
                       </ul>
                     </>
                   )}
+                  <InterviewPrepAI jobId={job.id} />
                 </div>
               </div>
             )}

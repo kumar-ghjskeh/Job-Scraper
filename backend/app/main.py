@@ -1719,6 +1719,38 @@ def tailor_generate(job_id: int, payload: TailorIn, session: SessionDep):
     return {"latex": latex, "missing_keywords": missing}
 
 
+def _assemble_interview_prompt(session: Session, job_id: int) -> str:
+    job = session.get(JobPosting, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    from .services.resume_studio import build_interview_prompt
+    return build_interview_prompt(
+        job_title=job.job_title, company=job.company,
+        description=job.cleaned_description or job.full_description_text or job.description_snippet or "",
+        role_category=job.role_category or "",
+    )
+
+
+@app.post("/jobs/{job_id}/interview-prep-prompt")
+def interview_prep_prompt(job_id: int, session: SessionDep):
+    """Copy-paste prompt for company-specific interview prep (Claude/ChatGPT)."""
+    return {"prompt": _assemble_interview_prompt(session, job_id)}
+
+
+@app.post("/jobs/{job_id}/interview-prep/generate")
+def interview_prep_generate(job_id: int, session: SessionDep):
+    """Generate company-specific interview prep in-app via Gemini."""
+    from .services.resume_studio import generate_with_gemini, gemini_enabled
+    if not gemini_enabled():
+        raise HTTPException(status_code=400, detail="In-app generation is not configured. Add a free GEMINI_API_KEY to enable it.")
+    prompt = _assemble_interview_prompt(session, job_id)
+    try:
+        text = generate_with_gemini(prompt)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"text": text}
+
+
 # ── Email digest (Phase 4) ───────────────────────────────────────────────────
 
 @app.get("/digest/preview")
