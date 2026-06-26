@@ -35,7 +35,7 @@ _EQUIVALENT: dict[str, list[str]] = {
 _AREA: dict[str, str] = {}
 for _s in HDLS: _AREA[_s] = "rtl"
 for _s in CONCEPTS:
-    _AREA[_s] = "dft" if _s in ("DFT", "Scan", "ATPG", "MBIST") else "rtl"
+    _AREA[_s] = "dft" if _s in ("DFT", "Scan", "ATPG", "MBIST", "Boundary Scan", "Fault Coverage") else "rtl"
 for _s in METHODOLOGIES: _AREA[_s] = "dv"
 for _s in PROTOCOLS: _AREA[_s] = "rtl"
 for _s in TOOLS: _AREA[_s] = "tool"
