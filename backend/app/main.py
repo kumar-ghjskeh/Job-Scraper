@@ -86,11 +86,21 @@ async def startup():
         logger.exception("Startup DB seeding failed — serving in degraded mode; "
                          "scheduled scrapes will reconcile once the DB is reachable")
 
-    try:
-        scheduler = create_scheduler()
-        scheduler.start()
-    except Exception:
-        logger.exception("Scheduler failed to start — API still serving")
+    # The in-process APScheduler is OFF by default. All scraping now runs in
+    # GitHub Actions (scrape.yml, 6×/day) writing straight to Postgres, so the
+    # web service should be a lean READ-ONLY API. Running scrapes here would peg
+    # the tiny free instance's CPU/RAM and make /health time out (Render's 5s
+    # health check → "server failure" emails) while slowing every request. Set
+    # ENABLE_SCHEDULER=true only on a host that is meant to do its own scraping.
+    if settings.enable_scheduler:
+        try:
+            scheduler = create_scheduler()
+            scheduler.start()
+            logger.info("In-process scheduler started (ENABLE_SCHEDULER=true)")
+        except Exception:
+            logger.exception("Scheduler failed to start — API still serving")
+    else:
+        logger.info("Scheduler disabled — scraping handled externally (GitHub Actions)")
 
     # On a fresh cloud deploy, populate the database without waiting for the
     # first scheduled run. Empty DB → scrape; already-populated → skip.

@@ -22,5 +22,10 @@ services:
         value: "3.12.4"
       - key: CORS_ORIGINS
         sync: false   # set to your Vercel URL, e.g. https://job-scraper-tau-teal.vercel.app
+      # Scraping is external (GitHub Actions -> Neon), so the web service does NO
+      # scraping: it's a lean read-only API. This keeps /health fast and avoids
+      # Render's "health check timed out" emails caused by scrapes hogging the CPU.
       - key: RUN_SCRAPE_ON_STARTUP
-        value: "true"
+        value: "false"
+      - key: ENABLE_SCHEDULER
+        value: "false"

@@ -162,46 +162,67 @@ export default function App() {
 
   const NO_FETCH: Tab[] = ['companies', 'health']
 
+  // Stale-while-revalidate cache so re-visiting a tab / page is instant (no
+  // blank "Loading…"): we paint the cached result immediately, then refresh it
+  // silently in the background. Mutations (refresh, save/apply, resume change)
+  // clear it via reload().
+  const jobsCache = useRef<Map<string, PaginatedResponse<Job>>>(new Map())
+
   const loadAnalytics = useCallback(async () => {
     try { setAnalytics(await api.getAnalytics()) } catch { /* non-fatal */ }
   }, [])
 
+  const fetchJobs = useCallback(async (): Promise<PaginatedResponse<Job>> => {
+    switch (tab) {
+      case 'resume':      return api.getResumeMatches(page, PAGE_SIZE, !!filters.include_senior, undefined, resumeSort, filters)
+      case 'entry-level': return api.getEntryLevelJobs(filters, page, PAGE_SIZE)
+      case 'best':        return api.getBestJobs(filters, page, PAGE_SIZE)
+      case 'saved':       return api.getSavedJobs(page, PAGE_SIZE)
+      case 'applied':     return api.getAppliedJobs(page, PAGE_SIZE)
+      default:            return api.getJobs(filters, page, PAGE_SIZE)
+    }
+  }, [tab, filters, page, resumeSort])
+
   const loadJobs = useCallback(async () => {
     if (NO_FETCH.includes(tab)) return
-    setLoading(true)
+    const key = `${tab}|${JSON.stringify(filters)}|${page}|${resumeSort}`
+    const cached = jobsCache.current.get(key)
+    if (cached) {
+      setPaginatedJobs(cached)   // instant paint from cache
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     setError(null)
     try {
-      let data: PaginatedResponse<Job>
-      switch (tab) {
-        case 'resume':      data = await api.getResumeMatches(page, PAGE_SIZE, !!filters.include_senior, undefined, resumeSort, filters); break
-        case 'entry-level': data = await api.getEntryLevelJobs(filters, page, PAGE_SIZE); break
-        case 'best':        data = await api.getBestJobs(filters, page, PAGE_SIZE); break
-        case 'saved':       data = await api.getSavedJobs(page, PAGE_SIZE); break
-        case 'applied':     data = await api.getAppliedJobs(page, PAGE_SIZE); break
-        default:            data = await api.getJobs(filters, page, PAGE_SIZE)
-      }
+      const data = await fetchJobs()
+      jobsCache.current.set(key, data)
       setPaginatedJobs(data)
-      if (selectedJob) {
-        const updated = data.items.find((j) => j.id === selectedJob.id)
-        if (updated) setSelectedJob(updated)
-      }
-      // Overlay resume-match badges on cards (other tabs) — one batch call.
+      setSelectedJob((cur) => (cur ? data.items.find((j) => j.id === cur.id) ?? cur : cur))
+      // Overlay resume-match badges on cards (non-resume tabs) — one batch call.
       if (tab !== 'resume' && data.items.length) {
         api.getMatchBatch(data.items.map((j) => j.id)).then(setMatchMap).catch(() => setMatchMap({}))
-      } else {
+      } else if (tab === 'resume') {
         setMatchMap({})
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load jobs')
+      if (!cached) setError(e instanceof Error ? e.message : 'Failed to load jobs')
     } finally {
       setLoading(false)
     }
-  }, [tab, filters, page, selectedJob])
+  }, [tab, filters, page, resumeSort, fetchJobs]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    loadJobs()
-    loadAnalytics()
-  }, [tab, filters, page, resumeSort]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Clears the cache and refetches — use after any mutation that changes data.
+  const reload = useCallback(() => {
+    jobsCache.current.clear()
+    loadJobs(); loadAnalytics()
+  }, [loadJobs, loadAnalytics])
+
+  // Jobs refetch on tab / filter / page / sort change. Analytics is GLOBAL
+  // (independent of tab) so it loads once on mount + after mutations — not on
+  // every tab click, which removes a round-trip from each switch.
+  useEffect(() => { loadJobs() }, [tab, filters, page, resumeSort]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadAnalytics() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lock body scroll while a mobile drawer or full-screen sheet is open.
   const sheetOpen = isMobile && selectedJob !== null
@@ -278,11 +299,11 @@ export default function App() {
           const runs = (await api.getScrapeRuns()).sort((a, b) => (a.started_at < b.started_at ? 1 : -1))
           const latest = runs[0]
           if (latest && latest.id !== prevId && latest.finished_at) {
-            setRefreshing(false); loadJobs(); loadAnalytics(); return
+            setRefreshing(false); reload(); return
           }
         } catch { /* keep polling */ }
         if (Date.now() < deadline) setTimeout(poll, 4000)
-        else { setRefreshing(false); loadJobs(); loadAnalytics() }
+        else { setRefreshing(false); reload() }
       }
       setTimeout(poll, 4000)
     } catch { setRefreshing(false) }
@@ -291,7 +312,7 @@ export default function App() {
   async function handleQuickAction(job: Job, action: 'saved' | 'applied' | 'ignored') {
     const newStatus = job.active_status === action ? 'active' : action
     await api.updateJobStatus(job.id, { active_status: newStatus })
-    loadJobs(); loadAnalytics()
+    reload()
   }
 
   // Resume Matches gets the filter sidebar too (consistent filtering across tabs).
@@ -346,10 +367,10 @@ export default function App() {
               !isMobile && showSidebar ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0 }}>
                   <FilterSidebar filters={filters} onChange={changeFilters} totalCount={paginatedJobs?.total_count ?? 0} hideSort />
-                  <ResumeIntel onChanged={() => { loadJobs(); loadAnalytics() }} />
+                  <ResumeIntel onChanged={reload} />
                 </div>
               ) : (
-                <ResumeIntel onChanged={() => { loadJobs(); loadAnalytics() }} />
+                <ResumeIntel onChanged={reload} />
               )
             ) : !isMobile && showSidebar ? (
               <FilterSidebar filters={filters} onChange={changeFilters} totalCount={paginatedJobs?.total_count ?? 0} />
@@ -435,7 +456,7 @@ export default function App() {
             </div>
 
             {!isMobile && showPanel && (
-              <JobDetailsPanel job={selectedJob} onClose={() => setSelectedJob(null)} onUpdate={() => { loadJobs(); loadAnalytics() }} />
+              <JobDetailsPanel job={selectedJob} onClose={() => setSelectedJob(null)} onUpdate={reload} />
             )}
           </div>
         )}
@@ -464,7 +485,7 @@ export default function App() {
             mobile
             job={selectedJob}
             onClose={() => setSelectedJob(null)}
-            onUpdate={() => { loadJobs(); loadAnalytics() }}
+            onUpdate={reload}
           />
         </div>
       )}

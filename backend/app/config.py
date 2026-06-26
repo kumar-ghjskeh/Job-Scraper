@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     # dashboard is populated without waiting for the first scheduled run).
     run_scrape_on_startup: bool = False
 
+    # Run the in-process APScheduler (tier-based scrapes + daily digest). OFF by
+    # default: scraping is done externally by GitHub Actions (scrape.yml), so the
+    # web service stays a lean read-only API. Enabling it on the free Render tier
+    # makes scrapes compete with request serving and trips the health check.
+    enable_scheduler: bool = False
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def split_cors(cls, v: Any) -> list[str]:
