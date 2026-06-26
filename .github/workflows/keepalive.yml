@@ -1,12 +1,19 @@
 name: Keep backend awake
 
-# Pings the Render health endpoint every ~10 minutes so the free-tier web
-# service does not spin down. While it's awake the APScheduler tier-based
-# scrapes + daily digest actually run. No third-party uptime service needed.
+# Pings the Render health endpoint every ~10 minutes during waking hours so the
+# free-tier web service is warm when you open the app (no 30–60s cold start).
+#
+# Why only a daytime window (not 24/7): Render's free web service has a monthly
+# instance-hour budget. Keeping it awake 24/7 sits right at the edge and risks a
+# month-end suspension. Pinging only ~06:00–24:00 ET keeps it warm during all
+# realistic usage while staying well under the cap; it sleeps overnight. This
+# does NOT affect scraping — that runs independently in scrape.yml writing
+# straight to Postgres, 24/7.
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # every 10 minutes (GitHub may delay during peak load)
+    # UTC. 10–23 + 0–3 UTC ≈ 06:00–24:00 America/New_York (EDT). ~18h/day.
+    - cron: "*/10 10-23,0-3 * * *"
   workflow_dispatch: {}        # lets you run it manually from the Actions tab
 
 jobs:

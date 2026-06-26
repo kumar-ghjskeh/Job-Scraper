@@ -7,7 +7,7 @@ name: Scrape jobs (24/7)
 
 on:
   schedule:
-    - cron: "0 */6 * * *"   # every 6 hours (UTC)
+    - cron: "0 */4 * * *"   # every 4 hours = 6 scrapes/day (UTC), runs 24/7 on GitHub
   workflow_dispatch: {}       # manual "Run workflow" button
 
 concurrency:
