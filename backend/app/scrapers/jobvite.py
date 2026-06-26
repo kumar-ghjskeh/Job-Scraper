@@ -52,6 +52,21 @@ def _strip_html(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", s or "")).strip()
 
 
+def _parse_iso(s: str):
+    """Parse a JSON-LD datePosted ("2026-02-17T20:54:33Z" or "2026-02-17")."""
+    import datetime as _dt
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        return _dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except Exception:
+        try:
+            return _dt.datetime.strptime(s[:10], "%Y-%m-%d")
+        except Exception:
+            return None
+
+
 class JobviteScraper(BaseScraper):
     async def fetch_jobs(self) -> list[JobData]:
         host = (self.config.get("jobvite_host", "") or "").replace("https://", "").strip("/")
@@ -117,5 +132,10 @@ class JobviteScraper(BaseScraper):
                 if full:
                     j.full_description_text = full
                     j.description_snippet = full[:600]
+                dm = re.search(r'"datePosted"\s*:\s*"([^"]+)"', r.text)
+                if dm:
+                    pd = _parse_iso(dm.group(1))
+                    if pd:
+                        j.posted_date = pd
             except Exception:
                 continue

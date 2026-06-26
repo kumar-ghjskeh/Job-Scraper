@@ -2,7 +2,7 @@ import type { Job } from '../lib/types'
 import { Icon } from './Icon'
 import { matchColor } from './ScoreGauge'
 import { CompanyLogo } from './CompanyLogo'
-import { fmtDate } from '../lib/datetime'
+import { freshness } from '../lib/datetime'
 
 interface Props {
   job: Job
@@ -43,6 +43,9 @@ const isNew = (d: string) => Date.now() - new Date(d).getTime() < 24 * 60 * 60 *
 
 export function JobCard({ job, selected, onClick, onQuickAction, extraLocations = [], resumeMatch }: Props) {
   const fresh = isNew(job.first_seen_at)
+  // Honest freshness: real posted date when known ("Posted 3d ago"), else when we
+  // first saw it ("Added 5d ago"). Drives the relative line at the card footer.
+  const fr = freshness(job.posted_date, job.posted_date_known, job.first_seen_at)
   const saved = job.active_status === 'saved'
   const rm = resumeMatch ?? job.resume_match
   // The ring always shows New Grad Fit (the primary score for this candidate);
@@ -150,9 +153,15 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
           {saved && <span style={{ fontSize: 11.5, color: 'var(--primary)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}><Icon name="bookmarkFilled" size={12} color="var(--primary)" /> Saved</span>}
           {job.active_status === 'applied' && <span style={{ fontSize: 11.5, color: 'var(--success)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}><Icon name="checkCircle" size={12} color="var(--success)" /> Applied</span>}
           {job.active_status === 'ignored' && <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontWeight: 600 }}>Ignored</span>}
-          <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
-            {job.posted_date ? `Posted ${fmtDate(job.posted_date)}` : 'Recently posted'}
-          </span>
+          {fr.label && (
+            <span
+              title={fr.exact ? 'Posting date from the source' : 'Date the role first appeared on our radar (source did not provide a post date)'}
+              style={{ fontSize: 11.5, fontWeight: fr.isNew ? 700 : 400, color: fr.isNew ? 'var(--success)' : 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+            >
+              <Icon name="clock" size={11} color={fr.isNew ? 'var(--success)' : 'var(--text-tertiary)'} />
+              {fr.label}{!fr.exact && <span style={{ opacity: 0.7 }}>~</span>}
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 7 }}>
