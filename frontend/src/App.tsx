@@ -434,7 +434,7 @@ export default function App() {
                       job={g.job}
                       extraLocations={g.extraLocations}
                       resumeMatch={tab === 'resume' ? g.job.resume_match : matchMap[String(g.job.id)]?.resume_match}
-                      resumePrimary={tab === 'resume'}
+                      ringMetric={tab === 'resume' ? resumeSort : undefined}
                       selected={selectedJob?.id === g.job.id}
                       onClick={() => setSelectedJob(selectedJob?.id === g.job.id ? null : g.job)}
                       onQuickAction={(action) => handleQuickAction(g.job, action)}

@@ -11,8 +11,9 @@ interface Props {
   onQuickAction: (action: 'saved' | 'applied' | 'ignored') => void
   extraLocations?: string[]
   resumeMatch?: number
-  /** On the Resume Matches tab, show the resume-match % as the primary ring. */
-  resumePrimary?: boolean
+  /** Active Resume-Matches sort. When 'resume_match', the headline ring shows the
+   *  Resume Match % so the dominant number matches the list order. */
+  ringMetric?: string
 }
 
 // New Grad Fit ring colour — gold only for a true Excellent (90+) fit.
@@ -41,18 +42,26 @@ function locationPill(label: string): string {
 }
 const isNew = (d: string) => Date.now() - new Date(d).getTime() < 24 * 60 * 60 * 1000
 
-export function JobCard({ job, selected, onClick, onQuickAction, extraLocations = [], resumeMatch }: Props) {
+export function JobCard({ job, selected, onClick, onQuickAction, extraLocations = [], resumeMatch, ringMetric }: Props) {
   const fresh = isNew(job.first_seen_at)
   // Honest freshness: real posted date when known ("Posted 3d ago"), else when we
   // first saw it ("Added 5d ago"). Drives the relative line at the card footer.
   const fr = freshness(job.posted_date, job.posted_date_known, job.first_seen_at)
   const saved = job.active_status === 'saved'
   const rm = resumeMatch ?? job.resume_match
-  // The ring always shows New Grad Fit (the primary score for this candidate);
-  // Resume Match is a smaller secondary badge.
   const ng = job.new_grad_fit ?? 0
-  const ngc = ngColor(ng)
   const ngLabel = job.new_grad_fit_label || ''
+  // Headline ring: normally New Grad Fit. But when the list is sorted by Best
+  // Resume Match, the ring shows Resume Match so the dominant number matches the
+  // order (otherwise a card with a lower NG-fit but higher resume-match looks
+  // out of order). The other metric stays visible as the small pill.
+  const ringIsRm = ringMetric === 'resume_match' && rm !== undefined && rm !== null
+  const ringVal = ringIsRm ? (rm as number) : ng
+  const ringColor = ringIsRm ? matchColor(rm as number) : ngColor(ng)
+  const ringLabel = ringIsRm ? 'Match' : ngLabel
+  const ringTitle = ringIsRm
+    ? `Resume Match ${rm}%`
+    : `New Grad Fit ${ng} — ${job.overall_recommendation || ngLabel}`
   const risk = job.eligibility_risk
   const h1b = job.sponsors_h1b
 
@@ -80,7 +89,11 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{job.company}</span>
             <span className={`badge tier-${(job.company_priority || 'c').toLowerCase()}`}>{job.company_priority}</span>
-            {rm !== undefined && rm !== null && (
+            {ringIsRm ? (
+              <span className="pill" style={{ background: 'transparent', color: ngColor(ng), border: `1px solid ${ngColor(ng)}`, fontWeight: 700, fontSize: 10.5 }}>
+                <Icon name="target" size={10} color={ngColor(ng)} /> NG Fit {ng}
+              </span>
+            ) : rm !== undefined && rm !== null && (
               <span className="pill" style={{ background: 'transparent', color: matchColor(rm), border: `1px solid ${matchColor(rm)}`, fontWeight: 700, fontSize: 10.5 }}>
                 <Icon name="target" size={10} color={matchColor(rm)} /> Resume {rm}%
               </span>
@@ -89,17 +102,17 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
           </div>
         </div>
 
-        {/* Score ring — New Grad Fit (how realistic this role is for a new grad) */}
+        {/* Headline score ring — New Grad Fit, or Resume Match when sorted by it */}
         <div
-          title={`New Grad Fit ${ng} — ${job.overall_recommendation || ngLabel}`}
+          title={ringTitle}
           style={{
             width: 54, height: 54, borderRadius: '50%', background: 'var(--surface-muted)',
-            border: `2.5px solid ${ngc}`, display: 'flex', flexDirection: 'column',
+            border: `2.5px solid ${ringColor}`, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center', flexShrink: 0, textAlign: 'center',
           }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: ngc, lineHeight: 1 }}>{ng}</div>
-          <div style={{ fontSize: 7.5, color: ngc, fontWeight: 700, letterSpacing: '0.01em', marginTop: 1, padding: '0 2px' }}>
-            {ngLabel}
+          <div style={{ fontSize: 16, fontWeight: 800, color: ringColor, lineHeight: 1 }}>{ringIsRm ? `${ringVal}%` : ringVal}</div>
+          <div style={{ fontSize: 7.5, color: ringColor, fontWeight: 700, letterSpacing: '0.01em', marginTop: 1, padding: '0 2px' }}>
+            {ringLabel}
           </div>
         </div>
       </div>

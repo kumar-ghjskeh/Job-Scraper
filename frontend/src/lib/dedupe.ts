@@ -24,7 +24,12 @@ export function groupByCanonical(jobs: Job[]): JobGroup[] {
 
   return order.map((key) => {
     const items = groups.get(key)!
-    items.sort((a, b) => b.match_score - a.match_score)
+    // The representative MUST be the first-appearing member. The server returns
+    // the list already sorted by the active criterion (resume_match, new-grad
+    // fit, …), so the first member of a group is its best-ranked instance — and
+    // the group is positioned at exactly that member's rank. Picking any other
+    // member (e.g. highest match_score) would display a value that doesn't match
+    // the card's position, making an 80% match appear above an 86% one.
     const primary = items[0]
     const locations = Array.from(
       new Set(items.map((i) => i.location).filter((l): l is string => !!l && l.trim().length > 0))
