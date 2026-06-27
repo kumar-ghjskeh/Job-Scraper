@@ -317,8 +317,8 @@ companies:
     eightfold_tenant: "qualcomm"
     eightfold_domain: "qualcomm.com"
     search_keywords: ["verification", "rtl", "asic", "design verification", "soc", "modem"]
-    notes: "Eightfold pcsx API behind anti-bot — scraped via the local real-browser engine."
-    enabled: false
+    notes: "Eightfold position API — scraped via the cloud curl_cffi pass (engine:cf). Verified live: 155 jobs, all RTL/DV."
+    enabled: true
 
   - name: "Arm"
     category: "Tier1"
