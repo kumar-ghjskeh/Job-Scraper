@@ -9,6 +9,7 @@ Do Not Add.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Optional
 
 from .resume_parser import (
@@ -41,9 +42,27 @@ for _s in PROTOCOLS: _AREA[_s] = "rtl"
 for _s in TOOLS: _AREA[_s] = "tool"
 
 
+@lru_cache(maxsize=8192)
+def _extract_cached(t: str) -> tuple:
+    return tuple(canon for canon, pats in _ALL.items() if any(re.search(p, t) for p in pats))
+
+
 def extract_job_skills(job_text: str) -> list[str]:
-    t = (job_text or "").lower()
-    return [canon for canon, pats in _ALL.items() if any(re.search(p, t) for p in pats)]
+    """Canonical skills/keywords found in the text. Cached (same posting text →
+    same result) so the heavy taxonomy regex runs once per distinct posting."""
+    return list(_extract_cached((job_text or "").lower()))
+
+
+def job_skills_for(job: dict) -> list[str]:
+    """Prefer the precomputed `job_skills` stored on the posting (fast split);
+    fall back to live extraction when it isn't populated yet."""
+    stored = job.get("job_skills")
+    if stored:
+        return [s for s in stored.split(",") if s]
+    return extract_job_skills(" ".join([
+        job.get("job_title", ""), job.get("cleaned_description", "") or "",
+        job.get("matched_keywords", "") or "",
+    ]))
 
 
 def _area_strength(profile: dict) -> dict[str, int]:
@@ -261,15 +280,19 @@ def _domain_score(profile: dict, job: dict) -> int:
     return 55
 
 
-def compute_match(profile: dict, job: dict) -> dict:
+def compute_match(profile: dict, job: dict, lite: bool = False) -> dict:
     """job is a dict with job_title, cleaned_description, matched_keywords,
     role_category, match_score, is_candidate_friendly, eligibility_risk,
-    sponsors_h1b, first_seen_at-ish freshness flag."""
+    sponsors_h1b, first_seen_at-ish freshness flag.
+
+    lite=True returns only the scores + capped matched/missing skills — used for
+    ranking the full job set fast (skips the per-job interview prep, tailoring
+    suggestions, and why-matches that only the detail view needs)."""
     job_text = " ".join([
         job.get("job_title", ""), job.get("cleaned_description", "") or "",
         job.get("matched_keywords", "") or "",
     ])
-    job_skills = extract_job_skills(job_text)
+    job_skills = job_skills_for(job)
     resume_skills = set(profile.get("all_skills", []))
 
     matched = [s for s in job_skills if s in resume_skills]
@@ -352,6 +375,23 @@ def compute_match(profile: dict, job: dict) -> dict:
     elig_pen = 12 if job.get("eligibility_risk") == "high" else (5 if job.get("eligibility_risk") == "medium" else 0)
     priority_score = 0.55 * level_fit + 0.45 * overlap_match - elig_pen
     apply_priority = "High" if priority_score >= 72 else ("Medium" if priority_score >= 52 else "Low")
+
+    # Fast path for list ranking — everything the cards/sort need, none of the
+    # heavy per-job detail (interview prep, suggestions, why-matches).
+    if lite:
+        return {
+            "resume_match": resume_match,
+            "new_grad_fit": ng_fit,
+            "experienced_fit": exp_fit,
+            "overall_recommendation": recommendation,
+            "match_breakdown": match_breakdown,
+            "defensibility": defensibility,
+            "apply_priority": apply_priority,
+            "apply_priority_score": round(priority_score, 1),
+            "matched_skills": matched[:6],
+            "missing_skills": missing[:6],
+            "recommended_resume": _recommended_resume(job.get("role_category", ""), profile),
+        }
 
     # Why matches
     why = []

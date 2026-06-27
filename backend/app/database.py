@@ -37,6 +37,19 @@ engine = create_engine(DATABASE_URL, **_engine_kwargs)
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
+    # Postgres (Neon): create_all won't ALTER an existing table, so add new
+    # columns idempotently. Keep this list current with additive model columns.
+    if not _is_sqlite:
+        from sqlalchemy import text
+        _pg_add_columns = [
+            ("job_postings", "job_skills", "TEXT NOT NULL DEFAULT ''"),
+        ]
+        try:
+            with engine.begin() as conn:
+                for tbl, col_name, decl in _pg_add_columns:
+                    conn.execute(text(f'ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col_name} {decl}'))
+        except Exception as e:
+            logger.warning("Postgres column ensure warning: %s", e)
     # Run SQLite column migrations for existing databases
     if settings.database_url.startswith("sqlite:///"):
         db_path = settings.database_url.replace("sqlite:///", "")

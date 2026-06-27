@@ -127,6 +127,10 @@ class JobPosting(SQLModel, table=True):
     # ── Scoring ───────────────────────────────────────────────────
     match_score: int = 0   # intrinsic RTL/DV role relevance (USA not scored)
     matched_keywords: str = ""
+    # Cache of the canonical skills/keywords extracted from this posting (comma-
+    # separated), precomputed at scrape time so résumé matching doesn't re-run the
+    # full keyword-taxonomy regex over every job on each request.
+    job_skills: str = ""
     score_breakdown_json: str = ""
     relevance_score_label: str = ""
     # Job-intrinsic fit scores (resume-independent) — New Grad Fit is the primary

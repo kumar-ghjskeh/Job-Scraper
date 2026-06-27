@@ -187,6 +187,13 @@ async def persist_company_results(
                 )
                 ex_fit = experienced_fit_score(sen_level, is_senior, ymin)
 
+                # Precompute the résumé-matching skill set so matching never has
+                # to run the full keyword taxonomy over this posting at request time.
+                from .resume_match import extract_job_skills
+                jskills = ",".join(extract_job_skills(
+                    " ".join([raw.job_title, cleaned_desc or "", ", ".join(matched_kws)])
+                ))
+
                 import json
                 job = JobPosting(
                     company=company_name,
@@ -226,6 +233,7 @@ async def persist_company_results(
                     new_grad_fit=ng_fit,
                     experienced_fit=ex_fit,
                     matched_keywords=", ".join(matched_kws),
+                    job_skills=jskills,
                     score_breakdown_json=score_breakdown_json(breakdown),
                     relevance_score_label=score_to_label(score),
                     description_snippet=snippet,

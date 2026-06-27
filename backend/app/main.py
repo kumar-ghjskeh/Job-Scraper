@@ -812,7 +812,7 @@ def _job_match_input(job: JobPosting) -> dict:
     return {
         "job_title": job.job_title, "cleaned_description": job.cleaned_description,
         "matched_keywords": job.matched_keywords, "role_category": job.role_category,
-        "company": job.company, "company_priority": job.company_priority,
+        "job_skills": job.job_skills, "company": job.company, "company_priority": job.company_priority,
         "match_score": job.match_score, "is_candidate_friendly": job.is_candidate_friendly,
         "eligibility_risk": job.eligibility_risk, "sponsors_h1b": job.sponsors_h1b,
         "is_fresh": is_fresh,
@@ -949,23 +949,12 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
         include_unknown_location=include_unknown_location, include_software=include_software,
         role_flags=role_flags, state=state, h1b_only=h1b_only, page=1, limit=5000,
     )
-    scored = []
-    for job in jobs:
-        m = compute_match(profile, _job_match_input(job))
-        item = JobResponse.model_validate(job).model_dump()
-        item["resume_match"] = m["resume_match"]
-        item["new_grad_fit"] = m["new_grad_fit"]
-        item["experienced_fit"] = m["experienced_fit"]
-        item["overall_recommendation"] = m["overall_recommendation"]
-        item["match_breakdown"] = m["match_breakdown"]
-        item["defensibility"] = m["defensibility"]
-        item["apply_priority"] = m["apply_priority"]
-        item["apply_priority_score"] = m["apply_priority_score"]
-        item["matched_skills"] = m["matched_skills"][:6]
-        item["missing_skills"] = m["missing_skills"][:6]
-        scored.append(item)
-    bd = lambda it, k: (it.get("match_breakdown") or {}).get(k, 0)  # noqa: E731
-    _fresh = lambda it: str(it.get("posted_date") or it.get("first_seen_at") or "")  # noqa: E731
+    # Score every filtered job with the LITE path (fast — no per-job interview
+    # prep / suggestions), rank, then fully serialize ONLY the current page. This
+    # keeps the endpoint responsive on the free tier even with hundreds of jobs.
+    scored = [(job, compute_match(profile, _job_match_input(job), lite=True)) for job in jobs]
+    bd = lambda m, k: (m.get("match_breakdown") or {}).get(k, 0)  # noqa: E731
+    _fresh = lambda job: str(getattr(job, "posted_date", None) or getattr(job, "first_seen_at", None) or "")  # noqa: E731
     # Recruiter-grade sorts. New Grad Fit is the primary candidate signal; each
     # breaks ties on a second signal so the orderings are genuinely distinct.
     #   new_grad_fit — most realistic for a new grad first
@@ -975,18 +964,31 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
     #   newest       — by trusted posted date
     #   recent       — by when we first saw it
     sort_keys = {
-        "new_grad_fit": lambda it: (it["new_grad_fit"], it["resume_match"]),
-        "match": lambda it: (it.get("apply_priority_score", 0), it["resume_match"]),
-        "resume_match": lambda it: (it["resume_match"], it["new_grad_fit"]),
-        "apply_priority": lambda it: (it.get("apply_priority_score", 0), it["new_grad_fit"]),
-        "experience": lambda it: (bd(it, "experience"), it["resume_match"]),
-        "newest": lambda it: (_fresh(it), it["resume_match"]),
-        "recent": lambda it: (str(it.get("first_seen_at") or ""), it["resume_match"]),
+        "new_grad_fit": lambda t: (t[1]["new_grad_fit"], t[1]["resume_match"]),
+        "match": lambda t: (t[1].get("apply_priority_score", 0), t[1]["resume_match"]),
+        "resume_match": lambda t: (t[1]["resume_match"], t[1]["new_grad_fit"]),
+        "apply_priority": lambda t: (t[1].get("apply_priority_score", 0), t[1]["new_grad_fit"]),
+        "experience": lambda t: (bd(t[1], "experience"), t[1]["resume_match"]),
+        "newest": lambda t: (_fresh(t[0]), t[1]["resume_match"]),
+        "recent": lambda t: (str(getattr(t[0], "first_seen_at", None) or ""), t[1]["resume_match"]),
     }
     scored.sort(key=sort_keys.get(sort, sort_keys["match"]), reverse=True)
     total = len(scored)
     start = (page - 1) * limit
-    page_items = scored[start:start + limit]
+    page_items = []
+    for job, m in scored[start:start + limit]:
+        item = JobResponse.model_validate(job).model_dump()
+        item["resume_match"] = m["resume_match"]
+        item["new_grad_fit"] = m["new_grad_fit"]
+        item["experienced_fit"] = m["experienced_fit"]
+        item["overall_recommendation"] = m["overall_recommendation"]
+        item["match_breakdown"] = m["match_breakdown"]
+        item["defensibility"] = m["defensibility"]
+        item["apply_priority"] = m["apply_priority"]
+        item["apply_priority_score"] = m["apply_priority_score"]
+        item["matched_skills"] = m["matched_skills"]
+        item["missing_skills"] = m["missing_skills"]
+        page_items.append(item)
     total_pages = max(1, (total + limit - 1) // limit)
     return {"items": page_items, "total_count": total, "page": page, "limit": limit,
             "total_pages": total_pages, "has_next": page < total_pages, "has_prev": page > 1}
@@ -1003,7 +1005,7 @@ def job_match_batch(payload: dict, session: SessionDep):
     for jid in ids:
         job = session.get(JobPosting, jid)
         if job:
-            m = compute_match(profile, _job_match_input(job))
+            m = compute_match(profile, _job_match_input(job), lite=True)
             out[str(jid)] = {"resume_match": m["resume_match"], "apply_priority": m["apply_priority"]}
     return {"matches": out}
 
