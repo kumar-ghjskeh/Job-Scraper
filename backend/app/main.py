@@ -305,6 +305,7 @@ def _build_job_query(
     role_flags: Optional[str] = None,
     state: Optional[str] = None,
     h1b_only: bool = False,
+    relevant_only: bool = True,
     sort_by: str = "new_grad_fit",
     sort_order: str = "desc",
     page: int = 1,
@@ -471,6 +472,16 @@ def _build_job_query(
     # Exclude software-only roles unless explicitly requested
     if not include_software:
         conditions.append(JobPosting.is_software_only == False)
+
+    # Relevance gate — keep discovery strictly on-motto (frontend semiconductor:
+    # RTL design + verification/DV/ASIC and adjacent silicon-design categories).
+    # Hides software, unclassifiable, and adjacent/backup roles so diversified
+    # employers (equipment makers, etc.) can't introduce nuisance. Saved/Applied
+    # tabs pass relevant_only=False since the user explicitly chose those jobs.
+    if relevant_only:
+        conditions.append(
+            col(JobPosting.role_category).notin_(("Software / Compiler", "Unknown", "Adjacent / Backup"))
+        )
 
     # Role flags filter: comma-separated list of flag names that must be True
     if role_flags:
@@ -673,7 +684,7 @@ def removed_jobs(session: SessionDep, page: int = 1, limit: int = 50):
 def saved_jobs(session: SessionDep, page: int = 1, limit: int = 50):
     items, total = _build_job_query(
         session, status="saved", usa_only=False, include_senior=True,
-        page=page, limit=limit,
+        relevant_only=False, page=page, limit=limit,
     )
     return _paginate(items, total, page, limit)
 
@@ -682,7 +693,7 @@ def saved_jobs(session: SessionDep, page: int = 1, limit: int = 50):
 def applied_jobs(session: SessionDep, page: int = 1, limit: int = 50):
     items, total = _build_job_query(
         session, status="applied", usa_only=False, include_senior=True,
-        sort_by="applied_at", page=page, limit=limit,
+        relevant_only=False, sort_by="applied_at", page=page, limit=limit,
     )
     return _paginate(items, total, page, limit)
 

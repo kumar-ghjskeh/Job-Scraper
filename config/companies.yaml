@@ -166,8 +166,8 @@ companies:
     workday_career_site: "latticesemiconductorscareers"
     engine: "cf"
     search_keywords: ["verification", "rtl", "fpga", "design verification", "digital design"]
-    notes: "Workday behind anti-bot — scraped via curl_cffi (engine:cf)."
-    enabled: false
+    notes: "Workday behind anti-bot — scraped via curl_cffi (engine:cf). Verified live (FPGA)."
+    enabled: true
 
   - name: "MatX"
     category: "AI Accelerator"
@@ -487,8 +487,8 @@ companies:
     workday_instance: "wd5"
     workday_career_site: "External"
     search_keywords: ["verification", "rtl", "design verification", "fpga", "digital design", "soc"]
-    notes: "Workday serves httpx a maintenance page — scraped via the local real-browser engine."
-    enabled: false
+    notes: "Workday behind anti-bot — scraped via the cloud curl_cffi pass (engine:cf). Verified live."
+    enabled: true
   - name: "Renesas Electronics"
     category: "Tier1"
     priority: "B"
@@ -522,8 +522,8 @@ companies:
     workday_instance: "wd1"
     workday_career_site: "External_Careers"
     search_keywords: ["verification", "rtl", "design verification", "asic", "soc", "digital design"]
-    notes: "Workday serves httpx a maintenance page — scraped via the local real-browser engine."
-    enabled: false
+    notes: "Workday behind anti-bot — scraped via the cloud curl_cffi pass (engine:cf). Verified live (EDA, DV-rich)."
+    enabled: true
   - name: "KLA"
     category: "Semiconductor Equipment"
     priority: "B"
@@ -533,9 +533,9 @@ companies:
     workday_tenant: "kla"
     workday_instance: "wd1"
     workday_career_site: "Search"
-    search_keywords: ["verification", "rtl", "design verification", "fpga", "digital design"]
-    notes: "Workday serves httpx a maintenance page — scraped via the local real-browser engine."
-    enabled: false
+    search_keywords: ["design verification", "rtl design", "asic verification", "fpga", "digital design"]
+    notes: "Workday behind anti-bot — scraped via the cloud curl_cffi pass (engine:cf). Equipment maker: tight keywords + relevance gate keep it on-motto."
+    enabled: true
   - name: "Applied Materials"
     category: "Semiconductor Equipment"
     priority: "B"
@@ -545,9 +545,9 @@ companies:
     workday_tenant: "amat"
     workday_instance: "wd1"
     workday_career_site: "External"
-    search_keywords: ["verification", "rtl", "design verification", "fpga", "digital design"]
-    notes: "Workday serves httpx a maintenance page — scraped via the local real-browser engine."
-    enabled: false
+    search_keywords: ["design verification", "rtl design", "asic verification", "fpga", "digital design"]
+    notes: "Workday behind anti-bot — scraped via the cloud curl_cffi pass (engine:cf). Equipment maker: tight keywords + relevance gate keep it on-motto."
+    enabled: true
   - name: "MediaTek"
     category: "Tier1"
     priority: "B"
@@ -593,8 +593,8 @@ companies:
     workday_career_site: "SiliconlabsCareers"
     engine: "cf"
     search_keywords: ["verification", "rtl", "design verification", "fpga", "digital design"]
-    notes: "Workday behind anti-bot — scraped via curl_cffi (engine:cf)."
-    enabled: false
+    notes: "Workday behind anti-bot — scraped via curl_cffi (engine:cf). Verified live."
+    enabled: true
   - name: "Ambarella"
     category: "AI Vision"
     priority: "B"
@@ -790,10 +790,12 @@ companies:
   - name: "Flex Logix"
     category: "FPGA / eFPGA"
     priority: "C"
-    careers_url: "https://www.google.com/search?q=Flex+Logix+FPGA+verification+jobs+careers"
-    ats_platform: "generic"
-    notes: "Direct search — custom careers portal."
-    enabled: false
+    careers_url: "https://job-boards.greenhouse.io/flex"
+    ats_platform: "greenhouse"
+    greenhouse_board: "flex"
+    search_keywords: ["verification", "rtl", "fpga", "design verification", "digital design"]
+    notes: "Greenhouse public JSON (board: flex) — discovered live, clean-API httpx pass."
+    enabled: true
   - name: "Quadric"
     category: "Edge AI"
     priority: "C"
