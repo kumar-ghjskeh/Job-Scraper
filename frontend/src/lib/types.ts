@@ -139,6 +139,7 @@ export interface JobMatch {
   matched_skills: string[]
   missing_skills: string[]
   matched_projects: string[]
+  matched_projects_detail?: { title: string; backs: string[] }[]
   recommended_resume: string
   why_matches: string[]
   tailoring_suggestions: TailoringSuggestion[]

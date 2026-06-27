@@ -554,15 +554,31 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
                   </div>
                 </div>
 
-                {matchData.matched_projects.length > 0 && (
+                {(matchData.matched_projects_detail?.length || matchData.matched_projects.length) > 0 && (
                   <div>
-                    <div className="section-header">Your matching projects</div>
+                    <div className="section-header">Your matching projects · what each one backs</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {matchData.matched_projects.map((p, i) => (
-                        <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', background: 'var(--surface-muted)', borderRadius: 6, padding: '7px 10px', display: 'flex', gap: 7, alignItems: 'flex-start' }}>
-                          <Icon name="checkCircle" size={13} color="var(--success)" /> <span>{p}</span>
-                        </div>
-                      ))}
+                      {matchData.matched_projects_detail?.length ? (
+                        matchData.matched_projects_detail.map((p, i) => (
+                          <div key={i} style={{ background: 'var(--surface-muted)', borderRadius: 7, padding: '8px 11px' }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', gap: 7, alignItems: 'center' }}>
+                              <Icon name="checkCircle" size={13} color="var(--success)" /> {p.title}
+                            </div>
+                            {p.backs.length > 0 && (
+                              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6, paddingLeft: 20 }}>
+                                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Backs this role's</span>
+                                {p.backs.map((b) => <span key={b} className="skill-chip" style={{ fontSize: 10.5 }}>{b}</span>)}
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        matchData.matched_projects.map((p, i) => (
+                          <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', background: 'var(--surface-muted)', borderRadius: 6, padding: '7px 10px', display: 'flex', gap: 7, alignItems: 'flex-start' }}>
+                            <Icon name="checkCircle" size={13} color="var(--success)" /> <span>{p}</span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}

@@ -74,24 +74,82 @@ def _area_strength(profile: dict) -> dict[str, int]:
     }
 
 
+# Words in a project description that signal it backs a given skill area — used to
+# point a "Safe to Add" suggestion at the candidate's concrete supporting project.
+_AREA_PROJECT_HINTS = {
+    "rtl": ("rtl", "verilog", "vhdl", "design", "fifo", "cpu", "alu", "axi", "fpga",
+            "cdc", "fsm", "soc", "datapath", "pipeline", "memory", "cache"),
+    "dv": ("verification", "uvm", "testbench", "scoreboard", "coverage", "assertion",
+           "sva", "monitor", "driver", "sequence", "constrained"),
+    "dft": ("scan", "atpg", "mbist", "bist", "dft", "boundary"),
+    "tool": (),
+}
+
+
+def _short_title(proj: str) -> str:
+    t = re.split(r"\s+[—:]|\s-\s|\(", proj, 1)[0].strip()
+    return (t or proj)[:60].strip()
+
+
+# Past-tense verbs that begin résumé BULLET lines (not project titles).
+_BULLET_VERBS = frozenset((
+    "built", "verified", "implemented", "ran", "created", "designed", "debugged",
+    "developed", "added", "executed", "achieved", "reached", "used", "performed",
+    "wrote", "configured", "integrated", "analyzed", "optimized", "reduced",
+    "improved", "led", "collaborated", "architected", "validated", "simulated",
+    "measured", "protection", "ver", "designed",
+))
+
+
+def _looks_like_title(s: str) -> bool:
+    """Heuristic: a real project title is short, capitalized, and doesn't start
+    like a bullet ("Verified …", "Built …") — used to keep the matching-projects
+    row clean when the parser captures bullet fragments as projects."""
+    s = (s or "").strip()
+    if not s or not s[0].isupper():
+        return False
+    words = s.split()
+    if len(words) > 8:
+        return False
+    return words[0].lower().rstrip(".,") not in _BULLET_VERBS
+
+
+def _evidence_project(skill: str, area: str, projects: list[str]) -> str:
+    """A concrete project that supports this skill — first by direct mention, then
+    by area. Returns a short project title, or "" if none."""
+    sl = skill.lower()
+    for p in projects:
+        if sl in p.lower():
+            return _short_title(p)
+    for p in projects:
+        pl = p.lower()
+        if any(h in pl for h in _AREA_PROJECT_HINTS.get(area, ())):
+            return _short_title(p)
+    return ""
+
+
 def _classify_suggestion(skill: str, profile: dict, strengths: dict[str, int]) -> tuple[str, str]:
     """Return (tier, rationale) for a missing skill. Never fabricate."""
     resume_skills = set(profile.get("all_skills", []))
+    projects = profile.get("projects", []) or []
     # 1. Equivalent already present → reword
     for equiv in _EQUIVALENT.get(skill, []):
         if equiv in resume_skills:
-            return "Reword Only", f"Your resume shows {equiv}; reword to surface “{skill}”."
+            return "Reword Only", f"Your résumé already shows {equiv} — reword it to surface “{skill}” explicitly."
     area = _AREA.get(skill, "tool")
     # 2. Specific tools/protocols you've never used → never claim
     if skill in _TOOLSET:
         if strengths.get("tool", 0) >= 3 or strengths.get(area, 0) >= 3:
-            return "Learn First", f"Adjacent to your background, but learn {skill} before claiming it."
-        return "Do Not Add", f"No supporting experience with {skill} — leave it off."
+            return "Learn First", f"Adjacent to your background, but learn {skill} hands-on before claiming it."
+        return "Do Not Add", f"No supporting experience with {skill} — leave it off to avoid an ATS/interview flag."
     # 3. Concept/methodology in a strong area → safe (implied by your work)
     if strengths.get(area, 0) >= 3:
+        ev = _evidence_project(skill, area, projects)
+        if ev:
+            return "Safe to Add", f"Your “{ev}” project already demonstrates this {area.upper()} work — safe to state {skill} explicitly."
         return "Safe to Add", f"Well-supported by your {area.upper()} experience — safe to make explicit."
     if strengths.get(area, 0) >= 1:
-        return "Learn First", f"Some foundation, but strengthen {skill} before featuring it."
+        return "Learn First", f"Some {area.upper()} foundation, but strengthen {skill} before featuring it."
     return "Do Not Add", f"No supporting background for {skill} yet."
 
 
@@ -307,14 +365,24 @@ def compute_match(profile: dict, job: dict, lite: bool = False) -> dict:
     else:
         skills_score = 45  # no parseable JD skills
 
-    # 2. Matched projects (resume projects that touch the job's areas).
+    # 2. Matched projects (resume projects that touch the job's areas) + WHICH of
+    #    the job's signals/skills each one backs (for the "matching projects" row).
     job_signals = [s for s, pats in PROJECT_SIGNALS.items() if any(re.search(p, job_text.lower()) for p in pats)]
     matched_projects = []
+    matched_projects_detail = []
     for proj in profile.get("projects", []):
         pl = proj.lower()
-        if any(re.search(p, pl) for s in job_signals for p in PROJECT_SIGNALS[s]) or any(m.lower() in pl for m in matched[:6]):
+        sig_backs = [s for s in job_signals if any(re.search(p, pl) for p in PROJECT_SIGNALS[s])]
+        skill_backs = [m for m in matched[:8] if m.lower() in pl]
+        backs = sig_backs + [m for m in skill_backs if m not in sig_backs]
+        if backs:
             matched_projects.append(proj)
+            matched_projects_detail.append({"title": _short_title(proj), "backs": backs[:6]})
     matched_projects = matched_projects[:4]
+    # Display: prefer entries that read like real project titles (drop bullet-line
+    # fragments). Score below still uses the full matched count — display only.
+    _titled = [d for d in matched_projects_detail if _looks_like_title(d["title"])]
+    matched_projects_detail = (_titled or matched_projects_detail)[:4]
     projects_score = [40, 70, 90, 100][min(len(matched_projects), 3)]
 
     # 3. Domain alignment (role category vs resume focus).
@@ -426,6 +494,7 @@ def compute_match(profile: dict, job: dict, lite: bool = False) -> dict:
         "matched_skills": matched,
         "missing_skills": missing,
         "matched_projects": matched_projects,
+        "matched_projects_detail": matched_projects_detail,
         "recommended_resume": _recommended_resume(job.get("role_category", ""), profile),
         "why_matches": why,
         "tailoring_suggestions": suggestions,
