@@ -15,11 +15,13 @@ interface Props {
   hideSort?: boolean
 }
 
+// Only categories the relevance gate actually shows (Adjacent/Backup, Unknown,
+// Software are excluded server-side, so offering them here would mean 0 results).
 const CATEGORIES = [
   'Design Verification', 'RTL Design', 'SoC Verification',
   'CPU/GPU Verification', 'FPGA RTL', 'Formal Verification',
-  'Emulation', 'Pre-Silicon Validation', 'Post-Silicon Validation',
-  'EDA / Verification Tools', 'Adjacent / Backup',
+  'DFT', 'Emulation', 'Pre-Silicon Validation', 'Post-Silicon Validation',
+  'EDA / Verification Tools',
 ]
 const QUICK_KWS = [
   'UVM', 'SystemVerilog', 'SVA', 'Verilog', 'RTL',

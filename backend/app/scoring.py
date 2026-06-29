@@ -63,20 +63,41 @@ _CODESIGN_SIGNALS = [
 ]
 
 
+# Unambiguous RTL/DV ROLE PHRASES — if present the role is genuine hardware
+# design/verification and is NEVER software-only (overrides a co-occurring
+# "software"/"firmware" word). Specific phrases only — a bare "rtl" can appear in
+# software titles like "Software Engineer, RTL-to-GDS Flow".
+_STRONG_HW_TITLE = re.compile(
+    r"rtl design|rtl engineer|design verification|verification engineer|dv engineer"
+    r"|physical design|logic design|dft engineer|asic design|digital design"
+    r"|soc design|microarchitecture|formal verification|vlsi design|chip design"
+    r"|silicon design|circuit design|asic verification|design for test", re.I)
+
+# Clear software / firmware DEVELOPER titles — these are software even when they
+# name-drop hardware (GPU/FPGA/SoC kernels, drivers, synthesis tooling). This is
+# what stops "Principal Software Development Engineer - GPU/AI" leaking in.
+_SW_DEV_TITLE = re.compile(
+    r"software (developer|development|engineer)|\bsde\b|software architect"
+    r"|\bfirmware\b|device driver|\bkernel\b|compiler engineer|systems software"
+    r"|embedded software", re.I)
+
+
 def is_software_only(title: str, description: str = "") -> bool:
-    """True if job is purely software with no hardware overlap."""
+    """True if job is purely software/firmware with no RTL/DV hardware-design work."""
     title_l = title.lower()
+    # A real RTL/DV title term wins — never call it software-only.
+    if _STRONG_HW_TITLE.search(title_l):
+        return False
+    # A clear software/firmware developer title is software-only regardless of any
+    # hardware noun in the title/body.
+    if _SW_DEV_TITLE.search(title_l):
+        return True
+
     desc_l = description.lower()
     combined = title_l + " " + desc_l
-
-    # Must have a software-only title pattern
-    has_sw_title = any(
-        re.search(p, title_l) for p in _SOFTWARE_ONLY_TITLE_PATTERNS
-    )
-    if not has_sw_title:
+    # Otherwise: must have a software-only title pattern and no hardware overlap.
+    if not any(re.search(p, title_l) for p in _SOFTWARE_ONLY_TITLE_PATTERNS):
         return False
-
-    # If there's any hardware overlap signal, it's NOT software-only
     has_hw = any(sig in combined for sig in _HW_OVERLAP_SIGNALS)
     return not has_hw
 

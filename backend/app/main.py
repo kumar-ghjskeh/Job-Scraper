@@ -516,10 +516,14 @@ def _build_job_query(
         "job_title": JobPosting.job_title,
     }
     sort_col = sort_col_map.get(sort_by, JobPosting.new_grad_fit)
-    if sort_order == "asc":
-        stmt = stmt.order_by(col(sort_col).asc(), col(JobPosting.match_score).desc(), col(JobPosting.first_seen_at).desc())
-    else:
-        stmt = stmt.order_by(col(sort_col).desc(), col(JobPosting.match_score).desc(), col(JobPosting.first_seen_at).desc())
+    # NULLS LAST so a nullable sort key (posted_date) never floats undated jobs to
+    # the top of "Newest posted" — jobs with no real posting date rank last.
+    primary = col(sort_col).asc() if sort_order == "asc" else col(sort_col).desc()
+    stmt = stmt.order_by(
+        primary.nulls_last(),
+        col(JobPosting.match_score).desc(),
+        col(JobPosting.first_seen_at).desc(),
+    )
 
     # Paginate
     offset = (page - 1) * limit
@@ -708,6 +712,11 @@ def job_facets(session: SessionDep, usa_only: bool = True, include_software: boo
         )
     if not include_software:
         base_conds.append(JobPosting.is_software_only == False)
+    # Same relevance gate as discovery, so facet counts/categories match what the
+    # job list actually shows (no nuisance categories, no inflated counts).
+    base_conds.append(
+        col(JobPosting.role_category).notin_(("Software / Compiler", "Unknown", "Adjacent / Backup"))
+    )
 
     def facet_count(extra_conds):
         stmt = select(func.count(JobPosting.id)).where(*base_conds, *extra_conds)
@@ -965,7 +974,11 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
     # keeps the endpoint responsive on the free tier even with hundreds of jobs.
     scored = [(job, compute_match(profile, _job_match_input(job), lite=True)) for job in jobs]
     bd = lambda m, k: (m.get("match_breakdown") or {}).get(k, 0)  # noqa: E731
-    _fresh = lambda job: str(getattr(job, "posted_date", None) or getattr(job, "first_seen_at", None) or "")  # noqa: E731
+    # "Newest posted": rank jobs with a REAL posted date first (by that date), then
+    # undated jobs (by first-seen) — so an undated "Added today" never outranks a
+    # genuinely "Posted yesterday" job. Tuple sorts with reverse=True.
+    _fresh = lambda job: (1 if getattr(job, "posted_date", None) else 0,  # noqa: E731
+                          str(getattr(job, "posted_date", None) or getattr(job, "first_seen_at", None) or ""))
     # Recruiter-grade sorts. New Grad Fit is the primary candidate signal; each
     # breaks ties on a second signal so the orderings are genuinely distinct.
     #   new_grad_fit — most realistic for a new grad first
