@@ -465,9 +465,10 @@ companies:
     priority: "S"
     careers_url: "https://www.google.com/about/careers/applications/jobs/results/"
     ats_platform: "google"
-    search_keywords: ["hardware engineer", "silicon", "asic", "verification", "rtl", "tpu"]
-    notes: "careers.google.com v3 search API was retired (404); needs a refreshed adapter. Use the careers link for Google Silicon / TPU roles."
-    enabled: false
+    engine: "browser"
+    search_keywords: ["design verification", "rtl", "asic", "physical design", "tpu"]
+    notes: "google.com/about/careers is a JS SPA (v3 API retired) — scraped via the real-browser DOM engine (GoogleBrowserScraper), USA-filtered in the URL. Runs in the giants GitHub Actions job."
+    enabled: true
 
   - name: "Amazon"
     category: "Hyperscaler"
@@ -483,8 +484,8 @@ companies:
     priority: "A"
     careers_url: "https://careers.microsoft.com/us/en/search-results"
     ats_platform: "microsoft"
-    search_keywords: ["silicon engineer", "hardware verification", "asic", "fpga", "rtl"]
-    notes: "gcsservices.careers.microsoft.com blocks automated TLS handshakes; needs a browser-grade adapter. Use the careers link for Azure Maia silicon roles."
+    search_keywords: ["design verification", "rtl", "asic", "silicon design", "fpga"]
+    notes: "MicrosoftBrowserScraper exists in giants.py, but the careers SPA ignores the URL query param (returns unfiltered jobs) and MS has minimal silicon roles. Left without engine:browser so the runner skips it; re-add engine:browser once the search routing is solved. Low priority."
     enabled: false
 
   - name: "Meta"
@@ -492,9 +493,10 @@ companies:
     priority: "A"
     careers_url: "https://www.metacareers.com/jobs"
     ats_platform: "meta"
-    search_keywords: ["silicon", "asic", "hardware verification", "rtl", "mtia"]
-    notes: "metacareers GraphQL — needs dedicated scraper."
-    enabled: false
+    engine: "browser"
+    search_keywords: ["design verification", "rtl", "asic", "silicon", "mtia"]
+    notes: "metacareers.com is a JS SPA — scraped via the real-browser DOM engine (MetaBrowserScraper). USA enforced downstream (no clean URL filter). MTIA accelerator silicon roles. Runs in the giants GitHub Actions job."
+    enabled: true
 
   # ═════════════════════════════════════════════════════════════════════════
   #  🔎 DIRECT-SEARCH companies — top semiconductor employers whose career
