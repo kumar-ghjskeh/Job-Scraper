@@ -229,6 +229,16 @@ companies:
     notes: "Lever public JSON (atomcomputing) — discovered live."
     enabled: true
 
+  - name: "Normal Computing"
+    category: "Novel Silicon"
+    priority: "C"
+    careers_url: "https://jobs.ashbyhq.com/normalcomputing"
+    ats_platform: "ashby"
+    ashby_org: "normalcomputing"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "digital design"]
+    notes: "Ashby public JSON (normalcomputing) — discovered live (thermodynamic silicon); genuine Hardware Design Verification role."
+    enabled: true
+
   - name: "Waymo"
     category: "Cloud Silicon"
     priority: "A"
