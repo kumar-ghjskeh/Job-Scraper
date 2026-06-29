@@ -50,6 +50,21 @@ logger = logging.getLogger(__name__)
 ERROR_QUARANTINE_THRESHOLD = 8
 
 
+def _sane_posted_date(d, now):
+    """Trust a scraper-provided posted date only if it's a plausible PAST date.
+    A future date (Workday sometimes returns scheduled-publish dates) or absurdly
+    ancient one (parser noise) is rejected so the card honestly falls back to the
+    first-seen 'Added ~' label instead of showing a wrong 'Posted' date."""
+    if not d:
+        return None
+    dd = d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    if dd.date() > now.date():              # posting date is in the future
+        return None
+    if dd < now - timedelta(days=5 * 365):  # >5 yrs old → almost certainly noise
+        return None
+    return d
+
+
 async def persist_company_results(
     company_cfg: dict, raw_jobs: list, removed_threshold: int
 ) -> tuple[int, int]:
@@ -72,6 +87,7 @@ async def persist_company_results(
         for raw in raw_jobs:
             job_id_str = raw.job_id or ""
             found_ids.add(job_id_str or raw.apply_url)
+            posted = _sane_posted_date(raw.posted_date, now)  # validated (no future/noise)
 
             existing = find_existing(
                 session,
@@ -98,9 +114,14 @@ async def persist_company_results(
                             existing.full_description_text = raw.full_description_text
                         existing.description_snippet = truncate_description_cleanly(cleaned, length=300)
                         existing.data_quality_status = "ok"
-                if raw.posted_date and not existing.posted_date:
-                    existing.posted_date = raw.posted_date
+                if posted and not existing.posted_date:
+                    existing.posted_date = posted
                     existing.posted_date_known = True
+                # Heal a previously-stored future/garbage date if the source has
+                # since corrected it (or the validator now rejects it).
+                elif existing.posted_date and _sane_posted_date(existing.posted_date, now) is None:
+                    existing.posted_date = posted
+                    existing.posted_date_known = posted is not None
                 # Refresh the apply URL with the current logic so existing rows
                 # pick up the Workday deep-link fix (no more dead fallbacks).
                 url_result = process_apply_url(
@@ -166,7 +187,7 @@ async def persist_company_results(
                 sen_level, sen_conf = classify_seniority(raw.job_title, cleaned_desc)
                 role_known = bool(role_cat) and role_cat != "Unknown"
                 src_rel = source_reliability(company_cfg.get("ats_platform", ""))
-                posted_known = raw.posted_date is not None
+                posted_known = posted is not None
                 loc_label = canonical_location_label(
                     raw.location, loc_result.is_usa, loc_result.is_remote_usa,
                     remote_status, loc_result.confidence,
@@ -225,7 +246,7 @@ async def persist_company_results(
                     apply_url_reason=url_result.apply_url_reason,
                     source_url=raw.source_url,
                     ats_platform=company_cfg.get("ats_platform", ""),
-                    posted_date=raw.posted_date,
+                    posted_date=posted,
                     first_seen_at=now,
                     last_seen_at=now,
                     active_status=ActiveStatus.active,
