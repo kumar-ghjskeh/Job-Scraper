@@ -199,6 +199,36 @@ companies:
     locations_of_interest: ["San Jose", "Remote"]
     enabled: true
 
+  - name: "Graphcore"
+    category: "AI Accelerator"
+    priority: "B"
+    careers_url: "https://job-boards.greenhouse.io/graphcore"
+    ats_platform: "greenhouse"
+    greenhouse_board: "graphcore"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "soc", "digital design"]
+    notes: "Greenhouse public JSON (board: graphcore) — discovered live, 14 RTL/DV roles."
+    enabled: true
+
+  - name: "PsiQuantum"
+    category: "Quantum Silicon"
+    priority: "B"
+    careers_url: "https://job-boards.greenhouse.io/psiquantum"
+    ats_platform: "greenhouse"
+    greenhouse_board: "psiquantum"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "digital design"]
+    notes: "Greenhouse public JSON (board: psiquantum) — discovered live."
+    enabled: true
+
+  - name: "Atom Computing"
+    category: "Quantum Silicon"
+    priority: "C"
+    careers_url: "https://jobs.lever.co/atomcomputing"
+    ats_platform: "lever"
+    lever_company: "atomcomputing"
+    search_keywords: ["verification", "rtl", "design verification", "fpga", "digital design"]
+    notes: "Lever public JSON (atomcomputing) — discovered live."
+    enabled: true
+
   - name: "Waymo"
     category: "Cloud Silicon"
     priority: "A"
