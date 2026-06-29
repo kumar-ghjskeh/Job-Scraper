@@ -145,9 +145,14 @@ class BrowserEightfoldScraper(EightfoldScraper):
         return await resp.json()
 
 
-def browser_scraper_for(company_config: dict, context: Any) -> BrowserWorkdayScraper | BrowserEightfoldScraper:
+def browser_scraper_for(company_config: dict, context: Any):
     """Pick the right browser-backed scraper for a company by ATS platform."""
     ats = (company_config.get("ats_platform") or "").lower()
+    # Big-tech career SPAs (Apple/Google/…) are DOM-scraped, not API-through-browser.
+    from .giants import giant_browser_scraper_for
+    giant = giant_browser_scraper_for(company_config, context)
+    if giant is not None:
+        return giant
     if ats == "eightfold":
         return BrowserEightfoldScraper(company_config, context)
     return BrowserWorkdayScraper(company_config, context)

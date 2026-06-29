@@ -455,9 +455,10 @@ companies:
     priority: "S"
     careers_url: "https://jobs.apple.com/en-us/search"
     ats_platform: "apple"
-    search_keywords: ["verification engineer", "rtl", "silicon", "asic", "design verification"]
-    notes: "jobs.apple.com role-search API was revamped (old endpoint 404s); needs a refreshed adapter. Use the careers link to search Apple Silicon directly."
-    enabled: false
+    engine: "browser"
+    search_keywords: ["design verification", "rtl", "asic", "verification engineer", "digital design"]
+    notes: "jobs.apple.com is a JS SPA with no usable public API — scraped via the real-browser DOM engine (AppleBrowserScraper), USA-filtered in the URL. Runs in the dedicated giants GitHub Actions job (Chromium)."
+    enabled: true
 
   - name: "Google"
     category: "Hyperscaler"

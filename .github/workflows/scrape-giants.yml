@@ -1,0 +1,51 @@
+name: Scrape giants (browser)
+
+# Browser-based scraping for big-tech career SPAs (Apple, …) whose public APIs are
+# protected/obfuscated. Installs Chromium on GitHub's runner and DOM-scrapes the
+# rendered job listings (engine: browser companies). Kept SEPARATE from the main
+# browserless scrape so a browser/bot-detection failure here never affects the
+# reliable httpx + curl_cffi pass. Writes to the same production Postgres.
+#
+# Needs the same DATABASE_URL repo secret as the main scrape.
+
+on:
+  schedule:
+    - cron: "30 */6 * * *"   # every 6 hours (offset from the main scrape)
+  workflow_dispatch: {}       # manual "Run workflow" button (use this to test)
+
+concurrency:
+  group: scrape-giants
+  cancel-in-progress: false
+
+jobs:
+  scrape-giants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Check DATABASE_URL secret is configured
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::The DATABASE_URL repository secret is not set."
+            exit 1
+          fi
+
+      - name: Install dependencies + Chromium
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install -r backend/requirements-browser.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Run browser scraper (giants)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m backend.app.run_browser_scrape
