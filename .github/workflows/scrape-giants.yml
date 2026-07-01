@@ -38,11 +38,20 @@ jobs:
             exit 1
           fi
 
+      # Cache the downloaded Chromium binary across runs so each run only pays the
+      # (small) system-deps step, not the ~150 MB browser download.
+      - name: Cache Playwright Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+
       - name: Install dependencies + Chromium
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
           pip install -r backend/requirements-browser.txt
+          # Idempotent: skips the download when the cache restored the browser.
           python -m playwright install --with-deps chromium
 
       - name: Run browser scraper (giants)
