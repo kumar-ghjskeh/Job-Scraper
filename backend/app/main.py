@@ -1732,6 +1732,26 @@ class TailorIn(BaseModel):
     instructions: Optional[str] = None
 
 
+class CompileIn(BaseModel):
+    latex: str
+
+
+@app.post("/resume-studio/compile-pdf")
+def compile_resume_pdf(payload: CompileIn):
+    """Compile tailored LaTeX to a PDF via a free hosted compiler. On failure the
+    frontend falls back to the Overleaf hand-off, so a 502 here is non-fatal."""
+    from fastapi import Response
+    from .services.resume_studio import compile_latex_to_pdf
+    try:
+        pdf = compile_latex_to_pdf(payload.latex)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return Response(
+        content=pdf, media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="tailored-resume.pdf"'},
+    )
+
+
 def _assemble_tailor(session: Session, job_id: int, payload: TailorIn):
     job = session.get(JobPosting, job_id)
     if not job:

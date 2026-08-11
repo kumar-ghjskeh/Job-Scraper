@@ -7,7 +7,7 @@ type IconName =
   | 'checkCircle' | 'mapPin' | 'building' | 'activity' | 'star' | 'graduation'
   | 'briefcase' | 'globe' | 'home' | 'x' | 'copy' | 'external' | 'chevronLeft'
   | 'chevronRight' | 'sliders' | 'target' | 'clipboard' | 'sparkles' | 'bolt'
-  | 'layers' | 'eyeOff' | 'cpu' | 'list' | 'sun' | 'moon' | 'shield' | 'passport' | 'fileText' | 'clock' | 'bell'
+  | 'layers' | 'eyeOff' | 'cpu' | 'list' | 'sun' | 'moon' | 'shield' | 'passport' | 'fileText' | 'clock' | 'bell' | 'download'
 
 interface Props {
   name: IconName
@@ -39,6 +39,7 @@ const PATHS: Record<IconName, { d?: string; el?: React.ReactNode; fill?: boolean
   x: { el: <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></> },
   copy: { el: <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></> },
   external: { el: <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></> },
+  download: { el: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></> },
   chevronLeft: { el: <polyline points="15 18 9 12 15 6" /> },
   chevronRight: { el: <polyline points="9 18 15 12 9 6" /> },
   sliders: { el: <><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></> },

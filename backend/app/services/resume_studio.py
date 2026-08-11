@@ -88,6 +88,35 @@ def gemini_enabled() -> bool:
     return bool(settings.gemini_api_key)
 
 
+def compile_latex_to_pdf(latex: str) -> bytes:
+    """Compile LaTeX to a PDF via a free hosted compiler (YtoTech latex-on-http),
+    so the app needs no LaTeX engine of its own. Raises RuntimeError on any
+    failure so the frontend can fall back to the Overleaf hand-off."""
+    if not (latex or "").strip():
+        raise RuntimeError("No LaTeX to compile.")
+    try:
+        with httpx.Client(timeout=90) as client:
+            resp = client.post(
+                "https://latex.ytotech.com/builds/sync",
+                json={"compiler": "pdflatex",
+                      "resources": [{"main": True, "content": latex}]},
+            )
+    except Exception as e:
+        raise RuntimeError(f"Could not reach the PDF compiler: {e}") from e
+
+    ctype = resp.headers.get("content-type", "")
+    if resp.status_code in (200, 201) and ctype.startswith("application/pdf"):
+        return resp.content
+    # On a LaTeX error the service returns JSON logs; surface a short, readable bit.
+    detail = ""
+    try:
+        data = resp.json()
+        detail = (data.get("logs") or data.get("error") or "")[:400]
+    except Exception:
+        detail = resp.text[:400]
+    raise RuntimeError(f"PDF compile failed ({resp.status_code}). {detail}".strip())
+
+
 def generate_with_gemini(prompt: str) -> str:
     """Call Google's free Gemini API and return the generated LaTeX. Raises
     RuntimeError with a readable message on any failure so the API can surface it."""

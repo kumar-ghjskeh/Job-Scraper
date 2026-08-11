@@ -209,6 +209,10 @@ export const api = {
     const { data } = await axios.post(`${BASE}/jobs/${jobId}/tailor/generate`, body)
     return data
   },
+  async compileResumePdf(latex: string): Promise<Blob> {
+    const { data } = await axios.post(`${BASE}/resume-studio/compile-pdf`, { latex }, { responseType: 'blob' })
+    return data
+  },
   async getInterviewPrompt(jobId: number): Promise<{ prompt: string }> {
     const { data } = await axios.post(`${BASE}/jobs/${jobId}/interview-prep-prompt`, {})
     return data
