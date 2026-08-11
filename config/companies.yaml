@@ -239,6 +239,16 @@ companies:
     notes: "Ashby public JSON (normalcomputing) — discovered live (thermodynamic silicon); genuine Hardware Design Verification role."
     enabled: true
 
+  - name: "indie Semiconductor"
+    category: "Automotive Silicon"
+    priority: "C"
+    careers_url: "https://job-boards.greenhouse.io/indiesemiconductor"
+    ats_platform: "greenhouse"
+    greenhouse_board: "indiesemiconductor"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "digital design"]
+    notes: "Greenhouse public JSON (indiesemiconductor) — discovered live; automotive mixed-signal SoC (USA DV role in Aliso Viejo/San Jose)."
+    enabled: true
+
   - name: "Waymo"
     category: "Cloud Silicon"
     priority: "A"
