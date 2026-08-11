@@ -11,6 +11,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import and_
+from sqlalchemy.orm import defer
 from sqlmodel import Session, col, func, select
 
 from .config import settings
@@ -306,11 +307,17 @@ def _build_job_query(
     state: Optional[str] = None,
     h1b_only: bool = False,
     relevant_only: bool = True,
+    keep_cleaned: bool = False,
     sort_by: str = "new_grad_fit",
     sort_order: str = "desc",
     page: int = 1,
     limit: int = 50,
 ) -> tuple[list[JobPosting], int]:
+    # Heavy full-text columns are the dominant DB egress (Resume Matches alone
+    # pulls thousands of rows). List/ranking views never need the raw full text,
+    # so defer it — the detail endpoint (session.get) still loads it on demand.
+    # keep_cleaned=True keeps cleaned_description loaded for résumé-match ranking,
+    # which reads it; it's blanked in that endpoint's response instead.
 
     stmt = select(JobPosting)
     conditions = []
@@ -525,10 +532,24 @@ def _build_job_query(
         col(JobPosting.first_seen_at).desc(),
     )
 
+    # Defer heavy full-text columns so they aren't SELECTed (egress reduction).
+    deferred = [JobPosting.full_description_text]
+    if not keep_cleaned:
+        deferred.append(JobPosting.cleaned_description)
+    stmt = stmt.options(*[defer(c) for c in deferred])
+
     # Paginate
     offset = (page - 1) * limit
     stmt = stmt.offset(offset).limit(limit)
     items = session.exec(stmt).all()
+
+    # Populate the deferred fields with "" directly in each instance's __dict__ so
+    # response serialization reads the blank value instead of lazily re-querying
+    # the column per row (which would defeat the point and cause N+1 queries).
+    for job in items:
+        job.__dict__["full_description_text"] = ""
+        if not keep_cleaned:
+            job.__dict__["cleaned_description"] = ""
 
     return items, total_count
 
@@ -967,7 +988,8 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
         new_since_hours=new_since_hours, keyword=keyword, skills=skills,
         usa_only=usa_only, include_senior=include_senior,
         include_unknown_location=include_unknown_location, include_software=include_software,
-        role_flags=role_flags, state=state, h1b_only=h1b_only, page=1, limit=5000,
+        role_flags=role_flags, state=state, h1b_only=h1b_only,
+        keep_cleaned=True, page=1, limit=5000,   # ranking reads cleaned_description
     )
     # Score every filtered job with the LITE path (fast — no per-job interview
     # prep / suggestions), rank, then fully serialize ONLY the current page. This
@@ -1002,6 +1024,9 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
     page_items = []
     for job, m in scored[start:start + limit]:
         item = JobResponse.model_validate(job).model_dump()
+        # cleaned_description was loaded for ranking; don't ship it (the detail
+        # view fetches the full text on demand). Keeps the list payload small.
+        item["cleaned_description"] = ""
         item["resume_match"] = m["resume_match"]
         item["new_grad_fit"] = m["new_grad_fit"]
         item["experienced_fit"] = m["experienced_fit"]

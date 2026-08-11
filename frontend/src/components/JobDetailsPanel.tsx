@@ -117,6 +117,8 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
   const [matchLoading, setMatchLoading] = useState(false)
   const [similar, setSimilar] = useState<Job[]>([])
   const [similarLoading, setSimilarLoading] = useState(false)
+  // Full description is fetched on demand (list rows omit it to cut DB egress).
+  const [fullText, setFullText] = useState<string>('')
   // Draggable panel width (desktop). Persisted so it sticks across sessions.
   const [panelWidth, setPanelWidth] = useState<number>(() => {
     const v = Number(localStorage.getItem('ashborne-panel-width'))
@@ -167,6 +169,20 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
       .then((s) => { if (!cancelled) setSimilar(s) })
       .catch(() => { if (!cancelled) setSimilar([]) })
       .finally(() => { if (!cancelled) setSimilarLoading(false) })
+    return () => { cancelled = true }
+  }, [job?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch the full job (incl. the heavy description) only when a job is opened —
+  // list responses omit it. Seed from any text already on the list object.
+  useEffect(() => {
+    if (!job) { setFullText(''); return }
+    let cancelled = false
+    setFullText(job.cleaned_description || job.full_description_text || '')
+    api.getJob(job.id)
+      .then((full) => {
+        if (!cancelled) setFullText(full.cleaned_description || full.full_description_text || job.description_snippet || '')
+      })
+      .catch(() => { /* keep the seed/snippet */ })
     return () => { cancelled = true }
   }, [job?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -788,12 +804,12 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
                 <strong>Why this job:</strong> {job.relevance_reason}
               </div>
             )}
-            {(job.cleaned_description || job.full_description_text || job.description_snippet) ? (
+            {(fullText || job.description_snippet) ? (
               <div style={{
                 fontSize: 13, color: 'var(--text)', lineHeight: 1.75,
                 whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               }}>
-                {job.cleaned_description || job.full_description_text || job.description_snippet}
+                {fullText || job.description_snippet}
               </div>
             ) : (
               <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', paddingTop: 20 }}>

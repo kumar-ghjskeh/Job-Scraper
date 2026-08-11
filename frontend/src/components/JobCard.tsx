@@ -71,7 +71,9 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
   const keywords = job.matched_keywords
     ? job.matched_keywords.split(',').map((k) => k.trim()).filter((k) => k && !NOISE_KW.test(k)).slice(0, 6)
     : []
-  const snippet = job.cleaned_description || job.description_snippet || ''
+  // List rows no longer carry the full description (egress reduction) — use the
+  // small snippet for the card preview; the detail panel fetches the full text.
+  const snippet = job.description_snippet || ''
 
   return (
     <div className={`job-card${selected ? ' selected' : ''}`} onClick={onClick}>
