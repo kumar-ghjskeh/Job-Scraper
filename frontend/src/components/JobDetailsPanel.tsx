@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { fmtDateLong } from '../lib/datetime'
+import { fmtDateLong, freshness } from '../lib/datetime'
 import type { Job, JobMatch } from '../lib/types'
 import { Icon } from './Icon'
 import { InterviewPrepAI } from './InterviewPrepAI'
@@ -864,85 +864,131 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
           </div>
         )}
 
-        {detailTab === 'source' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <MetaRow label="Job ID (Internal)" value={String(job.id)} />
-            <MetaRow label="Company Job ID" value={job.job_id_from_company} />
-            <MetaRow label="ATS Platform" value={job.ats_platform} />
-            <div style={{ gridColumn: '1 / -1' }}>
-              <MetaRow label="Apply URL Status" value={
-                <span>
-                  <span style={{
-                    color: job.apply_url_status === 'ok' ? 'var(--success)' : 'var(--warning)',
-                    fontWeight: 600,
-                  }}>
-                    {job.apply_url_status || '—'}
-                  </span>
-                  {job.apply_url_reason && (
-                    <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>
-                      — {job.apply_url_reason}
+        {detailTab === 'source' && (() => {
+          const fr = freshness(job.posted_date, job.posted_date_known, job.first_seen_at)
+          const daysOpen = job.first_seen_at
+            ? Math.max(0, Math.floor((Date.now() - new Date(job.first_seen_at).getTime()) / 86_400_000))
+            : null
+          const yrs = job.years_required_min != null
+            ? (job.years_required_max != null && job.years_required_max !== job.years_required_min
+                ? `${job.years_required_min}–${job.years_required_max} yrs`
+                : `${job.years_required_min}+ yrs`)
+            : 'Not specified'
+          const h1b = job.sponsors_h1b === true ? 'Sponsors H1B'
+            : job.sponsors_h1b === false ? 'No sponsorship' : 'Unknown'
+          let roleFlags: string[] = []
+          try {
+            const rf = job.role_flags_json ? JSON.parse(job.role_flags_json) : {}
+            roleFlags = Object.keys(rf).filter((k) => rf[k]).map((k) => k.replace(/^is_/, '').replace(/_/g, ' '))
+          } catch { /* ignore */ }
+          const chips: string[] = []
+          if (job.is_entry_level) chips.push('Entry-level')
+          if (job.is_candidate_friendly) chips.push('Candidate-friendly')
+          if (job.is_hardware_software_codesign) chips.push('HW/SW co-design')
+          roleFlags.forEach((f) => { if (!chips.some((c) => c.toLowerCase() === f.toLowerCase())) chips.push(f) })
+          const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Posting timeline */}
+              <div>
+                <div className="section-header">Posting timeline</div>
+                <div style={grid}>
+                  <MetaRow label={fr.exact ? 'Posted' : 'Added (source gave no date)'} value={
+                    <span>{fr.exact && job.posted_date ? fmt(job.posted_date) : fmt(job.first_seen_at)}
+                      {fr.label && <span style={{ color: fr.isNew ? 'var(--success)' : 'var(--text-muted)', marginLeft: 6, fontWeight: 600, fontSize: 11.5 }}>· {fr.label}{!fr.exact && ' ~'}</span>}
                     </span>
+                  } />
+                  <MetaRow label="Actively listed" value={daysOpen != null ? `${daysOpen} day${daysOpen === 1 ? '' : 's'}` : '—'} />
+                  <MetaRow label="First seen on radar" value={fmt(job.first_seen_at)} />
+                  <MetaRow label="Last seen (still open)" value={fmt(job.last_seen_at)} />
+                </div>
+              </div>
+
+              {/* Role details */}
+              <div>
+                <div className="section-header">Role details</div>
+                <div style={grid}>
+                  <MetaRow label="Role category" value={job.role_category} />
+                  <MetaRow label="Experience level" value={
+                    <span>{job.experience_level}{job.seniority_confidence ? <span style={{ color: 'var(--text-muted)', fontSize: 11.5 }}> · {job.seniority_confidence}% conf</span> : null}</span>
+                  } />
+                  <MetaRow label="Experience required" value={yrs} />
+                  <MetaRow label="Role relevance" value={`${job.match_score}/100`} />
+                </div>
+                {chips.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                    {chips.map((c) => <span key={c} className="pill pill-neutral" style={{ fontSize: 11, textTransform: 'capitalize' }}>{c}</span>)}
+                  </div>
+                )}
+                {job.relevance_reason && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, background: 'var(--bg)', borderRadius: 8, padding: '9px 11px' }}>
+                    <strong style={{ color: 'var(--text-primary)' }}>Why it's relevant:</strong> {job.relevance_reason}
+                  </div>
+                )}
+              </div>
+
+              {/* Eligibility & location */}
+              <div>
+                <div className="section-header">Eligibility &amp; location</div>
+                <div style={grid}>
+                  <MetaRow label="Location" value={job.display_location || job.location} />
+                  <MetaRow label="Remote status" value={job.remote_status} />
+                  <MetaRow label="H1B sponsorship" value={
+                    <span style={{ color: job.sponsors_h1b === true ? 'var(--success)' : job.sponsors_h1b === false ? 'var(--warning)' : 'var(--text)', fontWeight: 600 }}>{h1b}</span>
+                  } />
+                  <MetaRow label="Eligibility risk" value={
+                    <span style={{ color: job.eligibility_risk === 'high' ? 'var(--danger)' : job.eligibility_risk === 'medium' ? 'var(--warning)' : 'var(--success)', fontWeight: 600, textTransform: 'capitalize' }}>{job.eligibility_risk || 'low'}</span>
+                  } />
+                </div>
+                {job.eligibility_terms && (
+                  <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
+                    Flags: {job.eligibility_terms}
+                  </div>
+                )}
+              </div>
+
+              {/* Company */}
+              <div>
+                <div className="section-header">Company</div>
+                <div style={grid}>
+                  <MetaRow label="Company" value={job.company} />
+                  <MetaRow label="Tier" value={`${job.company_priority}-Tier`} />
+                  <MetaRow label="Category" value={job.company_category} />
+                  <MetaRow label="Data quality" value={job.data_quality_score ? `${job.data_quality_score}/100` : '—'} />
+                </div>
+              </div>
+
+              {/* Trust & provenance */}
+              <div>
+                <div className="section-header">Source &amp; provenance</div>
+                <div style={grid}>
+                  <MetaRow label="ATS platform" value={job.ats_platform} />
+                  <MetaRow label="Source reliability" value={job.source_reliability} />
+                  <MetaRow label="Classification conf." value={job.classification_confidence ? `${job.classification_confidence}%` : '—'} />
+                  <MetaRow label="Location confidence" value={job.location_confidence > 0 ? `${Math.round(job.location_confidence * 100)}%` : '—'} />
+                  <MetaRow label="Apply link status" value={
+                    <span style={{ color: job.apply_url_status === 'ok' ? 'var(--success)' : 'var(--warning)', fontWeight: 600 }}>
+                      {job.apply_url_status || '—'}{job.apply_url_reason ? <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · {job.apply_url_reason}</span> : null}
+                    </span>
+                  } />
+                  <MetaRow label="Company job ID" value={job.job_id_from_company || String(job.id)} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Apply URL</div>
+                    <a href={job.safe_apply_url || job.apply_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: 'var(--primary)', wordBreak: 'break-all', display: 'block', lineHeight: 1.5 }}>{job.safe_apply_url || job.apply_url || '—'}</a>
+                  </div>
+                  {job.source_url && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Source URL</div>
+                      <a href={job.source_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: 'var(--primary)', wordBreak: 'break-all' }}>{job.source_url}</a>
+                    </div>
                   )}
-                </span>
-              } />
-            </div>
-            <div>
-              <div style={{
-                fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
-                textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4,
-              }}>
-                Safe Apply URL
-              </div>
-              <a
-                href={job.safe_apply_url || job.apply_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  fontSize: 11, color: 'var(--primary)', wordBreak: 'break-all',
-                  display: 'block', lineHeight: 1.5,
-                }}
-              >
-                {job.safe_apply_url || job.apply_url || '—'}
-              </a>
-            </div>
-            {job.original_apply_url && job.original_apply_url !== job.safe_apply_url && (
-              <div>
-                <div style={{
-                  fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
-                  textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4,
-                }}>
-                  Original Apply URL
                 </div>
-                <span style={{ fontSize: 11, color: 'var(--text-faint)', wordBreak: 'break-all', lineHeight: 1.5 }}>
-                  {job.original_apply_url}
-                </span>
               </div>
-            )}
-            {job.source_url && (
-              <div>
-                <div style={{
-                  fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
-                  textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4,
-                }}>
-                  Source URL
-                </div>
-                <a
-                  href={job.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontSize: 11, color: 'var(--primary)', wordBreak: 'break-all' }}
-                >
-                  {job.source_url}
-                </a>
-              </div>
-            )}
-            <MetaRow label="First Seen" value={fmt(job.first_seen_at)} />
-            <MetaRow label="Last Seen" value={fmt(job.last_seen_at)} />
-            <MetaRow label="Location Confidence" value={
-              job.location_confidence > 0 ? `${Math.round(job.location_confidence * 100)}%` : '—'
-            } />
-          </div>
-        )}
+            </div>
+          )
+        })()}
 
         {detailTab === 'notes' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
