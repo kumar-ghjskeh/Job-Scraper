@@ -11,6 +11,7 @@ import { SummaryCards } from './components/SummaryCards'
 import { TopNav, type Tab } from './components/TopNav'
 import { Icon } from './components/Icon'
 import { ResumeIntel } from './components/ResumeIntel'
+import { LegalModal, type LegalTab } from './components/LegalModal'
 import { groupByCanonical } from './lib/dedupe'
 import { useTheme } from './lib/theme'
 import { useIsMobile } from './lib/useIsMobile'
@@ -18,6 +19,11 @@ import { api } from './lib/api'
 import type { AnalyticsSummary, Filters, Job, PaginatedResponse } from './lib/types'
 
 const PAGE_SIZE = 50
+
+const footerLinkStyle: React.CSSProperties = {
+  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+  color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, textDecoration: 'underline',
+}
 
 const TAB_LABELS: Partial<Record<Tab, string>> = {
   'all': 'verified jobs',
@@ -153,6 +159,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [legal, setLegal] = useState<LegalTab | null>(null)
   const [matchMap, setMatchMap] = useState<Record<string, { resume_match: number; apply_priority: string }>>({})
   // Default to New Grad Fit: for a new grad, "show me the roles I can realistically
   // get, best fit first" is the most intuitive ranking (a ng=100 New-College-Grad
@@ -461,7 +468,17 @@ export default function App() {
             )}
           </div>
         )}
+        {/* Footer — legal + data controls (required for app-store publishing) */}
+        <footer style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--text-tertiary)' }}>
+          <span>© {new Date().getFullYear()} Ashborne Silicon</span>
+          <span aria-hidden>·</span>
+          <button onClick={() => setLegal('privacy')} style={footerLinkStyle}>Privacy</button>
+          <button onClick={() => setLegal('terms')} style={footerLinkStyle}>Terms</button>
+          <button onClick={() => setLegal('data')} style={footerLinkStyle}>Delete my data</button>
+        </footer>
       </main>
+
+      {legal && <LegalModal tab={legal} onChangeTab={setLegal} onClose={() => setLegal(null)} />}
 
       {/* ── Mobile: filters drawer ── */}
       {isMobile && filtersOpen && (

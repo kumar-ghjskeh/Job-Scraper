@@ -960,6 +960,28 @@ def delete_resume(session: SessionDep):
     return {"ok": True}
 
 
+@app.delete("/account/data")
+def delete_all_my_data(session: SessionDep):
+    """Erase all personal data stored by the app: uploaded résumés + parsed
+    profiles, the saved master-résumé LaTeX / tailoring instructions, saved
+    searches (watchlists), and push-notification subscriptions. Public job
+    postings are not personal data and are unaffected. Backs the 'Delete my data'
+    control required for app-store privacy compliance."""
+    deleted = {"resumes": 0, "settings": 0, "watchlists": 0, "push_subscriptions": 0}
+    for r in session.exec(select(ResumeProfile)).all():
+        session.delete(r); deleted["resumes"] += 1
+    for key in (_MASTER_LATEX_KEY, _TAILOR_INSTRUCTIONS_KEY):
+        s = session.get(Setting, key)
+        if s:
+            session.delete(s); deleted["settings"] += 1
+    for w in session.exec(select(Watchlist)).all():
+        session.delete(w); deleted["watchlists"] += 1
+    for ps in session.exec(select(PushSubscription)).all():
+        session.delete(ps); deleted["push_subscriptions"] += 1
+    session.commit()
+    return {"ok": True, "deleted": deleted}
+
+
 @app.get("/jobs/resume-matches")
 def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(default=50, ge=1, le=200),
                    include_senior: bool = False, resume_id: Optional[int] = None, sort: str = "match",

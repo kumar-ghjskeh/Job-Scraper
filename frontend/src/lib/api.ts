@@ -167,6 +167,11 @@ export const api = {
     await axios.delete(`${BASE}/resume`)
   },
 
+  async deleteAllMyData(): Promise<{ ok: boolean; deleted: Record<string, number> }> {
+    const { data } = await axios.delete(`${BASE}/account/data`)
+    return data
+  },
+
   async getResumeMatches(page = 1, limit = 50, includeSenior = false, resumeId?: number, sort = 'match', filters: Filters = {}): Promise<PaginatedResponse<Job> & { no_resume?: boolean }> {
     // Forward the SAME active filters as the other tabs so Resume Matches respects
     // them (the backend routes them through the shared query builder). The tab's own
