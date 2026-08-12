@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
+import urllib.parse
 from datetime import datetime
 from typing import Any
 
@@ -280,11 +281,84 @@ class MetaBrowserScraper(BrowserDomScraper):
         return result
 
 
+class GenericDomScraper(BrowserDomScraper):
+    """Config-driven browser DOM scraper — a NEW company needs only config, no
+    code. Loads a search-results URL (keyword rendered in the URL so results
+    appear on load) and extracts cards with CSS selectors from config:
+
+      dom_url:      search URL with a ``{kw}`` placeholder (repeated per keyword).
+                    e.g. "https://careers.x.com/search?q={kw}"
+      dom_card:     CSS selector for each job-card element.
+      dom_title:    selector for the title inside a card (optional; default: the
+                    card's anchor / text).
+      dom_link:     selector for the apply <a> inside a card (optional; default:
+                    first <a> in the card).
+      dom_location: selector for the location inside a card (optional).
+      dom_base:     origin for turning relative hrefs absolute (optional; default:
+                    derived from dom_url).
+      dom_pages:    number of ``&page=N`` pages to append per keyword (optional).
+    """
+
+    def _search_urls(self) -> list[str]:
+        tmpl = self.config.get("dom_url", "")
+        if not tmpl:
+            return []
+        kws = self.config.get("search_keywords") or ["design verification", "rtl", "asic"]
+        pages = int(self.config.get("dom_pages", 1) or 1)
+        urls: list[str] = []
+        for kw in kws:
+            q = urllib.parse.quote(kw)
+            for pg in range(1, pages + 1):
+                u = tmpl.replace("{kw}", q)
+                if pages > 1:
+                    u += ("&" if "?" in u else "?") + f"page={pg}"
+                urls.append(u)
+        return urls
+
+    async def _extract(self, page) -> list[dict]:
+        cfg = {
+            "card": self.config.get("dom_card", ""),
+            "title": self.config.get("dom_title", ""),
+            "link": self.config.get("dom_link", ""),
+            "loc": self.config.get("dom_location", ""),
+        }
+        if not cfg["card"]:
+            return []
+        rows = await page.evaluate(r"""(cfg) => {
+            const out = [];
+            for (const c of document.querySelectorAll(cfg.card)) {
+                const a = cfg.link ? c.querySelector(cfg.link) : c.querySelector('a[href]');
+                const tEl = cfg.title ? c.querySelector(cfg.title) : null;
+                const title = ((tEl ? tEl.textContent : (a ? a.textContent : c.textContent)) || '').trim();
+                const href = a ? a.getAttribute('href') : '';
+                const lEl = cfg.loc ? c.querySelector(cfg.loc) : null;
+                const location = lEl ? lEl.textContent.replace(/\s+/g, ' ').trim() : '';
+                if (title) out.push({ title, href, location });
+            }
+            return out;
+        }""", cfg)
+
+        base = self.config.get("dom_base") or ("https://" + urllib.parse.urlparse(self.config.get("dom_url", "")).netloc)
+        result = []
+        for r in rows:
+            href = r.get("href") or ""
+            apply_url = href if href.startswith("http") else (base + (href if href.startswith("/") else "/" + href)) if href else base
+            m = re.search(r"(\d{4,})", href)
+            jid = m.group(1) if m else (href or r.get("title", ""))[:80]
+            result.append({
+                "job_id": jid, "title": r.get("title", "")[:140],
+                "apply_url": apply_url, "location": _clean_loc(r.get("location", "")),
+                "source_url": base, "snippet": r.get("title", ""),
+            })
+        return result
+
+
 _GIANTS = {
     "apple": AppleBrowserScraper,
     "google": GoogleBrowserScraper,
     "microsoft": MicrosoftBrowserScraper,
     "meta": MetaBrowserScraper,
+    "browser_dom": GenericDomScraper,
 }
 
 

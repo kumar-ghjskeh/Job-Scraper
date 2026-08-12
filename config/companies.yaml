@@ -898,3 +898,38 @@ companies:
     ats_platform: "generic"
     notes: "Direct search — FPGA / avionics hardware (check eligibility)."
     enabled: false
+  - name: "Ambiq"
+    category: "Low-Power SoC"
+    priority: "B"
+    careers_url: "https://boards.greenhouse.io/ambiqmicroinc"
+    ats_platform: "greenhouse"
+    greenhouse_board: "ambiqmicroinc"
+    search_keywords:
+      - "verification"
+      - "rtl"
+      - "design verification"
+      - "asic"
+      - "soc"
+      - "dft"
+    locations_of_interest:
+      - "Austin"
+      - "United States"
+    notes: "Greenhouse public API — verified live; strong Austin, TX RTL/DV/DFT/SoC roles."
+    enabled: true
+  - name: "Axiado"
+    category: "Security SoC"
+    priority: "C"
+    careers_url: "https://careers.smartrecruiters.com/axiado"
+    ats_platform: "smartrecruiters"
+    smartrecruiters_company: "axiado"
+    search_keywords:
+      - "verification"
+      - "rtl"
+      - "asic"
+      - "design verification"
+      - "soc"
+    locations_of_interest:
+      - "San Jose"
+      - "United States"
+    notes: "SmartRecruiters public API — verified live; US ASIC verification roles (San Jose) among global postings."
+    enabled: true
