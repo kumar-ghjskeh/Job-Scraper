@@ -611,10 +611,12 @@ companies:
   - name: "Skyworks Solutions"
     category: "RF / Analog"
     priority: "C"
-    careers_url: "https://www.skyworksinc.com/en/Careers"
-    ats_platform: "generic"
-    notes: "Workday anti-bot (422) — direct search."
-    enabled: false
+    careers_url: "https://careers.skyworksinc.com/jobs/"
+    ats_platform: "jobs2web"
+    jobs2web_host: "careers.skyworksinc.com"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "fpga"]
+    notes: "jobs2web / SAP SuccessFactors RMK (/services/jobs/search) — discovered live. RF/analog, few digital DV roles (USA verification role in Irvine); relevance gate keeps it on-motto."
+    enabled: true
   - name: "Qorvo"
     category: "RF / Analog"
     priority: "C"
@@ -664,11 +666,13 @@ companies:
     enabled: false
   - name: "Teradyne"
     category: "Test / ATE"
-    priority: "C"
-    careers_url: "https://careers.teradyne.com/"
-    ats_platform: "generic"
-    notes: "Workday anti-bot (422) — direct search."
-    enabled: false
+    priority: "B"
+    careers_url: "https://jobs.teradyne.com/jobs/"
+    ats_platform: "jobs2web"
+    jobs2web_host: "jobs.teradyne.com"
+    search_keywords: ["verification", "rtl", "design verification", "asic", "fpga"]
+    notes: "jobs2web / SAP SuccessFactors RMK (/services/jobs/search) — discovered live; 25+ USA digital/ASIC/FPGA Design Verification roles."
+    enabled: true
   - name: "Keysight Technologies"
     category: "Test / Instruments"
     priority: "C"
