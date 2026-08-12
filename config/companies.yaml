@@ -527,9 +527,12 @@ companies:
     category: "Tier1"
     priority: "B"
     careers_url: "https://careers.ti.com/"
-    ats_platform: "generic"
-    notes: "Direct search — custom careers portal."
-    enabled: false
+    ats_platform: "oracle"
+    oracle_host: "edbz.fa.us2.oraclecloud.com"
+    oracle_site: "CX"
+    search_keywords: ["verification", "rtl", "design verification", "digital design", "asic"]
+    notes: "Oracle Recruiting Cloud (recruitingCEJobRequisitions) — discovered live; digital DV/design roles (USA in Dallas/Knoxville)."
+    enabled: true
   - name: "Microchip Technology"
     category: "Tier1"
     priority: "B"

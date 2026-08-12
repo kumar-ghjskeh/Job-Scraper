@@ -13,6 +13,7 @@ from .icims import ICIMSScraper
 from .jobs2web import Jobs2WebScraper
 from .jobvite import JobviteScraper
 from .lever import LeverScraper
+from .oracle import OracleHcmScraper
 from .phenom import PhenomScraper
 from .radancy import RadancyScraper
 from .smartrecruiters import SmartRecruitersScraper
@@ -29,6 +30,7 @@ SCRAPER_MAP: dict[str, type[BaseScraper]] = {
     "eightfold": EightfoldScraper,
     "phenom": PhenomScraper,
     "jobs2web": Jobs2WebScraper,
+    "oracle": OracleHcmScraper,
     "jobvite": JobviteScraper,
     "avature": AvatureScraper,
     "radancy": RadancyScraper,
