@@ -117,12 +117,36 @@ class LocationResult:
     reason: str = ""
 
 
+# Foreign regions whose names CONTAIN a full US state name. Left intact, the
+# state name inside them reads as an unambiguous US signal, which suppresses the
+# explicit foreign-country check entirely — "Tijuana, Baja California, Mexico"
+# was being served as a California job.
+#
+# Each is rewritten to its COUNTRY before any matching runs, so the region still
+# excludes correctly even when the posting never names the country
+# ("Mexicali, Baja California" -> "mexicali, mexico" -> foreign), instead of
+# degrading to "location unknown".
+#
+# NOTE: only phrases where a US state name is a strict substring belong here.
+# Real US states that merely contain a country name ("New Mexico") must NOT be
+# listed — those already resolve correctly via the US-state-name match.
+_FALSE_FRIENDS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"\bbaja california(?:\s+sur)?\b", re.IGNORECASE), " mexico "),
+]
+
+
+def _mask_false_friends(loc: str) -> str:
+    for pat, repl in _FALSE_FRIENDS:
+        loc = pat.sub(repl, loc)
+    return loc
+
+
 def parse_location(location_raw: str, description: str = "") -> LocationResult:
     """Detect whether a job is in the USA and extract state/city."""
     if not location_raw and not description:
         return LocationResult(confidence=0.0, reason="no location data")
 
-    loc = (location_raw or "").lower().strip()
+    loc = _mask_false_friends((location_raw or "").lower().strip())
     desc_snippet = (description or "")[:500].lower()
     combined = loc + " " + desc_snippet
 
