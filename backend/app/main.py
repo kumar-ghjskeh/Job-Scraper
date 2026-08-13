@@ -10,7 +10,7 @@ from typing import Annotated, Any, Optional
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import and_
+from sqlalchemy import and_, case
 from sqlalchemy.orm import defer
 from sqlmodel import Session, col, func, select
 
@@ -299,6 +299,43 @@ def _effective_date():
     return func.coalesce(JobPosting.posted_date, JobPosting.first_seen_at)
 
 
+def _keyword_rank(keyword: str):
+    """How well does a row actually answer the query? (higher = better)
+
+    Keyword matching deliberately reaches into the full description so deep
+    terms ("coverage closure", "PCIe") still hit — but that means a broad term
+    like "RTL" matches ~70% of the corpus, and without a relevance key the
+    "best" result for "physical design" was whatever scored highest for new
+    grads (a Design Verification role). Title hits must outrank body mentions.
+
+    Tiers: whole-phrase title hit > company name > all tokens in the title >
+    curated keyword/category hit > single token in title > description-only.
+    """
+    from sqlmodel import or_ as sql_or
+
+    kw = " ".join(keyword.split())
+    phrase = f"%{kw}%"
+    toks = [t for t in kw.split() if t]
+    title = col(JobPosting.job_title)
+    ntitle = col(JobPosting.normalized_title)
+
+    whens = [
+        (title.ilike(phrase), 100),
+        (ntitle.ilike(phrase), 92),
+        (col(JobPosting.company).ilike(phrase), 88),
+    ]
+    if len(toks) > 1:
+        # All tokens present in the title, any order ("verification design").
+        whens.append((and_(*[title.ilike(f"%{t}%") for t in toks]), 75))
+    whens += [
+        (col(JobPosting.matched_keywords).ilike(phrase), 60),
+        (col(JobPosting.role_category).ilike(phrase), 55),
+    ]
+    if toks:
+        whens.append((sql_or(*[title.ilike(f"%{t}%") for t in toks]), 40))
+    return case(*whens, else_=10)
+
+
 def _build_job_query(
     session: Session,
     status: Optional[str] = None,
@@ -548,8 +585,16 @@ def _build_job_query(
     # the map holds SQL expressions as well as plain model columns, and both
     # expose .asc()/.desc() directly.)
     primary = sort_col.asc() if sort_order == "asc" else sort_col.desc()
+
+    # With a search query, how well the row matches the query leads the ordering
+    # — but only when the user hasn't explicitly picked a different sort. If they
+    # chose "Newest first", that wins and relevance becomes the tiebreaker.
+    order_keys = [primary.nulls_last()]
+    if keyword:
+        rank = _keyword_rank(keyword).desc()
+        order_keys = [rank, *order_keys] if sort_by == "new_grad_fit" else [*order_keys, rank]
     stmt = stmt.order_by(
-        primary.nulls_last(),
+        *order_keys,
         col(JobPosting.match_score).desc(),
         col(JobPosting.first_seen_at).desc(),
     )
