@@ -51,6 +51,14 @@ US_CITIES: list[tuple[str, str]] = [
     ("san bruno","CA"),("south san francisco","CA"),("fremont","CA"),
     ("santa barbara","CA"),("goleta","CA"),("thousand oaks","CA"),
     ("westlake village","CA"),
+    # Bare US city names seen live with no state attached.
+    # Bare US city names seen live with no state attached. Deliberately excludes
+    # over-generic words ("Allen", "Spring", "Hudson") that would false-positive
+    # on the bare-city match, which has no other signal to corroborate it.
+    ("cary","NC"),("richardson","TX"),("bay area","CA"),("morrisville","NC"),
+    ("longmont","CO"),("colorado springs","CO"),("broomfield","CO"),
+    ("mendota heights","MN"),("andover","MA"),("marlborough","MA"),
+    ("nashua","NH"),("cedar rapids","IA"),
 ]
 
 NON_USA_SIGNALS: frozenset[str] = frozenset({
@@ -73,6 +81,11 @@ NON_USA_SIGNALS: frozenset[str] = frozenset({
     "argentina","buenos aires","cordoba argentina",
     "brazil","sao paulo","campinas",
     "australia","sydney","melbourne",
+    # Bare foreign city names seen live in the corpus with no country attached,
+    # which left them "location unknown" and therefore visible in the USA view.
+    "kanata","catania","ho chi minh","belo horizonte","caen","rehovot","isr",
+    "alajuela","sofia","belgrade","cork","limerick","galway","krakow","wroclaw",
+    "gdansk","brno","timisoara","cluj","bucharest","budapest","prague","sofia",
 })
 
 # Explicit foreign COUNTRY/region names. These are strong signals: when one
@@ -91,6 +104,12 @@ FOREIGN_COUNTRIES: tuple[str, ...] = (
     "australia", "new zealand", "vietnam", "philippines", "thailand",
     "indonesia", "turkey", "ukraine", "uae", "united arab emirates",
     "saudi arabia", "egypt", "morocco", "south africa", "uk",
+    # Seen live in the corpus while still classified "location unknown", which
+    # let them surface in the USA-or-unknown view: Renesas/Sofia, Tenstorrent/
+    # Belgrade, Teradyne/Alajuela, plus their regional neighbours.
+    "bulgaria", "serbia", "costa rica", "croatia", "slovenia", "slovakia",
+    "lithuania", "latvia", "estonia", "colombia", "chile", "peru", "armenia",
+    "georgia (country)", "bosnia", "macedonia", "montenegro", "albania",
     # Clearly non-US regions (e.g. "Remote - Europe", "Remote, EMEA"). Deliberately
     # excludes "Americas"/"North America" which can include the US.
     "europe", "emea", "apac", "latam", "asia pacific",
@@ -139,6 +158,46 @@ def _mask_false_friends(loc: str) -> str:
     for pat, repl in _FALSE_FRIENDS:
         loc = pat.sub(repl, loc)
     return loc
+
+
+# Workday (and a few others) return a useless roll-up like "2 Locations" in the
+# list API when a req spans sites, but the apply URL still carries the real
+# primary site as a path slug:
+#   .../job/Folsom-CA/MTS--AI-Optimized-Memory_R123   -> "Folsom, CA"
+#   .../job/India---Hyderabad/Design-Engineer_R456    -> "India, Hyderabad"
+# Recovering it costs nothing (no extra request) and is the difference between
+# showing "2 Locations" and showing a real place — and between an India req
+# quietly sitting in the USA view and being correctly excluded.
+_URL_JOB_SLUG_RE = re.compile(r"/job/([^/?#]+)/[^/?#]*$", re.IGNORECASE)
+# Trailing street-address noise: "4420-Arrow-Ave", "3850-N-First-St", "Main-Site".
+_ADDR_NOISE_RE = re.compile(
+    r"[\s,]+\d[\w\s]*(?:st|street|ave|avenue|rd|road|blvd|dr|drive|way|pkwy|"
+    r"parkway|lane|ln|ct|court)?\s*$",
+    re.IGNORECASE,
+)
+
+
+def location_from_apply_url(apply_url: str) -> str:
+    """Best-effort human location parsed out of a job URL's path slug.
+
+    Returns "" when the URL carries no usable slug. The result is a plain
+    location string meant to be fed straight back into parse_location().
+    """
+    if not apply_url:
+        return ""
+    m = _URL_JOB_SLUG_RE.search(apply_url)
+    if not m:
+        return ""
+    slug = m.group(1)
+    # "---" separates location components; single "-" separates words.
+    text = slug.replace("---", ", ").replace("--", ", ").replace("-", " ")
+    text = text.replace("_", " ")
+    text = re.sub(r"\s+", " ", text).strip(" ,")
+    text = _ADDR_NOISE_RE.sub("", text).strip(" ,")
+    # A slug that is just a requisition id ("R2512345", "JR0123") is not a place.
+    if not text or re.fullmatch(r"[A-Za-z]{0,3}\d[\w\s]*", text):
+        return ""
+    return text
 
 
 def parse_location(location_raw: str, description: str = "") -> LocationResult:

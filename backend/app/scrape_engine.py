@@ -13,7 +13,7 @@ from .config import load_companies, load_schedule
 from .database import engine
 from .description_cleaner import clean_html_description, truncate_description_cleanly
 from .eligibility import detect_eligibility_risk
-from .location_utils import parse_location
+from .location_utils import location_from_apply_url, parse_location
 from .models import ActiveStatus, Company, JobPosting, ScrapeError, ScrapeRun
 from .scrapers import get_scraper
 from .quality import (
@@ -145,8 +145,20 @@ async def persist_company_results(
                     raw.description_snippet or raw_desc, length=300
                 )
 
-                # Location parsing
+                # Location parsing. Workday-style sources hand back a roll-up
+                # ("2 Locations") for multi-site reqs, which parses to "unknown"
+                # and then rides the USA-or-unknown view regardless of where the
+                # job really is. The apply URL still names the primary site, so
+                # fall back to it — free, and it both surfaces a real place and
+                # correctly excludes the foreign reqs hiding in that bucket.
                 loc_result = parse_location(raw.location, snippet)
+                if loc_result.confidence == 0.0:
+                    recovered = location_from_apply_url(raw.apply_url or "")
+                    if recovered:
+                        from_url = parse_location(recovered, snippet)
+                        if from_url.confidence > 0.0:
+                            loc_result = from_url
+                            raw.location = recovered
 
                 # Apply URL safety
                 url_result = process_apply_url(
