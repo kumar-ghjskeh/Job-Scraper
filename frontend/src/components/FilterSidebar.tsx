@@ -255,8 +255,8 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
             >
               <option value="new_grad_fit">Best New Grad Fit</option>
               <option value="match_score">Most relevant</option>
-              <option value="posted_date">Newest posted</option>
-              <option value="first_seen_at">Recently added</option>
+              <option value="posted_date">Newest first</option>
+              <option value="first_seen_at">Recently added to radar</option>
             </select>
           </div>
         )}
@@ -395,9 +395,13 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
           </div>
         </div>
 
-        {/* New Since */}
+        {/* New Since — matches the card's own freshness line: the real posted
+            date when the source gives one, else when we first saw the job. */}
         <div style={{ marginBottom: 16 }}>
-          <SectionHead title="Posted Within" />
+          <SectionHead title="Posted / Added Within" />
+          <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', margin: '-4px 0 6px' }}>
+            Matches the “Posted…／Added…” line on each card.
+          </div>
           <select
             value={filters.posted_within_hours ?? ''}
             onChange={(e) => set('posted_within_hours', e.target.value ? Number(e.target.value) : undefined)}

@@ -281,6 +281,24 @@ VALID_STATUSES = {s.value for s in ActiveStatus}
 
 # ── Job filter builder ─────────────────────────────────────────────────────────
 
+
+def _effective_date():
+    """The single source of truth for "how fresh is this job?".
+
+    Uses the company's real posted date when the source gave us one, and falls
+    back to when WE first saw it otherwise. This is exactly what the job card
+    already shows ("Posted 3d ago" vs "Added 3d ago"), so the recency FILTER,
+    the recency SORT and the card text can never disagree with each other.
+
+    Before this existed, recency filtering keyed off ``posted_date`` alone,
+    which silently hid every job from sources that don't publish a post date
+    (Google, Meta, …) from every "posted within" window and dumped them at the
+    bottom of "newest first". Undated jobs are not stale jobs — they're jobs
+    whose age we know from discovery instead of from the source.
+    """
+    return func.coalesce(JobPosting.posted_date, JobPosting.first_seen_at)
+
+
 def _build_job_query(
     session: Session,
     status: Optional[str] = None,
@@ -402,13 +420,13 @@ def _build_job_query(
         cutoff = datetime.now(timezone.utc) - timedelta(days=first_seen_days)
         conditions.append(JobPosting.first_seen_at >= cutoff)
 
-    # "Posted within" filters on the company's actual POSTED date (what the card
-    # shows), NOT when we scraped it. A job with no known posted date is excluded
-    # from short windows — we can't claim it was posted that recently.
+    # "Posted / added within" uses the effective date (real posted date when the
+    # source published one, else first-seen) so the window matches the freshness
+    # the card actually shows and never hides undated sources. See
+    # _effective_date().
     if posted_within_hours:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=posted_within_hours)
-        conditions.append(col(JobPosting.posted_date).is_not(None))
-        conditions.append(JobPosting.posted_date >= cutoff)
+        conditions.append(_effective_date() >= cutoff)
 
     if keyword:
         # Accurate multi-token search (portable SQLite + Postgres). Each token must
@@ -518,14 +536,18 @@ def _build_job_query(
         "experienced_fit": JobPosting.experienced_fit,
         "first_seen_at": JobPosting.first_seen_at,
         "last_seen_at": JobPosting.last_seen_at,
-        "posted_date": JobPosting.posted_date,
+        # Newest-first ranks on the effective date so undated sources (Google,
+        # Meta, …) sort by when we found them instead of being buried last.
+        "posted_date": _effective_date(),
         "company": JobPosting.company,
         "job_title": JobPosting.job_title,
     }
     sort_col = sort_col_map.get(sort_by, JobPosting.new_grad_fit)
-    # NULLS LAST so a nullable sort key (posted_date) never floats undated jobs to
-    # the top of "Newest posted" — jobs with no real posting date rank last.
-    primary = col(sort_col).asc() if sort_order == "asc" else col(sort_col).desc()
+    # NULLS LAST is kept as a safety net for any nullable sort key; the recency
+    # key is now COALESCE-backed so it is never null in practice. (No col() here:
+    # the map holds SQL expressions as well as plain model columns, and both
+    # expose .asc()/.desc() directly.)
+    primary = sort_col.asc() if sort_order == "asc" else sort_col.desc()
     stmt = stmt.order_by(
         primary.nulls_last(),
         col(JobPosting.match_score).desc(),
@@ -783,8 +805,10 @@ def job_facets(session: SessionDep, usa_only: bool = True, include_software: boo
         "candidate_friendly_count": facet_count([JobPosting.is_candidate_friendly == True]),
         "senior_count": facet_count([JobPosting.is_senior == True]),
         "remote_count": facet_count([col(JobPosting.remote_status).ilike("%remote%")]),
+        # Same effective-date basis as the "posted / added within 24h" filter, so
+        # the headline count and the filtered result can never disagree.
         "new_24h_count": facet_count([
-            JobPosting.first_seen_at >= datetime.now(timezone.utc) - timedelta(hours=24)
+            _effective_date() >= datetime.now(timezone.utc) - timedelta(hours=24)
         ]),
     }
 
@@ -1263,7 +1287,7 @@ def _company_stats_map(session: Session) -> dict[str, dict]:
                 (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0),
                 JobPosting.is_software_only == False,
             )).label("viewable"),
-            func.count().filter(JobPosting.first_seen_at >= cutoff_24h).label("new_today"),
+            func.count().filter(_effective_date() >= cutoff_24h).label("new_today"),
             func.avg(JobPosting.data_quality_score).label("avg_quality"),
         ).where(active).group_by(JobPosting.company)
     ).all()
@@ -1448,7 +1472,7 @@ def analytics_summary(session: SessionDep):
     # this endpoint ~2.5 s. One query = one round trip = one table scan.
     specs = [
         ("total_active",       [active_cond, usa_view]),
-        ("new_24h",            [active_cond, usa_view, JobPosting.first_seen_at >= cutoff_24h]),
+        ("new_24h",            [active_cond, usa_view, _effective_date() >= cutoff_24h]),
         ("entry_level",        [active_cond, usa_view,
                                 (JobPosting.is_entry_level == True) | (JobPosting.is_candidate_friendly == True),
                                 JobPosting.is_senior == False]),
