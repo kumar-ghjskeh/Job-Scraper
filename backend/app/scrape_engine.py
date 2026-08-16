@@ -6,6 +6,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import delete as sa_delete
 from sqlmodel import Session, col, select
 
 from .apply_url import process_apply_url
@@ -324,18 +325,32 @@ def maintain_scrape_runs(session: Session, keep: int = 20, stale_minutes: int = 
        row is stuck showing "running" forever and carries no useful data).
     2. FIFO-prune to the most recent ``keep`` *finished* runs (never deletes a run
        that is still legitimately in progress).
+
+    IMPORTANT: ``scrape_errors.scrape_run_id`` references ``scrape_runs.id`` with
+    no ON DELETE rule, so the child rows MUST be removed first. Deleting a run
+    that still had errors attached raised ForeignKeyViolation, and because this
+    runs at the very START of every scrape, that one bad row killed every scrape
+    on every engine before a single company was fetched — silently, in the two
+    passes that catch their own exceptions. Keep the child delete ahead of the
+    parent delete.
     """
     cutoff = datetime.utcnow() - timedelta(minutes=stale_minutes)
-    for r in session.exec(
+    doomed: list[ScrapeRun] = list(session.exec(
         select(ScrapeRun).where(ScrapeRun.finished_at == None, ScrapeRun.started_at < cutoff)  # noqa: E711
-    ).all():
-        session.delete(r)
+    ).all())
     all_runs = session.exec(
         select(ScrapeRun).order_by(col(ScrapeRun.started_at).desc())
     ).all()
-    for r in all_runs[keep:]:
-        if r.finished_at is not None:  # never prune a run that's still running
-            session.delete(r)
+    doomed += [r for r in all_runs[keep:] if r.finished_at is not None]
+
+    doomed_ids = {r.id for r in doomed if r.id is not None}
+    if doomed_ids:
+        # Children first, in one statement — see the note above.
+        session.execute(
+            sa_delete(ScrapeError).where(col(ScrapeError.scrape_run_id).in_(doomed_ids))
+        )
+    for r in doomed:
+        session.delete(r)
     session.commit()
 
 

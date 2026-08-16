@@ -42,19 +42,28 @@ async def _run() -> None:
     from .scrape_engine import run_scrape
 
     init_db()
+    # Each pass is caught so one engine failing can't stop the others — but a
+    # caught failure is still a failure. These are collected and re-raised at the
+    # end so the process exits non-zero; previously both passes could die and the
+    # job still exited 0, which is how a hard DB error scraped NOTHING for three
+    # days while the workflow reported green.
+    failures: list[str] = []
+
     logger.info("=== httpx pass (clean-API companies) ===")
     try:
         run = await run_scrape(triggered_by="github-actions")
         logger.info("httpx pass: companies=%s new=%s removed=%s errors=%s",
                     run.companies_scraped, run.new_jobs, run.removed_jobs, run.errors)
     except Exception as e:
-        logger.error("httpx pass FAILED: %s", e)
+        logger.exception("httpx pass FAILED")
+        failures.append(f"httpx: {e}")
 
     logger.info("=== curl_cffi pass (anti-bot companies) ===")
     try:
         await cf_main()
     except Exception as e:
-        logger.error("curl_cffi pass FAILED: %s", e)
+        logger.exception("curl_cffi pass FAILED")
+        failures.append(f"curl_cffi: {e}")
 
     # Saved-search alerts: after the data is refreshed, push a notification for any
     # watchlist that gained new matching jobs (free, via Web Push). No-op if no one
@@ -68,7 +77,13 @@ async def _run() -> None:
             sent = check_watchlists_and_notify(s)
         logger.info("saved-search alerts sent: %s", sent)
     except Exception as e:
+        # Alerts are a nice-to-have on top of the scrape; a push failure must not
+        # mask an otherwise good run, so this one stays non-fatal by design.
         logger.error("saved-search alert check FAILED: %s", e)
+
+    if failures:
+        logger.error("=== run_all FAILED: %d of 2 scrape passes broke ===", len(failures))
+        raise RuntimeError("; ".join(failures))
 
     logger.info("=== run_all complete ===")
 
