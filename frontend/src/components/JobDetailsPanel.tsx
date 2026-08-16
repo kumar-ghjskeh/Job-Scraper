@@ -119,6 +119,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
   const [similarLoading, setSimilarLoading] = useState(false)
   // Full description is fetched on demand (list rows omit it to cut DB egress).
   const [fullText, setFullText] = useState<string>('')
+  const [siblings, setSiblings] = useState<{ id: number; location: string; state: string; apply_url: string; remote_status: string }[]>([])
   // Draggable panel width (desktop). Persisted so it sticks across sessions.
   const [panelWidth, setPanelWidth] = useState<number>(() => {
     const v = Number(localStorage.getItem('ashborne-panel-width'))
@@ -158,6 +159,20 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
       .then((m) => { if (!cancelled) setMatchData(m) })
       .catch(() => { if (!cancelled) setMatchData(null) })
       .finally(() => { if (!cancelled) setMatchLoading(false) })
+    return () => { cancelled = true }
+  }, [job?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sibling requisitions for the same role at other sites. The list collapses
+  // these into one card, so this is where they stay reachable.
+  useEffect(() => {
+    if (!job) { setSiblings([]); return }
+    let cancelled = false
+    setSiblings([])
+    if ((job.group_count ?? 1) > 1) {
+      api.getJobLocations(job.id)
+        .then((s) => { if (!cancelled) setSiblings(s) })
+        .catch(() => { if (!cancelled) setSiblings([]) })
+    }
     return () => { cancelled = true }
   }, [job?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -455,6 +470,31 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
             <MetaRow label="Role Category" value={job.role_category} />
             <MetaRow label="Experience" value={job.experience_level} />
             <MetaRow label="Work Mode" value={job.location_label || job.remote_status} />
+            {siblings.length > 0 && (
+              <div style={{ gridColumn: '1 / -1', marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 5 }}>
+                  Also open at {siblings.length} other {siblings.length === 1 ? 'location' : 'locations'} — each is a
+                  separate requisition with its own application
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {siblings.map((s) => (
+                    <a
+                      key={s.id}
+                      href={s.apply_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: 11.5, padding: '3px 9px', borderRadius: 999,
+                        border: '1px solid var(--border)', background: 'var(--surface-muted)',
+                        color: 'var(--text-secondary)', textDecoration: 'none',
+                      }}
+                    >
+                      {s.location || 'Location TBD'}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             <MetaRow label="ATS Platform" value={job.ats_platform} />
             <MetaRow label="Source Reliability" value={job.source_reliability} />
             <MetaRow label="Seniority Confidence" value={job.seniority_confidence ? `${job.seniority_confidence}%` : '—'} />

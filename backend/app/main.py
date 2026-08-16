@@ -10,7 +10,7 @@ from typing import Annotated, Any, Optional
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import and_, case
+from sqlalchemy import and_, case, tuple_
 from sqlalchemy.orm import defer
 from sqlmodel import Session, col, func, select
 
@@ -212,6 +212,9 @@ class JobResponse(BaseModel):
     source_reliability: str = ""
     location_label: str = ""
     posted_date_known: bool = False
+    # How many open requisitions this card stands for (1 = just itself). Set when
+    # role grouping is on, so the card can say "+N locations" truthfully.
+    group_count: int = 1
 
     model_config = {"from_attributes": True}
 
@@ -363,6 +366,7 @@ def _build_job_query(
     h1b_only: bool = False,
     relevant_only: bool = True,
     keep_cleaned: bool = False,
+    group_roles: bool = False,
     sort_by: str = "new_grad_fit",
     sort_order: str = "desc",
     page: int = 1,
@@ -567,9 +571,6 @@ def _build_job_query(
         stmt = stmt.where(cond)
 
     # Count total
-    count_stmt = select(func.count()).select_from(stmt.subquery())
-    total_count = session.exec(count_stmt).one()
-
     # Sort — default ranks by New Grad Fit (primary score for this candidate),
     # with role relevance and recency as natural tiebreakers.
     sort_col_map = {
@@ -598,11 +599,41 @@ def _build_job_query(
     if keyword:
         rank = _keyword_rank(keyword).desc()
         order_keys = [rank, *order_keys] if sort_by == "new_grad_fit" else [*order_keys, rank]
-    stmt = stmt.order_by(
+    order_keys = [
         *order_keys,
         col(JobPosting.match_score).desc(),
         col(JobPosting.first_seen_at).desc(),
-    )
+    ]
+
+    # Role grouping: big employers post ONE role at many sites as separate reqs
+    # (Apple lists "Design Verification Engineer" 12 times). They are genuinely
+    # distinct requisitions, so nothing is deleted — but shown raw they bury the
+    # rest of the board under near-identical cards. Collapse them to one row per
+    # (company, normalized title), keeping the best-ranked member as the one
+    # shown; siblings are still reachable via /jobs/{id}/locations.
+    #
+    # Done with a window function rather than in the client because the client
+    # only ever sees one page, so it can only collapse duplicates that happen to
+    # land together — of 95 collapsible rows pool-wide it was catching 2. Doing
+    # it in SQL also keeps total_count and pagination honest, and still transfers
+    # only the page (grouping the full set client-side would multiply egress on
+    # the hottest endpoint).
+    if group_roles:
+        role_key = func.lower(
+            func.coalesce(col(JobPosting.normalized_title), col(JobPosting.job_title))
+        )
+        rn = func.row_number().over(
+            partition_by=[func.lower(col(JobPosting.company)), role_key],
+            order_by=order_keys,
+        ).label("_rn")
+        ranked = stmt.add_columns(rn).subquery()
+        keep_ids = select(ranked.c.id).where(ranked.c._rn == 1)
+        stmt = select(JobPosting).where(col(JobPosting.id).in_(keep_ids))
+
+    stmt = stmt.order_by(*order_keys)
+
+    count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
+    total_count = session.exec(count_stmt).one()
 
     # Defer heavy full-text columns so they aren't SELECTed (egress reduction).
     deferred = [JobPosting.full_description_text]
@@ -622,6 +653,29 @@ def _build_job_query(
         job.__dict__["full_description_text"] = ""
         if not keep_cleaned:
             job.__dict__["cleaned_description"] = ""
+
+    # How many reqs each surviving card represents. One aggregate over just the
+    # page's (company, title) pairs — not the whole pool — so the "+N locations"
+    # badge is accurate without a per-card round trip.
+    if group_roles and items:
+        keys = {(j.company.lower(), (j.normalized_title or j.job_title or "").lower()) for j in items}
+        role_key = func.lower(
+            func.coalesce(col(JobPosting.normalized_title), col(JobPosting.job_title))
+        )
+        counts = dict(
+            (tuple(r[:2]), r[2])
+            for r in session.exec(
+                select(func.lower(col(JobPosting.company)), role_key, func.count())
+                .where(
+                    JobPosting.active_status == ActiveStatus.active,
+                    tuple_(func.lower(col(JobPosting.company)), role_key).in_(list(keys)),
+                )
+                .group_by(func.lower(col(JobPosting.company)), role_key)
+            ).all()
+        )
+        for job in items:
+            k = (job.company.lower(), (job.normalized_title or job.job_title or "").lower())
+            job.__dict__["group_count"] = counts.get(k, 1)
 
     return items, total_count
 
@@ -671,9 +725,11 @@ def list_jobs(
     h1b_only: bool = False,
     sort_by: str = "new_grad_fit",
     sort_order: str = "desc",
+    group_roles: bool = True,
 ):
     items, total = _build_job_query(
         session, status=status, company=company, company_ids=company_ids,
+        group_roles=group_roles,
         priority=priority, role_category=role_category, experience_level=experience_level,
         level_filter=level_filter,
         remote=remote, min_score=min_score, new_since_hours=new_since_hours,
@@ -1219,6 +1275,42 @@ def skill_gaps(session: SessionDep, min_match: int = 45):
                 counter[sk] += 1
     gaps = [{"skill": s, "count": n} for s, n in counter.most_common(15)]
     return {"gaps": gaps, "high_match_jobs": n_high}
+
+
+@app.get("/jobs/{job_id}/locations")
+def job_locations(job_id: int, session: SessionDep):
+    """Every OTHER open requisition for the same role at the same company.
+
+    Role grouping shows one card per (company, title); this is how the card's
+    "+N locations" expands. The siblings are real, separately-applicable reqs
+    with their own apply URLs — grouping is a presentation choice, so nothing
+    may become unreachable because of it.
+    """
+    job = session.get(JobPosting, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    key = (job.normalized_title or job.job_title or "").lower()
+    rows = session.exec(
+        select(JobPosting)
+        .where(
+            func.lower(col(JobPosting.company)) == job.company.lower(),
+            func.lower(func.coalesce(col(JobPosting.normalized_title), col(JobPosting.job_title))) == key,
+            JobPosting.active_status == ActiveStatus.active,
+            col(JobPosting.id) != job_id,
+        )
+        .order_by(col(JobPosting.location))
+        .limit(50)
+    ).all()
+    return {
+        "siblings": [
+            {
+                "id": r.id, "location": r.location or "", "state": r.state or "",
+                "apply_url": r.apply_url, "posted_date": r.posted_date,
+                "remote_status": r.remote_status or "",
+            }
+            for r in rows
+        ]
+    }
 
 
 @app.get("/jobs/{job_id}/match")

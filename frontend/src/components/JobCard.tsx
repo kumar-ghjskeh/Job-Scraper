@@ -124,9 +124,17 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
         {job.location && (
           <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
             <Icon name="mapPin" size={13} color="var(--text-tertiary)" /> {job.display_location || job.location}
-            {extraLocations.length > 0 && (
-              <span style={{ color: 'var(--primary)', fontWeight: 600 }}>&nbsp;+{extraLocations.length} {extraLocations.length === 1 ? 'location' : 'locations'}</span>
-            )}
+            {(() => {
+              // Prefer the server's group_count: it counts every sibling req in
+              // the whole result set, while extraLocations only ever saw the
+              // current page. Falls back to the page-local value.
+              const extra = Math.max((job.group_count ?? 1) - 1, extraLocations.length)
+              return extra > 0 ? (
+                <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                  &nbsp;+{extra} {extra === 1 ? 'location' : 'locations'}
+                </span>
+              ) : null
+            })()}
           </span>
         )}
         {job.location_label && job.location_label !== 'Location Unknown' ? (

@@ -78,6 +78,14 @@ export const api = {
     await axios.post(`${BASE}/push/subscribe`, { endpoint: sub.endpoint, keys: sub.keys })
   },
 
+  /** Other open reqs for the same role at the same company — how a grouped
+   *  card's "+N locations" expands. Grouping is presentation only, so every
+   *  sibling stays individually reachable and applicable. */
+  async getJobLocations(id: number): Promise<{ id: number; location: string; state: string; apply_url: string; remote_status: string }[]> {
+    const { data } = await axios.get(`${BASE}/jobs/${id}/locations`)
+    return data.siblings || []
+  },
+
   async getJob(id: number): Promise<Job> {
     const { data } = await axios.get(`${BASE}/jobs/${id}`)
     return data

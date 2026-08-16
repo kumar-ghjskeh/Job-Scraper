@@ -87,6 +87,10 @@ export interface Job {
   source_reliability?: string      // 'High' | 'Medium' | 'Low'
   location_label?: string          // Onsite | Hybrid | Remote - USA | Multi-location USA | …
   posted_date_known?: boolean
+  /** How many open requisitions this card stands for (1 = just itself). Set by
+   *  the server when role grouping is on, so "+N locations" is accurate across
+   *  the whole result set rather than only the current page. */
+  group_count?: number
 
   // Resume match summary (Phase 3 — present on Resume Matches tab items)
   resume_match?: number
