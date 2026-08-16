@@ -860,31 +860,74 @@ def job_facets(session: SessionDep, usa_only: bool = True, include_software: boo
 
 @app.get("/jobs/search-suggestions")
 def search_suggestions(q: str, session: SessionDep, limit: int = 8):
-    """Return autocomplete suggestions for job titles and companies."""
-    if not q or len(q) < 2:
+    """Typed, counted, prefix-ranked autocomplete suggestions.
+
+    Each suggestion carries its kind ("company" / "title" / "skill") and how
+    many jobs it would return, so the dropdown can label the row and the user
+    can tell a dead end from a real one before pressing Enter. Only suggestions
+    drawn from the browseable pool (active + US-or-unknown) are offered — never
+    suggest a query that lands on an empty result page.
+
+    Prefix matches rank above mid-string ones: typing "ver" should offer
+    "Verification Engineer" before "Design Verification Engineer".
+    """
+    q = (q or "").strip()
+    if len(q) < 2:
         return {"suggestions": []}
+
     pattern = f"%{q}%"
-    titles = session.exec(
-        select(JobPosting.normalized_title)
-        .where(
-            col(JobPosting.normalized_title).ilike(pattern),
-            JobPosting.active_status == "active",
-        )
-        .distinct()
-        .limit(limit)
-    ).all()
-    companies = session.exec(
-        select(JobPosting.company)
-        .where(
-            col(JobPosting.company).ilike(pattern),
-            JobPosting.active_status == "active",
-        )
-        .distinct()
-        .limit(4)
-    ).all()
-    return {
-        "suggestions": list(dict.fromkeys([t for t in titles if t] + [c for c in companies if c]))[:limit]
+    prefix = f"{q}%"
+    browseable = [
+        JobPosting.active_status == "active",
+        (JobPosting.is_usa == True) | (JobPosting.location_confidence == 0.0),  # noqa: E712
+    ]
+    # Rank 0 = starts with the query, 1 = contains it. Sorts before count.
+    def _rank(field):
+        return case((col(field).ilike(prefix), 0), else_=1)
+
+    out: list[dict] = []
+    seen: set[str] = set()
+
+    # normalized_title is stored lowercased; title-casing it for display would
+    # render the domain's acronyms as "Dft"/"Rtl"/"Soc", so restore those.
+    _ACRONYMS = {
+        "rtl", "dft", "dv", "soc", "asic", "uvm", "pcie", "cxl", "ai", "ml",
+        "sta", "pd", "noc", "ip", "fpga", "io", "ddr", "hbm", "aps", "cpu",
+        "gpu", "tpu", "eda", "vlsi", "ate", "slt", "phy", "usb", "axi", "amba",
     }
+
+    def _pretty(value: str) -> str:
+        if not value or not value.islower():
+            return value
+        return " ".join(
+            w.upper() if w.strip("-/()") in _ACRONYMS else w.capitalize()
+            for w in value.split()
+        )
+
+    def _collect(field, kind: str, cap: int) -> None:
+        rank = _rank(field)
+        rows = session.exec(
+            select(field, func.count().label("n"), rank.label("r"))
+            .where(col(field).ilike(pattern), *browseable)
+            .group_by(field, rank)
+            .order_by(rank.asc(), func.count().desc())
+            .limit(cap)
+        ).all()
+        for value, n, _r in rows:
+            key = (value or "").strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append({"value": _pretty(value), "type": kind, "count": n})
+
+    # Companies first — an exact company name is the most decisive query.
+    _collect(JobPosting.company, "company", 3)
+    _collect(JobPosting.normalized_title, "title", limit)
+    _collect(JobPosting.role_category, "skill", 3)
+
+    # Companies keep their slot at the top; everything else by hit count.
+    out.sort(key=lambda s: (s["type"] != "company", -s["count"]))
+    return {"suggestions": out[:limit]}
 
 
 # ── Resume intelligence (Phase 3) ────────────────────────────────────────────

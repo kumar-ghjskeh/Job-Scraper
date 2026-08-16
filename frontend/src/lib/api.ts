@@ -128,9 +128,9 @@ export const api = {
     return data
   },
 
-  async getSearchSuggestions(q: string): Promise<string[]> {
-    if (!q || q.length < 2) return []
-    const { data } = await axios.get(`${BASE}/jobs/search-suggestions`, { params: { q } })
+  async getSearchSuggestions(q: string, signal?: AbortSignal): Promise<import('./types').SearchSuggestion[]> {
+    if (!q || q.trim().length < 2) return []
+    const { data } = await axios.get(`${BASE}/jobs/search-suggestions`, { params: { q }, signal })
     return data.suggestions || []
   },
 

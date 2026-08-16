@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import type { AnalyticsSummary } from '../lib/types'
+import { useEffect, useRef, useState } from 'react'
+import type { AnalyticsSummary, SearchSuggestion } from '../lib/types'
 import type { Theme } from '../lib/theme'
 import { useIsMobile } from '../lib/useIsMobile'
+import { api } from '../lib/api'
 import { Icon, type IconName } from './Icon'
 
 export type Tab = 'all' | 'resume' | 'entry-level' | 'best' | 'saved' | 'applied' | 'companies' | 'health'
@@ -34,6 +35,69 @@ export function TopNav({
   const [q, setQ] = useState(search)
   const isMobile = useIsMobile()
 
+  // ── Autocomplete ────────────────────────────────────────────────────────────
+  const [sugs, setSugs] = useState<SearchSuggestion[]>([])
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(-1)   // -1 = "use what I typed"
+  const boxRef = useRef<HTMLDivElement | null>(null)
+  const skipNextFetch = useRef(false)        // set when we fill the box on select
+
+  // Keep the box in sync when the query is cleared/changed from outside.
+  useEffect(() => { setQ(search) }, [search])
+
+  // Debounced fetch; the in-flight request is aborted whenever the user types
+  // again, so a slow response can never overwrite a newer one.
+  useEffect(() => {
+    if (skipNextFetch.current) { skipNextFetch.current = false; return }
+    const term = q.trim()
+    if (term.length < 2) { setSugs([]); setOpen(false); return }
+    const ctl = new AbortController()
+    const t = setTimeout(() => {
+      api.getSearchSuggestions(term, ctl.signal)
+        .then((s) => { setSugs(s); setOpen(s.length > 0); setActive(-1) })
+        .catch(() => { /* aborted or offline — keep the previous list */ })
+    }, 160)
+    return () => { clearTimeout(t); ctl.abort() }
+  }, [q])
+
+  // Close on any click outside the search box.
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  function submit(term: string) {
+    skipNextFetch.current = true      // don't reopen the menu for the text we just set
+    setQ(term)
+    setOpen(false)
+    setActive(-1)
+    onSearch(term.trim())
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open || sugs.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); setActive((i) => (i + 1) % sugs.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault(); setActive((i) => (i <= 0 ? sugs.length - 1 : i - 1))
+    } else if (e.key === 'Enter') {
+      // Enter with a highlighted row picks it; otherwise the typed text wins.
+      if (active >= 0) { e.preventDefault(); submit(sugs[active].value) }
+    } else if (e.key === 'Escape') {
+      setOpen(false); setActive(-1)
+    }
+  }
+
+  const SUG_META: Record<SearchSuggestion['type'], { icon: IconName; label: string }> = {
+    company: { icon: 'building', label: 'Company' },
+    title:   { icon: 'list',     label: 'Role' },
+    skill:   { icon: 'target',   label: 'Category' },
+  }
+
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 200, background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
       {/* Brand + search + actions */}
@@ -60,9 +124,10 @@ export function TopNav({
         </div>
 
         {/* Search */}
+        <div ref={boxRef} style={{ flex: 1, maxWidth: isMobile ? undefined : 540, position: 'relative' }}>
         <form
-          onSubmit={(e) => { e.preventDefault(); onSearch(q.trim()) }}
-          style={{ flex: 1, maxWidth: isMobile ? undefined : 540, position: 'relative' }}
+          onSubmit={(e) => { e.preventDefault(); submit(active >= 0 && sugs[active] ? sugs[active].value : q) }}
+          style={{ position: 'relative' }}
         >
           <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', display: 'flex' }}>
             <Icon name="search" size={16} />
@@ -70,18 +135,29 @@ export function TopNav({
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onKeyDown={onKeyDown}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = 'var(--primary)'
+              if (sugs.length > 0) setOpen(true)
+            }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}
             placeholder={isMobile ? 'Search jobs…' : 'Search by title, company, skill, protocol, or state…'}
+            role="combobox"
+            aria-expanded={open}
+            aria-controls="search-suggestions"
+            aria-autocomplete="list"
+            aria-activedescendant={active >= 0 ? `search-sug-${active}` : undefined}
+            autoComplete="off"
             style={{
               width: '100%', height: 38, paddingLeft: 36, paddingRight: q ? 64 : 14,
               background: 'var(--surface-muted)', border: '1px solid var(--border)',
-              borderRadius: 999, fontSize: 13.5, color: 'var(--text-primary)', outline: 'none',
+              borderRadius: open ? '18px 18px 0 0' : 999,
+              fontSize: 13.5, color: 'var(--text-primary)', outline: 'none',
               transition: 'background 0.14s, border-color 0.14s',
             }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--primary)' }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}
           />
           {q && (
-            <button type="button" onClick={() => { setQ(''); onSearch('') }}
+            <button type="button" onClick={() => { setQ(''); setSugs([]); setOpen(false); onSearch('') }}
               style={{
                 position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
                 background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '50%',
@@ -92,6 +168,62 @@ export function TopNav({
             </button>
           )}
         </form>
+
+        {open && sugs.length > 0 && (
+          <ul
+            id="search-suggestions"
+            role="listbox"
+            style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 300,
+              margin: 0, padding: '4px 0', listStyle: 'none',
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderTop: 'none', borderRadius: '0 0 12px 12px',
+              boxShadow: '0 10px 28px rgba(0,0,0,0.16)',
+              maxHeight: 340, overflowY: 'auto',
+            }}
+          >
+            {sugs.map((s, i) => {
+              const meta = SUG_META[s.type]
+              return (
+                <li
+                  key={`${s.type}:${s.value}`}
+                  id={`search-sug-${i}`}
+                  role="option"
+                  aria-selected={i === active}
+                  onMouseEnter={() => setActive(i)}
+                  // mousedown, not click: the input's blur would otherwise close
+                  // the menu before the click ever lands.
+                  onMouseDown={(e) => { e.preventDefault(); submit(s.value) }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '7px 12px', cursor: 'pointer', fontSize: 13,
+                    background: i === active ? 'var(--surface-muted)' : 'transparent',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  <span style={{ display: 'flex', color: 'var(--text-tertiary)', flexShrink: 0 }}>
+                    <Icon name={meta.icon} size={14} />
+                  </span>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.value}
+                  </span>
+                  <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)', flexShrink: 0 }}>
+                    {meta.label}
+                  </span>
+                  <span style={{
+                    fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)',
+                    background: 'var(--surface-muted)', border: '1px solid var(--border)',
+                    borderRadius: 999, padding: '1px 7px', flexShrink: 0, minWidth: 26,
+                    textAlign: 'center',
+                  }}>
+                    {s.count}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        </div>
 
         {!isMobile && <div style={{ flex: 1 }} />}
 

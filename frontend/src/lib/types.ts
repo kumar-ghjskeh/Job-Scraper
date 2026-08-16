@@ -258,6 +258,14 @@ export interface JobInventory {
   senior_roles: number
 }
 
+/** One autocomplete row: what to search for, what kind of thing it is, and how
+ *  many jobs it would return (so a dead end is visible before pressing Enter). */
+export interface SearchSuggestion {
+  value: string
+  type: 'company' | 'title' | 'skill'
+  count: number
+}
+
 export interface Filters {
   status?: string
   company?: string
