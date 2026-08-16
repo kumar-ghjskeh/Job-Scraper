@@ -16,7 +16,10 @@ concurrency:
 
 jobs:
   scrape:
-    runs-on: ubuntu-latest
+    # Pinned, never `ubuntu-latest`: that label silently migrates between Ubuntu
+    # LTS releases and takes the whole scrape down on GitHub's schedule rather
+    # than ours. Bump this deliberately.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
