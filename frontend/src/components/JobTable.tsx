@@ -63,7 +63,7 @@ export function JobTable({ jobs, onUpdate, loading }: Props) {
         padding: 40, textAlign: 'center', color: '#8b949e',
         background: '#161b22', borderRadius: 8, border: '1px solid #21262d',
       }}>
-        No jobs found. Try adjusting filters or run a scrape.
+        No roles match the current filters. Try widening your criteria.
       </div>
     )
   }

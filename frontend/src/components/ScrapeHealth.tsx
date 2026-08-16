@@ -12,6 +12,14 @@ const TZ_OPTIONS: { label: string; value: string }[] = [
 ]
 const RUNS_PREVIEW = 20
 
+// The pipeline reports engines by their internal identifiers; these are the
+// names a reader should actually see.
+const ENGINE_LABELS: Record<string, string> = {
+  'github-actions': 'Standard career APIs',
+  cf: 'Protected career sites',
+  browser: 'Large-employer sites',
+}
+
 // Module-level cache so re-opening Data Health paints instantly while it
 // refreshes in the background (survives tab switches within a session).
 let _healthCache: { runs: ScrapeRun[]; companies: Company[]; analytics: AnalyticsSummary | null } | null = null
@@ -48,7 +56,7 @@ export function ScrapeHealth() {
     .sort((a, b) => b.scrape_error_count - a.scrape_error_count)
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</div>
+    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
   }
 
   return (
@@ -94,12 +102,13 @@ export function ScrapeHealth() {
                     background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
                     padding: '6px 10px', fontSize: 11.5, color: 'var(--text-secondary)',
                   }}>
-                    <span style={{ color: c, fontWeight: 700 }}>{e.engine}</span>
+                    <span style={{ color: c, fontWeight: 700 }}>{ENGINE_LABELS[e.engine] ?? e.engine}</span>
                     {' · '}
                     {e.hours_since_last_good_run == null
                       ? 'never run'
-                      : `${e.hours_since_last_good_run}h ago (every ${e.cadence_hours}h)`}
-                    {e.companies_scraped > 0 && ` · ${e.companies_scraped} cos, ${e.new_jobs} new`}
+                      : `updated ${e.hours_since_last_good_run}h ago, every ${e.cadence_hours}h`}
+                    {e.companies_scraped > 0
+                      && ` · ${e.companies_scraped} companies, ${e.new_jobs} new`}
                   </div>
                 )
               })}
