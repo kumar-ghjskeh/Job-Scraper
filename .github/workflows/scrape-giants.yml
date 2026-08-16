@@ -1,30 +1,25 @@
 name: Scrape giants (browser)
 
 # Browser-based scraping for big-tech career SPAs (Apple, Google, Meta, …) whose
-# public APIs are protected/obfuscated. DOM-scrapes the rendered job listings
-# (engine: browser companies). Kept SEPARATE from the main browserless scrape so
-# a browser/bot-detection failure here never affects the reliable httpx +
-# curl_cffi pass. Writes to the same production Postgres.
+# public APIs are protected/obfuscated. Installs Chromium on GitHub's runner and
+# DOM-scrapes the rendered job listings (engine: browser companies). Kept SEPARATE
+# from the main browserless scrape so a browser/bot-detection failure here never
+# affects the reliable httpx + curl_cffi pass. Writes to the same production
+# Postgres.
 #
 # Needs the same DATABASE_URL repo secret as the main scrape.
 #
-# ── Why this job runs in a container ──────────────────────────────────────────
-# It used to install Chromium onto a bare `ubuntu-latest` runner:
-#     pip install playwright  (unpinned: ">=1.45.0")
-#     playwright install-deps chromium     <- apt, OS-version sensitive
-#     playwright install chromium          <- ~170MB download every run
-# That chain has three moving parts NOBODY controls and any of them can start
-# failing with zero commits on our side:
-#   1. `ubuntu-latest` silently migrates between Ubuntu LTS releases, and
-#      `install-deps` apt package names change across them.
-#   2. An unpinned playwright resolves to whatever shipped that morning.
-#   3. The browser download is a network fetch that can 404 or rate-limit.
-#
-# The official Playwright image ships Chromium AND its system libraries
-# preinstalled, at a version fixed by the tag. No apt, no browser download, no
-# `ubuntu-latest` drift. Pin this tag and the pin in requirements-browser.txt
-# together — the Python package and the bundled browser must match.
-# Container jobs are free on GitHub Actions, including on private repos.
+# ── History, so this isn't "improved" back into a hole ────────────────────────
+# Aug 2026: every run failed in ~50s. It looked like a browser/runner problem and
+# was briefly "fixed" by moving the job into the official Playwright container
+# image. That was a misdiagnosis on both counts:
+#   * the real cause was a ForeignKeyViolation in maintain_scrape_runs() that
+#     aborted EVERY engine before any scraping (fixed in 6be4f52), and
+#   * the container image keeps playwright in a venv that is not on the default
+#     PATH, so `python -m playwright` was missing entirely.
+# This setup is the one that demonstrably worked (3-4 min runs). What was kept
+# from that attempt is the part that was actually worth keeping: pinned versions
+# and an environment report.
 
 on:
   schedule:
@@ -38,21 +33,27 @@ concurrency:
 
 jobs:
   scrape-giants:
-    runs-on: ubuntu-24.04          # pinned, never `-latest`
+    # Pinned, never `ubuntu-latest`: that label silently migrates between Ubuntu
+    # LTS releases and the apt package names `playwright install-deps` needs
+    # change across them. Bump this deliberately, not on GitHub's schedule.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
-    container:
-      image: mcr.microsoft.com/playwright/python:v1.62.0-noble
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
       # Prints the exact runtime this job got. When something upstream shifts,
       # this is the line that makes the next failure self-explaining instead of
-      # a guessing game.
+      # a guessing game — it is what caught the missing module above.
       - name: Environment report
         run: |
-          echo "OS:        $(. /etc/os-release && echo "$PRETTY_NAME")"
-          echo "Python:    $(python --version 2>&1)"
-          echo "Playwright: $(python -m playwright --version 2>&1)"
+          echo "OS:         $(. /etc/os-release && echo "$PRETTY_NAME")"
+          echo "Python:     $(python --version 2>&1)"
+          echo "Playwright: $(python -m playwright --version 2>&1 || echo 'not installed yet')"
 
       - name: Check DATABASE_URL secret is configured
         env:
@@ -63,16 +64,21 @@ jobs:
             exit 1
           fi
 
-      # playwright itself is already in the image at the pinned version; installing
-      # requirements-browser.txt here would be a no-op at best and a version
-      # conflict at worst, so only the app's own dependencies are installed.
+      # Split into separate steps so a setup failure names the exact stage that
+      # broke (pip vs OS deps vs browser download vs launch) instead of one opaque
+      # "install" failure.
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
+          pip install -r backend/requirements-browser.txt
 
-      # Fails loudly and early if the image's browser is somehow unusable, so a
-      # launch problem is never misreported as a scraping problem.
+      - name: Install Chromium system libraries
+        run: python -m playwright install-deps chromium
+
+      - name: Install Chromium browser
+        run: python -m playwright install chromium
+
       - name: Verify Chromium launches
         run: |
           python - <<'PY'
