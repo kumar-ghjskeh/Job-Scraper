@@ -59,6 +59,23 @@ US_CITIES: list[tuple[str, str]] = [
     ("longmont","CO"),("colorado springs","CO"),("broomfield","CO"),
     ("mendota heights","MN"),("andover","MA"),("marlborough","MA"),
     ("nashua","NH"),("cedar rapids","IA"),
+    # Real US semiconductor/hardware sites that were resolving to "location
+    # unknown" and so depended on the unknown-location escape hatch to be seen
+    # at all. With USA-only now strict, an unrecognised US city is an INVISIBLE
+    # US job, so this list is the thing keeping real roles on the board.
+    ("orlando","FL"),("tampa","FL"),("palm bay","FL"),("huntsville","AL"),
+    ("tucson","AZ"),("mesa","AZ"),("gilbert","AZ"),("albuquerque","NM"),
+    ("round rock","TX"),("sherman","TX"),("el paso","TX"),("lubbock","TX"),
+    ("charlotte","NC"),("greensboro","NC"),("columbus","OH"),("cleveland","OH"),
+    ("rochester","MN"),("eden prairie","MN"),("shakopee","MN"),
+    ("chippewa falls","WI"),("madison","WI"),("corvallis","OR"),
+    ("meridian","ID"),("lehi","UT"),("salt lake city","UT"),
+    ("allentown","PA"),("malvern","PA"),("bethlehem","PA"),("philadelphia","PA"),
+    ("fishkill","NY"),("hopewell junction","NY"),("syracuse","NY"),("albany","NY"),
+    ("essex junction","VT"),("burlington","VT"),("manassas","VA"),
+    ("herndon","VA"),("reston","VA"),("arlington","VA"),("baltimore","MD"),
+    ("columbia","MD"),("nashville","TN"),("kansas city","MO"),("st louis","MO"),
+    ("indianapolis","IN"),("des moines","IA"),("omaha","NE"),("loveland","CO"),
 ]
 
 NON_USA_SIGNALS: frozenset[str] = frozenset({

@@ -354,7 +354,7 @@ def _build_job_query(
     skills: Optional[str] = None,
     usa_only: bool = True,
     include_senior: bool = False,
-    include_unknown_location: bool = True,
+    include_unknown_location: bool = False,
     include_software: bool = False,
     include_adjacent: bool = False,
     view: Optional[str] = None,
@@ -430,7 +430,12 @@ def _build_job_query(
         # "high score" means "realistic for a new grad", not intrinsic relevance.
         conditions.append(JobPosting.new_grad_fit >= min_score)
 
-    # USA filter
+    # USA filter. Default is STRICT: a job must be positively identified as
+    # being in the US. The opt-in escape hatch below also admits rows whose
+    # location we could not parse at all — useful for triage, wrong for the
+    # product, because "we don't know where this is" is not "this is in the US".
+    # If a genuine US role goes missing, the fix is to teach US_CITIES the city
+    # (see location_utils), NOT to re-open this hatch.
     if usa_only:
         if include_unknown_location:
             # USA jobs OR unknown location (confidence 0)
@@ -657,7 +662,7 @@ def list_jobs(
     skills: Optional[str] = None,
     usa_only: bool = True,
     include_senior: bool = False,
-    include_unknown_location: bool = True,
+    include_unknown_location: bool = False,
     include_software: bool = False,
     include_adjacent: bool = False,
     view: Optional[str] = None,
@@ -739,7 +744,7 @@ def entry_level_jobs(
     keyword: Optional[str] = None,
     skills: Optional[str] = None,
     usa_only: bool = True,
-    include_unknown_location: bool = True,
+    include_unknown_location: bool = False,
     include_software: bool = False,
     role_flags: Optional[str] = None,
     state: Optional[str] = None,
@@ -1104,7 +1109,7 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
                    min_score: Optional[int] = None, posted_within_hours: Optional[int] = None,
                    new_since_hours: Optional[int] = None, keyword: Optional[str] = None,
                    skills: Optional[str] = None, usa_only: bool = True,
-                   include_unknown_location: bool = True, include_software: bool = False,
+                   include_unknown_location: bool = False, include_software: bool = False,
                    role_flags: Optional[str] = None, state: Optional[str] = None,
                    h1b_only: bool = False):
     profile = _current_profile(session, resume_id)
