@@ -166,6 +166,22 @@ _DIGITAL_TITLE_SIGNALS = [
     "hardware design", "soc design", "chip design", "ip design", "cpu",
     "gpu", "emulation", "formal verification", "pre-silicon", "post-silicon",
     "dft", "design for test", "synthesis", "place and route", "pd engineer",
+    # Silicon bring-up / validation. These are the same discipline the app
+    # already classifies as Pre-Silicon and Post-Silicon Validation (82 live
+    # jobs), but the phrases below carry no "rtl/asic/verilog" token, so they
+    # only survived when a description happened to mention one — and many list
+    # endpoints return no description at all. That inconsistency was silently
+    # dropping whole families of in-scope roles (Astera Labs alone lost ~15).
+    "silicon validation", "silicon bring-up", "silicon bringup",
+    "system validation", "chiplet", "silicon integration",
+    # Timing/characterisation: front-end design work, same as synthesis above.
+    "static timing", "timing closure", "timing analysis",
+    "power and characterization", "characterization engineer",
+    # High-signal digital interconnect protocols. Safe as title signals because
+    # non-engineering uses ("PCIe Product Marketing") are already caught by the
+    # hard title exclusions above. "sta" is word-boundary matched, so it hits
+    # "Principal Engineer, STA" without touching "Staff".
+    "sta", "pcie", "cxl", "serdes", "noc", "axi", "ddr", "hbm",
 ]
 
 
@@ -199,6 +215,13 @@ def is_rtl_dv_relevant(title: str, description: str = "") -> tuple[bool, str]:
             "digital design", "logic design", "asic", "fpga",
         ]):
             return True, "Hardware design/verification role"
+        # "Silicon"/"SoC" in the TITLE is itself decisive for a verification or
+        # validation role. Checked on the title only, never the description:
+        # nearly every semiconductor employer says "silicon" somewhere in its
+        # boilerplate, so accepting it from the body would let unrelated
+        # validation roles (supplier quality, test-floor) in.
+        if re.search(r"\bsilicon\b|\bsoc\b|\bchip\b", title_l):
+            return True, "Silicon design/validation role"
 
     # 5. No title signal — require an engineering-ish title AND multiple distinct
     #    role-specific signals, so verbose company boilerplate ("we build SoCs")
