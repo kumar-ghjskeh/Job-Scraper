@@ -1506,6 +1506,71 @@ def scrape_errors(session: SessionDep, limit: int = 50):
     return session.exec(stmt).all()
 
 
+# How often each engine is scheduled to run, in hours. A run is only counted as
+# healthy if it FINISHED and actually visited at least one company — a run that
+# touched nothing is the exact shape the three-day silent outage had.
+_ENGINE_CADENCE_HOURS = {
+    "github-actions": 3,   # scrape.yml  — httpx pass
+    "cf": 3,               # scrape.yml  — curl_cffi pass
+    "browser": 8,          # scrape-giants.yml
+}
+
+
+def _pipeline_health(session: Session) -> dict:
+    """Per-engine verdict on whether scraping is actually happening.
+
+    Exists so a dead pipeline is visible in the app itself. The three-day outage
+    was only noticed because one workflow happened to email; the other reported
+    green while scraping nothing, and nothing in the UI contradicted it.
+    """
+    now = datetime.now(timezone.utc)
+    engines: list[dict] = []
+    worst = "ok"
+    for name, cadence in _ENGINE_CADENCE_HOURS.items():
+        last = session.exec(
+            select(ScrapeRun)
+            .where(
+                ScrapeRun.triggered_by == name,
+                col(ScrapeRun.finished_at).is_not(None),
+                ScrapeRun.companies_scraped > 0,
+            )
+            .order_by(col(ScrapeRun.started_at).desc())
+        ).first()
+        if last is None:
+            status, age_h = "down", None
+        else:
+            started = last.started_at
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            age_h = round((now - started).total_seconds() / 3600, 1)
+            # One missed cycle is normal (a run can overlap or retry); two is a
+            # warning; beyond four the engine is not running at all.
+            status = "ok" if age_h <= cadence * 2 else ("stale" if age_h <= cadence * 4 else "down")
+        if status == "down" or (status == "stale" and worst == "ok"):
+            worst = status
+        engines.append({
+            "engine": name,
+            "cadence_hours": cadence,
+            "status": status,
+            "hours_since_last_good_run": age_h,
+            "last_good_run_at": last.started_at if last else None,
+            "companies_scraped": last.companies_scraped if last else 0,
+            "new_jobs": last.new_jobs if last else 0,
+        })
+
+    freshest = session.exec(select(func.max(JobPosting.last_seen_at))).one()
+    if freshest is not None and freshest.tzinfo is None:
+        freshest = freshest.replace(tzinfo=timezone.utc)
+    return {
+        "status": worst,
+        "engines": engines,
+        "last_job_seen_at": freshest,
+        "hours_since_any_job_seen": (
+            round((now - freshest).total_seconds() / 3600, 1) if freshest else None
+        ),
+    }
+
+
 @app.get("/scrape-health")
 def scrape_health(session: SessionDep):
     runs = session.exec(
@@ -1521,6 +1586,7 @@ def scrape_health(session: SessionDep):
     company_data = [_build_company_response(c, stats, engines.get(c.name.lower(), "")) for c in companies]
 
     return {
+        "pipeline": _pipeline_health(session),
         "recent_runs": [
             {
                 "id": r.id, "started_at": r.started_at, "finished_at": r.finished_at,

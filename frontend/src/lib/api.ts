@@ -102,6 +102,11 @@ export const api = {
     return data
   },
 
+  async getPipelineHealth(): Promise<import('./types').PipelineHealth | null> {
+    const { data } = await axios.get(`${BASE}/scrape-health`)
+    return data.pipeline ?? null
+  },
+
   async triggerScrape(): Promise<void> {
     await axios.post(`${BASE}/scrape/run-now`)
   },

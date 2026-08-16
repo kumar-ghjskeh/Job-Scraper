@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { parseApiDate } from '../lib/datetime'
-import type { AnalyticsSummary, Company, ScrapeRun } from '../lib/types'
+import type { AnalyticsSummary, Company, PipelineHealth, ScrapeRun } from '../lib/types'
 
 const TZ_OPTIONS: { label: string; value: string }[] = [
   { label: 'My local time', value: 'local' },
@@ -23,11 +23,13 @@ export function ScrapeHealth() {
   const [loading, setLoading] = useState(() => _healthCache === null)
   const [tz, setTz] = useState<string>(() => localStorage.getItem('ashborne-tz') || 'local')
   const [showAllRuns, setShowAllRuns] = useState(false)
+  const [pipeline, setPipeline] = useState<PipelineHealth | null>(null)
 
   useEffect(() => {
     Promise.all([api.getScrapeRuns(), api.getCompanies(), api.getAnalytics().catch(() => null)])
       .then(([r, c, a]) => { _healthCache = { runs: r, companies: c, analytics: a }; setRuns(r); setCompanies(c); setAnalytics(a) })
       .finally(() => setLoading(false))
+    api.getPipelineHealth().then(setPipeline).catch(() => setPipeline(null))
   }, [])
 
   function changeTz(v: string) { setTz(v); localStorage.setItem('ashborne-tz', v) }
@@ -63,6 +65,48 @@ export function ScrapeHealth() {
           </select>
         </label>
       </div>
+
+      {/* Pipeline verdict — is scraping actually happening right now? A dead
+          pipeline used to be invisible here: one workflow emailed, the other
+          reported success while scraping nothing for three days. */}
+      {pipeline && (() => {
+        const tone = pipeline.status === 'ok'
+          ? { bg: 'rgba(34,197,94,0.10)', bd: 'var(--success)', fg: 'var(--success)', text: 'Scraping is healthy' }
+          : pipeline.status === 'stale'
+          ? { bg: 'rgba(234,179,8,0.10)', bd: 'var(--warning)', fg: 'var(--warning)', text: 'Scraping is falling behind' }
+          : { bg: 'rgba(239,68,68,0.10)', bd: 'var(--danger)', fg: 'var(--danger)', text: 'Scraping has stopped' }
+        return (
+          <div style={{ background: tone.bg, border: `1px solid ${tone.bd}`, borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: tone.fg, flexShrink: 0 }} />
+              <strong style={{ fontSize: 13.5, color: tone.fg }}>{tone.text}</strong>
+              {pipeline.hours_since_any_job_seen != null && (
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  · newest job seen {pipeline.hours_since_any_job_seen}h ago
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {pipeline.engines.map((e) => {
+                const c = e.status === 'ok' ? 'var(--success)' : e.status === 'stale' ? 'var(--warning)' : 'var(--danger)'
+                return (
+                  <div key={e.engine} style={{
+                    background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+                    padding: '6px 10px', fontSize: 11.5, color: 'var(--text-secondary)',
+                  }}>
+                    <span style={{ color: c, fontWeight: 700 }}>{e.engine}</span>
+                    {' · '}
+                    {e.hours_since_last_good_run == null
+                      ? 'never run'
+                      : `${e.hours_since_last_good_run}h ago (every ${e.cadence_hours}h)`}
+                    {e.companies_scraped > 0 && ` · ${e.companies_scraped} cos, ${e.new_jobs} new`}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Summary stats */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>

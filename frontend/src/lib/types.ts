@@ -258,6 +258,25 @@ export interface JobInventory {
   senior_roles: number
 }
 
+/** Per-engine verdict on whether scraping is actually happening. Exists so a
+ *  dead pipeline is visible in the app instead of only in a workflow email. */
+export interface PipelineEngine {
+  engine: string
+  cadence_hours: number
+  status: 'ok' | 'stale' | 'down'
+  hours_since_last_good_run: number | null
+  last_good_run_at: string | null
+  companies_scraped: number
+  new_jobs: number
+}
+
+export interface PipelineHealth {
+  status: 'ok' | 'stale' | 'down'
+  engines: PipelineEngine[]
+  last_job_seen_at: string | null
+  hours_since_any_job_seen: number | null
+}
+
 /** One autocomplete row: what to search for, what kind of thing it is, and how
  *  many jobs it would return (so a dead end is visible before pressing Enter). */
 export interface SearchSuggestion {
