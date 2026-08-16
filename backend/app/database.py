@@ -35,6 +35,45 @@ if not _is_sqlite:
 engine = create_engine(DATABASE_URL, **_engine_kwargs)
 
 
+def _ensure_scrape_errors_cascade() -> None:
+    """Migrate an EXISTING Postgres database's scrape_errors FK to ON DELETE
+    CASCADE.
+
+    ``create_all`` never alters an existing table, so a database created before
+    the model gained ``ondelete="CASCADE"`` keeps the old NO ACTION rule — the
+    rule that let one orphaned error row abort every scrape for three days.
+    Idempotent: it looks the constraint up by catalog (not by hardcoded name),
+    does nothing when CASCADE is already in place, and clears any orphaned rows
+    first so re-adding the constraint can't fail on stale data.
+    """
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        exists = conn.execute(text("SELECT to_regclass('public.scrape_errors')")).scalar()
+        if not exists:
+            return
+        # confdeltype: 'c' = CASCADE, 'a' = NO ACTION, 'r' = RESTRICT …
+        rows = conn.execute(text("""
+            SELECT conname, confdeltype
+            FROM pg_constraint
+            WHERE conrelid = 'public.scrape_errors'::regclass AND contype = 'f'
+        """)).fetchall()
+        for name, deltype in rows:
+            if deltype == "c":
+                continue
+            conn.execute(text("""
+                DELETE FROM scrape_errors
+                WHERE scrape_run_id IS NOT NULL
+                  AND scrape_run_id NOT IN (SELECT id FROM scrape_runs)
+            """))
+            conn.execute(text(f'ALTER TABLE scrape_errors DROP CONSTRAINT "{name}"'))
+            conn.execute(text(
+                f'ALTER TABLE scrape_errors ADD CONSTRAINT "{name}" '
+                'FOREIGN KEY (scrape_run_id) REFERENCES scrape_runs(id) ON DELETE CASCADE'
+            ))
+            logger.info("Migrated FK %s to ON DELETE CASCADE", name)
+
+
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     # Postgres (Neon): create_all won't ALTER an existing table, so add new
@@ -50,6 +89,10 @@ def init_db() -> None:
                     conn.execute(text(f'ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col_name} {decl}'))
         except Exception as e:
             logger.warning("Postgres column ensure warning: %s", e)
+        try:
+            _ensure_scrape_errors_cascade()
+        except Exception as e:
+            logger.warning("Postgres constraint ensure warning: %s", e)
     # Run SQLite column migrations for existing databases
     if settings.database_url.startswith("sqlite:///"):
         db_path = settings.database_url.replace("sqlite:///", "")

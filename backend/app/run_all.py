@@ -39,7 +39,7 @@ async def _run() -> None:
     # import time inside database.create_engine().
     from .database import init_db
     from .run_cf_scrape import main as cf_main
-    from .scrape_engine import run_scrape
+    from .scrape_engine import run_scrape, sweep_stale_jobs
 
     init_db()
     # Each pass is caught so one engine failing can't stop the others — but a
@@ -50,10 +50,16 @@ async def _run() -> None:
     failures: list[str] = []
 
     logger.info("=== httpx pass (clean-API companies) ===")
+    httpx_ok = False
     try:
         run = await run_scrape(triggered_by="github-actions")
         logger.info("httpx pass: companies=%s new=%s removed=%s errors=%s",
                     run.companies_scraped, run.new_jobs, run.removed_jobs, run.errors)
+        # A pass that visited nothing is a failure wearing a success costume —
+        # exactly how three days of dead scrapes looked like healthy 30s runs.
+        if not run.companies_scraped:
+            raise RuntimeError("httpx pass scraped 0 companies")
+        httpx_ok = True
     except Exception as e:
         logger.exception("httpx pass FAILED")
         failures.append(f"httpx: {e}")
@@ -64,6 +70,19 @@ async def _run() -> None:
     except Exception as e:
         logger.exception("curl_cffi pass FAILED")
         failures.append(f"curl_cffi: {e}")
+
+    # Retire postings nothing has re-seen in weeks (a source that quietly stopped
+    # returning results, or a company dropped from the config). Gated on a
+    # SUCCESSFUL pass on purpose: during an outage everything looks stale, and
+    # sweeping then would clear the board.
+    if httpx_ok:
+        try:
+            swept = sweep_stale_jobs()
+            logger.info("stale sweep: retired %s job(s)", swept)
+        except Exception as e:
+            logger.error("stale sweep FAILED: %s", e)
+    else:
+        logger.warning("stale sweep SKIPPED — no successful scrape pass this run")
 
     # Saved-search alerts: after the data is refreshed, push a notification for any
     # watchlist that gained new matching jobs (free, via Web Push). No-op if no one

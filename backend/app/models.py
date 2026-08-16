@@ -6,6 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
+from sqlalchemy import Column, ForeignKey, Integer
 from sqlmodel import Field, SQLModel
 
 
@@ -281,7 +282,16 @@ class ScrapeError(SQLModel, table=True):
     __tablename__ = "scrape_errors"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    scrape_run_id: Optional[int] = Field(default=None, foreign_key="scrape_runs.id")
+    # ON DELETE CASCADE, declared at the schema level. Pruning a scrape_run with
+    # errors attached used to raise ForeignKeyViolation, and because pruning runs
+    # at the start of every scrape, one un-prunable row silently killed ALL
+    # scraping for three days. The pruning code deletes these children itself
+    # too — this is the database refusing to let that bug exist again.
+    # Existing Postgres databases are migrated in database.init_db().
+    scrape_run_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, ForeignKey("scrape_runs.id", ondelete="CASCADE"), nullable=True),
+    )
     company: str
     error_message: str
     error_type: str = ""

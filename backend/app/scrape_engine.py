@@ -354,6 +354,41 @@ def maintain_scrape_runs(session: Session, keep: int = 20, stale_minutes: int = 
     session.commit()
 
 
+def sweep_stale_jobs(max_age_days: int = 21) -> int:
+    """Retire ACTIVE jobs that no scrape has re-seen in ``max_age_days``.
+
+    The normal removal path only counts misses for companies a scrape actually
+    visited, so a posting from a source that quietly stopped returning results —
+    or was removed from the config — stays "active" forever and is shown to
+    users indefinitely. This is the backstop for that.
+
+    Deliberately generous: at the healthy 3-hourly cadence, 21 days is ~168
+    consecutive misses, so it can only ever catch genuinely abandoned rows.
+
+    CALLER MUST ONLY RUN THIS AFTER A SUCCESSFUL SCRAPE — during the three-day
+    outage every job would have looked stale, and sweeping then would have
+    emptied the board.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    swept = 0
+    with Session(engine) as session:
+        stale = session.exec(
+            select(JobPosting).where(
+                JobPosting.active_status.in_([ActiveStatus.active, ActiveStatus.possibly_removed]),
+                JobPosting.last_seen_at < cutoff,
+            )
+        ).all()
+        for job in stale:
+            job.active_status = ActiveStatus.removed
+            job.removed_at = datetime.now(timezone.utc)
+            session.add(job)
+            swept += 1
+        if swept:
+            session.commit()
+            logger.info("Stale sweep: retired %d job(s) unseen for %d+ days", swept, max_age_days)
+    return swept
+
+
 async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | None = None) -> ScrapeRun:
     schedule_cfg = load_schedule()
     delay_between = schedule_cfg.get("rate_limit", {}).get("delay_between_companies_seconds", 5)
@@ -448,6 +483,14 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
             run_obj.errors = total_errors
             session.add(run_obj)
             session.commit()
+            # commit() expires every attribute, and this session is about to
+            # close — so reload the values and detach the instance while they
+            # are still readable. Returning it without this gives the caller an
+            # object that raises DetachedInstanceError on the first attribute
+            # read, which is exactly what made a fully successful 18-minute
+            # scrape report as a failed one.
+            session.refresh(run_obj)
+            session.expunge(run_obj)
             return run_obj
 
     return run
