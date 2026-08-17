@@ -172,9 +172,12 @@ companies:
   - name: "MatX"
     category: "AI Accelerator"
     priority: "A"
-    careers_url: "https://job-boards.greenhouse.io/matx"
-    ats_platform: "greenhouse"
-    greenhouse_board: "matx"
+    # Moved off Greenhouse (board 'matx' now 404s) to Ashby — same migration
+    # Cerebras made. Caught because the scrape reports per-company errors
+    # instead of silently returning zero.
+    careers_url: "https://jobs.ashbyhq.com/matx"
+    ats_platform: "ashby"
+    ashby_org: "matx"
     search_keywords: ["verification", "rtl", "design verification", "asic", "soc"]
     locations_of_interest: ["Mountain View", "Remote"]
     enabled: true
@@ -850,8 +853,14 @@ companies:
   - name: "Mythic"
     category: "Edge AI"
     priority: "C"
-    careers_url: "https://mythic.ai/careers/"
-    ats_platform: "generic"
+    # mythic.ai/careers just embeds a Lever board, so hit Lever's JSON API
+    # directly. The generic scraper was 403ing on the marketing page and falling
+    # back to Playwright, which the main cloud scrape has no Chromium for
+    # ("ModuleNotFoundError: No module named 'playwright'"). Note the token is
+    # the full "mythic-ai.com", not "mythic".
+    careers_url: "https://jobs.lever.co/mythic-ai.com"
+    ats_platform: "lever"
+    lever_company: "mythic-ai.com"
     search_keywords:
       - "verification"
       - "rtl"
@@ -862,7 +871,7 @@ companies:
       - "Austin"
       - "Redwood City"
       - "United States"
-    notes: "Generic scraper — verified live; analog-compute-in-memory startup with US DV/RTL roles."
+    notes: "Lever public API — verified live; 5 US DV/RTL/emulation roles (Austin, TX)."
     enabled: true
   - name: "Blaize"
     category: "Edge AI"
