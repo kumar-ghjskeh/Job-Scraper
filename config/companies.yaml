@@ -773,10 +773,24 @@ companies:
   - name: "MaxLinear"
     category: "Connectivity"
     priority: "C"
-    careers_url: "https://www.maxlinear.com/company/careers"
-    ats_platform: "generic"
-    notes: "Direct search — custom careers portal."
-    enabled: false
+    careers_url: "https://careersus-maxlinear.icims.com/jobs/search"
+    ats_platform: "icims"
+    # MUST be the full host. The public board is "careersus-maxlinear"; plain
+    # "maxlinear.icims.com" is an OAuth-gated internal portal that only returns
+    # a login redirect.
+    icims_host: "careersus-maxlinear.icims.com"
+    search_keywords:
+      - "verification"
+      - "rtl"
+      - "digital design"
+      - "asic"
+    locations_of_interest:
+      - "Carlsbad"
+      - "Irvine"
+      - "San Jose"
+      - "United States"
+    notes: "iCIMS HTML board — verified live."
+    enabled: true
   - name: "Seagate"
     category: "Storage"
     priority: "C"
@@ -838,8 +852,18 @@ companies:
     priority: "C"
     careers_url: "https://mythic.ai/careers/"
     ats_platform: "generic"
-    notes: "Direct search — custom careers portal."
-    enabled: false
+    search_keywords:
+      - "verification"
+      - "rtl"
+      - "design verification"
+      - "asic"
+      - "soc"
+    locations_of_interest:
+      - "Austin"
+      - "Redwood City"
+      - "United States"
+    notes: "Generic scraper — verified live; analog-compute-in-memory startup with US DV/RTL roles."
+    enabled: true
   - name: "Blaize"
     category: "Edge AI"
     priority: "C"
@@ -932,4 +956,47 @@ companies:
       - "San Jose"
       - "United States"
     notes: "SmartRecruiters public API — verified live; US ASIC verification roles (San Jose) among global postings."
+    enabled: true
+  - name: "Allegro MicroSystems"
+    category: "Sensors / Power"
+    priority: "C"
+    careers_url: "https://allegromicro.wd5.myworkdayjobs.com/AllegroCareers"
+    ats_platform: "workday"
+    workday_tenant: "allegromicro"
+    workday_instance: "wd5"
+    workday_career_site: "AllegroCareers"
+    search_keywords:
+      - "verification"
+      - "rtl"
+      - "digital design"
+      - "asic"
+      - "soc"
+    locations_of_interest:
+      - "Richardson"
+      - "Manchester"
+      - "United States"
+    notes: "Workday — verified live; mostly analog/sensor, but posts US digital SoC roles (Richardson, TX)."
+    enabled: true
+  - name: "Semtech"
+    category: "Analog / Mixed-Signal"
+    priority: "C"
+    careers_url: "https://semtech.wd1.myworkdayjobs.com/SemtechCareers"
+    ats_platform: "workday"
+    workday_tenant: "semtech"
+    workday_instance: "wd1"
+    workday_career_site: "SemtechCareers"
+    search_keywords:
+      - "verification"
+      - "rtl"
+      - "digital design"
+      - "asic"
+      - "soc"
+    locations_of_interest:
+      - "Camarillo"
+      - "San Jose"
+      - "United States"
+    notes: >-
+      Workday — verified live. Digital design/verification reqs exist but were
+      all non-US at time of adding (CH/MX/CA/IN); enabled so US postings are
+      picked up when they appear. The USA-only filter hides the rest.
     enabled: true

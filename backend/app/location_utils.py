@@ -177,6 +177,38 @@ def _mask_false_friends(loc: str) -> str:
     return loc
 
 
+# Workday tenants commonly prefix the location with an ISO-3166 alpha-3 country
+# code: "CAN - Burlington, ON", "IND - Hyderabad", "MEX - Aguascalientes",
+# "CHE - Neuchatel". Without this the country is invisible to the parser and the
+# city can collide with a US one — "CAN - Burlington, ON" was being served as
+# Burlington, VERMONT. Prefix-anchored so a stray three-letter word in a city
+# name can never trigger it.
+_ALPHA3_FOREIGN = {
+    "can", "mex", "ind", "chn", "twn", "jpn", "kor", "deu", "fra", "gbr", "che",
+    "sgp", "mys", "phl", "vnm", "tha", "isr", "irl", "nld", "swe", "nor", "dnk",
+    "fin", "pol", "rou", "esp", "ita", "aut", "bel", "cze", "hun", "prt", "grc",
+    "bra", "arg", "chl", "col", "aus", "nzl", "zaf", "tur", "ukr", "are", "sau",
+    "egy", "mar", "cri", "bgr", "srb", "hrv", "ltu", "lva", "est", "svk", "svn",
+    "idn", "hkg", "lka", "pak", "bgd", "rus", "bel",
+}
+_ALPHA3_RE = re.compile(r"^\s*([a-z]{3})\s*[-–—]\s*", re.IGNORECASE)
+
+# Canadian province codes. Safe to treat as foreign: none collide with a US
+# state abbreviation, and they appear in the same "City, XX" shape that would
+# otherwise fall through to a US city match.
+_CA_PROVINCE_RE = re.compile(r",\s*(on|qc|bc|ab|mb|sk|ns|nb|nl|pei|pe|yt|nt|nu)\s*$", re.IGNORECASE)
+
+
+def _foreign_country_code(loc: str) -> str:
+    """Country implied by an alpha-3 prefix or Canadian province suffix, else ""."""
+    m = _ALPHA3_RE.match(loc)
+    if m and m.group(1).lower() in _ALPHA3_FOREIGN:
+        return m.group(1).upper()
+    if _CA_PROVINCE_RE.search(loc):
+        return "CAN"
+    return ""
+
+
 # Workday (and a few others) return a useless roll-up like "2 Locations" in the
 # list API when a req spans sites, but the apply URL still carries the real
 # primary site as a path slug:
@@ -232,6 +264,17 @@ def parse_location(location_raw: str, description: str = "") -> LocationResult:
     # Only a strong US signal lets a genuine multi-region posting
     # ("Austin, TX; London, United Kingdom") stay in the USA view.
     strong_usa = _has_usa_signal(loc)
+
+    # 0. An explicit country CODE beats everything except an explicit US marker.
+    #    Checked before the city/state matching below, because the city half of
+    #    "CAN - Burlington, ON" collides with a real US city.
+    if not strong_usa:
+        code = _foreign_country_code(loc)
+        if code:
+            return LocationResult(
+                is_usa=False, country=code, confidence=0.95,
+                reason=f"foreign country code: '{code}'",
+            )
 
     # 1. Explicit foreign COUNTRY in the location field wins unless a strong US
     #    signal is also present — this stops "Cambridge, United Kingdom" being
