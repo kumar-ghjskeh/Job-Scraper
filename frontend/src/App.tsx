@@ -52,7 +52,30 @@ function SkeletonCard() {
   )
 }
 
-function EmptyState({ tab, query }: { tab: Tab; query?: string }) {
+function EmptyState({ tab, query, offline }: { tab: Tab; query?: string; offline?: boolean }) {
+  // The backend is unreachable or erroring. Saying "no jobs match your filters"
+  // here blames the user's filters for an outage and sends them fiddling with
+  // controls that cannot help — so say what is actually wrong.
+  if (offline) {
+    return (
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--warning-border)', borderRadius: 8, padding: '52px 24px', textAlign: 'center' }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: '50%', background: 'var(--warning-light)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px',
+        }}>
+          <Icon name="activity" size={26} color="var(--warning)" />
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
+          Can&rsquo;t reach the job service
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 460, margin: '0 auto 16px', lineHeight: 1.6 }}>
+          Your filters are fine &mdash; the server isn&rsquo;t responding, so nothing can be listed
+          right now. This retries by itself; saved jobs and your r&eacute;sum&eacute; are unaffected.
+          Check <strong>Data Health</strong> for the current status.
+        </div>
+      </div>
+    )
+  }
   // Active company/keyword search that returned nothing → likely an untracked
   // company (e.g. AMD). Be explicit and offer a direct careers search.
   if (query && query.trim() && ['all', 'best', 'entry-level'].includes(tab)) {
@@ -354,7 +377,9 @@ export default function App() {
             background: 'var(--warning-light)', border: '1px solid var(--warning-border)',
             borderRadius: 8, padding: '10px 16px', marginBottom: 14, color: 'var(--warning)', fontSize: 13,
           }}>
-            Data sync delayed — last update may be stale. Retrying automatically. ({error})
+            {jobs.length === 0
+              ? <>Can’t reach the job service — nothing could be loaded. Retrying automatically. ({error})</>
+              : <>Data sync delayed — showing the last successful results. Retrying automatically. ({error})</>}
           </div>
         )}
 
@@ -432,7 +457,7 @@ export default function App() {
                   {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
               ) : jobs.length === 0 ? (
-                <EmptyState tab={tab} query={filters.keyword} />
+                <EmptyState tab={tab} query={filters.keyword} offline={!!error} />
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }} className="animate-in">
                   {grouped.map((g) => (
