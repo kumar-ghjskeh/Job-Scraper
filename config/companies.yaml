@@ -957,6 +957,23 @@ companies:
       - "United States"
     notes: "SmartRecruiters public API — verified live; US ASIC verification roles (San Jose) among global postings."
     enabled: true
+  - name: "Tetramem"
+    category: "AI Accelerators"
+    priority: "C"
+    careers_url: "https://careers.smartrecruiters.com/tetrameminc"
+    ats_platform: "smartrecruiters"
+    smartrecruiters_company: "tetrameminc"
+    search_keywords:
+      - "verification"
+      - "rtl"
+      - "asic"
+      - "design verification"
+      - "soc"
+    locations_of_interest:
+      - "Fremont"
+      - "United States"
+    notes: "SmartRecruiters public API — verified live; US ASIC/SoC DV + RTL roles (Fremont, CA)."
+    enabled: true
   - name: "Allegro MicroSystems"
     category: "Sensors / Power"
     priority: "C"
