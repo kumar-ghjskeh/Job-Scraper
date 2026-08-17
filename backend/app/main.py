@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Optional
 
@@ -1015,6 +1016,107 @@ def _current_profile(session: Session, resume_id: Optional[int] = None) -> Optio
         return None
 
 
+# ── Résumé-ranking cache ──────────────────────────────────────────────────────
+# Maps a (résumé, filters, sort) signature to the ranked [(job_id, match)] list.
+# Only the ORDER and the per-job scores are cached — never job rows — so a page
+# view after a hit reads just its 50 rows instead of re-reading every filtered
+# job's description. TTL is short so a fresh scrape shows up quickly; the cache
+# is also dropped outright whenever the résumé set changes.
+_RANK_CACHE: dict[str, tuple[float, list[tuple[int, dict]]]] = {}
+# The key carries a data version (see _data_version), so a completed scrape
+# produces a different key and the old ranking is simply never consulted again.
+# That makes correctness independent of the clock, and lets the TTL be long —
+# it exists only to bound memory and to cover edits made outside a scrape.
+_RANK_CACHE_TTL_SECONDS = 3600
+_RANK_CACHE_MAX_ENTRIES = 24
+
+
+def _data_version(session: Session) -> str:
+    """Changes whenever a scrape finishes, so cached rankings retire by themselves.
+
+    A time-based TTL alone was the wrong tool: views spread across the day would
+    each land in a fresh window and re-read every filtered job's description,
+    which is the cost this cache exists to avoid.
+    """
+    try:
+        last = session.exec(
+            select(func.max(ScrapeRun.id)).where(col(ScrapeRun.finished_at).is_not(None))
+        ).one()
+        return str(last or 0)
+    except Exception:
+        return "0"
+
+
+def _profile_cache_id(session: Session, resume_id: Optional[int]) -> str:
+    if resume_id:
+        return str(resume_id)
+    rp = _active_resume(session)
+    return str(rp.id) if rp and rp.id else "none"
+
+
+def _match_cache_key(*, profile_id: str, sort: str, parts: tuple) -> str:
+    return "|".join([profile_id, sort or "match", *("" if p is None else str(p) for p in parts)])
+
+
+def _rank_cache_get(key: str) -> Optional[list[tuple[int, dict]]]:
+    hit = _RANK_CACHE.get(key)
+    if not hit:
+        return None
+    ts, ranked = hit
+    if (time.time() - ts) > _RANK_CACHE_TTL_SECONDS:
+        _RANK_CACHE.pop(key, None)
+        return None
+    return ranked
+
+
+def _rank_cache_put(key: str, ranked: list[tuple[int, dict]]) -> None:
+    if len(_RANK_CACHE) >= _RANK_CACHE_MAX_ENTRIES:
+        # Drop the oldest entry; this is a small bounded cache, not an LRU.
+        oldest = min(_RANK_CACHE, key=lambda k: _RANK_CACHE[k][0])
+        _RANK_CACHE.pop(oldest, None)
+    _RANK_CACHE[key] = (time.time(), ranked)
+
+
+def invalidate_rank_cache() -> None:
+    """Drop every cached ranking — call when the résumé set changes."""
+    _RANK_CACHE.clear()
+
+
+def _serialize_ranked_page(session: Session, ranked: list[tuple[int, dict]],
+                           page: int, limit: int) -> dict:
+    """Build one page from a cached ranking, reading only that page's rows."""
+    total = len(ranked)
+    start = (page - 1) * limit
+    window = ranked[start:start + limit]
+    ids = [jid for jid, _ in window]
+    rows = {}
+    if ids:
+        fetched = session.exec(
+            select(JobPosting)
+            .where(col(JobPosting.id).in_(ids))
+            .options(defer(JobPosting.full_description_text), defer(JobPosting.cleaned_description))
+        ).all()
+        rows = {j.id: j for j in fetched}
+    items = []
+    for jid, m in window:
+        job = rows.get(jid)
+        if job is None:      # deleted since the ranking was computed
+            continue
+        job.__dict__["full_description_text"] = ""
+        job.__dict__["cleaned_description"] = ""
+        item = JobResponse.model_validate(job).model_dump()
+        item["cleaned_description"] = ""
+        item.update({k: m[k] for k in (
+            "resume_match", "new_grad_fit", "experienced_fit", "overall_recommendation",
+            "match_breakdown", "defensibility", "apply_priority", "apply_priority_score",
+            "matched_skills", "missing_skills",
+        ) if k in m})
+        items.append(item)
+    total_pages = max(1, (total + limit - 1) // limit)
+    return {"items": items, "total_count": total, "page": page, "limit": limit,
+            "total_pages": total_pages, "has_next": page < total_pages, "has_prev": page > 1}
+
+
 def _job_match_input(job: JobPosting) -> dict:
     now = datetime.now(timezone.utc)
     fs = job.first_seen_at
@@ -1055,6 +1157,7 @@ def _resume_brief(rp: ResumeProfile) -> dict:
 
 @app.post("/resume/upload")
 async def upload_resume(session: SessionDep, file: UploadFile = File(...), label: str = Form(default="")):
+    invalidate_rank_cache()  # résumé set changed → cached rankings are stale
     from .resume_parser import parse_resume
     data = await file.read()
     if len(data) > 8 * 1024 * 1024:
@@ -1098,6 +1201,7 @@ def get_resume(session: SessionDep):
 
 @app.post("/resume/{resume_id}/activate")
 def activate_resume(resume_id: int, session: SessionDep):
+    invalidate_rank_cache()  # résumé set changed → cached rankings are stale
     target = session.get(ResumeProfile, resume_id)
     if not target:
         raise HTTPException(status_code=404, detail="Resume not found")
@@ -1110,6 +1214,7 @@ def activate_resume(resume_id: int, session: SessionDep):
 
 @app.delete("/resume/{resume_id}")
 def delete_resume_one(resume_id: int, session: SessionDep):
+    invalidate_rank_cache()  # résumé set changed → cached rankings are stale
     rp = session.get(ResumeProfile, resume_id)
     if rp:
         was_active = rp.is_active
@@ -1126,6 +1231,7 @@ def delete_resume_one(resume_id: int, session: SessionDep):
 
 @app.delete("/resume")
 def delete_resume(session: SessionDep):
+    invalidate_rank_cache()  # résumé set changed → cached rankings are stale
     """Delete all resume versions (legacy 'remove resume' action)."""
     for old in session.exec(select(ResumeProfile)).all():
         session.delete(old)
@@ -1135,6 +1241,7 @@ def delete_resume(session: SessionDep):
 
 @app.delete("/account/data")
 def delete_all_my_data(session: SessionDep):
+    invalidate_rank_cache()  # résumé set changed → cached rankings are stale
     """Erase all personal data stored by the app: uploaded résumés + parsed
     profiles, the saved master-résumé LaTeX / tailoring instructions, saved
     searches (watchlists), and push-notification subscriptions. Public job
@@ -1176,6 +1283,23 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
     # 1. Apply ALL active filters through the shared query builder (same contract as
     # /jobs), then 2. compute the resume match, then 3. rank. Pull the full filtered
     # set (high limit) so ranking/pagination happen over the filtered jobs.
+    #
+    # Ranking needs cleaned_description (~2.2 KB/row) for EVERY filtered job, so a
+    # single view of this tab moves ~1.8 MB. That is fine once and ruinous on
+    # repeat: paging, re-sorting and tab-switching all re-run it, and at ~50
+    # views/day it alone exceeds the database's 5 GB monthly transfer quota —
+    # the same quota that has been exhausted twice. So the ranked order is
+    # cached and only the current page is re-read. See _rank_cache_get.
+    cache_key = _match_cache_key(profile_id=_profile_cache_id(session, resume_id), sort=sort, parts=(
+        _data_version(session),
+        company, company_ids, priority, role_category, level_filter, remote, min_score,
+        posted_within_hours, new_since_hours, keyword, skills, usa_only, include_senior,
+        include_unknown_location, include_software, role_flags, state, h1b_only,
+    ))
+    cached = _rank_cache_get(cache_key)
+    if cached is not None:
+        return _serialize_ranked_page(session, cached, page, limit)
+
     jobs, _ = _build_job_query(
         session, company=company, company_ids=company_ids, priority=priority,
         role_category=role_category, level_filter=level_filter, remote=remote,
@@ -1214,6 +1338,9 @@ def resume_matches(session: SessionDep, page: int = 1, limit: int = Query(defaul
         "recent": lambda t: (str(getattr(t[0], "first_seen_at", None) or ""), t[1]["resume_match"]),
     }
     scored.sort(key=sort_keys.get(sort, sort_keys["match"]), reverse=True)
+    # Cache the ranked order + scores so paging/re-sorting doesn't re-read every
+    # filtered job's description (see the note at the query above).
+    _rank_cache_put(cache_key, [(job.id, m) for job, m in scored if job.id is not None])
     total = len(scored)
     start = (page - 1) * limit
     page_items = []
