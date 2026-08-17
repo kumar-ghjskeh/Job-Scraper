@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete as sa_delete
+from sqlalchemy.orm import load_only
 from sqlmodel import Session, col, select
 
 from .apply_url import process_apply_url
@@ -317,6 +318,23 @@ async def persist_company_results(
     return new_count, removed_count
 
 
+# The only columns the scrape-side bookkeeping queries read or write. Job rows
+# carry two very large text columns (full_description_text, cleaned_description);
+# loading them for bookkeeping moved megabytes per scrape for no reason and
+# exhausted the database's monthly data-transfer quota twice. Anything added here
+# must be genuinely needed by those loops.
+_SCRAPE_LIGHT_COLS = (
+    JobPosting.id,
+    JobPosting.company,
+    JobPosting.job_id_from_company,
+    JobPosting.apply_url,
+    JobPosting.active_status,
+    JobPosting.missed_scrapes,
+    JobPosting.removed_at,
+    JobPosting.last_seen_at,
+)
+
+
 def maintain_scrape_runs(session: Session, keep: int = 20, stale_minutes: int = 60) -> None:
     """Keep the Data Health run history clean and trustworthy:
 
@@ -373,10 +391,13 @@ def sweep_stale_jobs(max_age_days: int = 21) -> int:
     swept = 0
     with Session(engine) as session:
         stale = session.exec(
-            select(JobPosting).where(
+            select(JobPosting)
+            .where(
                 JobPosting.active_status.in_([ActiveStatus.active, ActiveStatus.possibly_removed]),
                 JobPosting.last_seen_at < cutoff,
             )
+            # Only the columns this actually writes. See _SCRAPE_LIGHT_COLS.
+            .options(load_only(*_SCRAPE_LIGHT_COLS))
         ).all()
         for job in stale:
             job.active_status = ActiveStatus.removed
@@ -500,10 +521,17 @@ async def _update_removed_status(company: str, seen_ids: set[str], threshold: in
     removed_count = 0
     with Session(engine) as session:
         active_jobs = session.exec(
-            select(JobPosting).where(
+            select(JobPosting)
+            .where(
                 JobPosting.company == company,
                 JobPosting.active_status.in_([ActiveStatus.active, ActiveStatus.possibly_removed]),
             )
+            # This loop reads job_id_from_company/apply_url and writes
+            # missed_scrapes/active_status/removed_at — nothing else. Loading
+            # full rows here pulled every description for every active job of
+            # every company on every scrape, which was the single largest
+            # consumer of the database's data-transfer quota.
+            .options(load_only(*_SCRAPE_LIGHT_COLS))
         ).all()
 
         for job in active_jobs:
