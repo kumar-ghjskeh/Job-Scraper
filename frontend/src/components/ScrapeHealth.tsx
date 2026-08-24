@@ -79,8 +79,11 @@ export function ScrapeHealth() {
           careers_url: c.careers_url, company_search_url: '', ats_platform: c.ats_platform,
           enabled: c.enabled, last_scraped_at: c.last_scraped_at,
           scrape_error_count: c.scrape_error_count, notes: '',
-          usa_active_jobs: c.usa_active_jobs, viewable_jobs: c.usa_active_jobs,
-          engine: c.engine, auto_connected: c.enabled || !!c.engine,
+          total_active_jobs: c.total_active_jobs, usa_active_jobs: c.usa_active_jobs,
+          viewable_jobs: c.viewable_jobs, entry_level_jobs: c.entry_level_jobs,
+          new_jobs_today: c.new_jobs_today, parser_confidence: c.parser_confidence,
+          scrape_status: c.scrape_status, engine: c.engine,
+          auto_connected: c.auto_connected,
         })) as unknown as Company[]
         _healthCache = { runs, companies, analytics: null }
         setRuns(runs); setCompanies(companies)
@@ -327,7 +330,12 @@ export function ScrapeHealth() {
         gap: 6,
       }}>
         {companies.filter(c => c.auto_connected ?? c.enabled).map((c) => {
-          const scraped = !!c.last_scraped_at
+          // A source is live when it is PRODUCING postings in the current
+          // snapshot. Keying this off last_scraped_at showed every company grey,
+          // because the scrape now runs against a scratch database that has no
+          // company table to stamp — the jobs themselves are the real evidence.
+          const live = (c.total_active_jobs ?? 0) > 0
+          const erroring = (c.scrape_error_count ?? 0) > 0
           return (
             <div key={c.id} style={{
               background: 'var(--surface)', border: '1px solid var(--border)',
@@ -343,11 +351,25 @@ export function ScrapeHealth() {
                   {c.ats_platform}{c.engine ? ` · ${c.engine}` : ''}
                 </div>
               </div>
-              <div style={{
-                width: 8, height: 8, borderRadius: '50%',
-                background: scraped ? (c.scrape_error_count > 0 ? 'var(--error)' : 'var(--success)') : 'var(--text-faint)',
-                flexShrink: 0,
-              }} title={scraped ? (c.scrape_error_count > 0 ? 'Has errors' : 'OK') : 'Not yet scraped'} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                {live && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                    {c.viewable_jobs ?? 0}
+                  </span>
+                )}
+                <span
+                  style={{
+                    width: 9, height: 9, borderRadius: '50%', flexShrink: 0,
+                    background: erroring ? 'var(--danger)' : live ? 'var(--success)' : 'var(--text-faint)',
+                    boxShadow: live && !erroring ? '0 0 0 3px rgba(34,197,94,0.18)' : 'none',
+                  }}
+                  title={
+                    erroring ? `${c.scrape_error_count} scrape error(s)`
+                    : live ? `Live — ${c.viewable_jobs ?? 0} US roles from ${c.total_active_jobs} postings`
+                    : 'Connected, but no live postings right now'
+                  }
+                />
+              </div>
             </div>
           )
         })}

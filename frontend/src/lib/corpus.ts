@@ -21,6 +21,15 @@ export interface CorpusCompany {
   engine: string
   enabled: boolean
   usa_active_jobs: number
+  total_active_jobs: number
+  viewable_jobs: number
+  entry_level_jobs: number
+  new_jobs_today: number
+  parser_confidence: number
+  /** True when the source is actually producing postings — the honest signal,
+   *  rather than merely being listed in the config. */
+  auto_connected: boolean
+  scrape_status: string
   last_scraped_at: string | null
   scrape_error_count: number
 }

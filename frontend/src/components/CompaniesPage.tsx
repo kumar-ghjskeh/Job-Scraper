@@ -15,12 +15,17 @@ function priorityColor(p: string): { bg: string; color: string } {
 }
 
 function statusDot(co: Company) {
-  if (!co.last_scraped_at) return { color: '#9CA3AF', label: 'Never scraped' }
-  const minsAgo = (Date.now() - (parseApiDate(co.last_scraped_at)?.getTime() ?? 0)) / 60000
-  if (co.scrape_status === 'error' || co.scrape_error_count > 2) return { color: '#DC2626', label: 'Errors' }
-  if (minsAgo < 360) return { color: '#16A34A', label: 'Fresh' }
-  if (minsAgo < 1440) return { color: '#D97706', label: 'Stale' }
-  return { color: '#9CA3AF', label: 'Old' }
+  // Judged on what the source is actually producing in the current snapshot.
+  // This used to key off last_scraped_at, which a rebuilt corpus never stamps —
+  // so every company rendered as "Never scraped" even while returning jobs.
+  if (co.scrape_status === 'error' || co.scrape_error_count > 2) {
+    return { color: 'var(--danger)', label: 'Errors' }
+  }
+  const live = co.total_active_jobs ?? 0
+  const usable = co.viewable_jobs ?? 0
+  if (live > 0 && usable > 0) return { color: 'var(--success)', label: 'Live' }
+  if (live > 0) return { color: 'var(--teal)', label: 'Live · no US roles' }
+  return { color: '#9CA3AF', label: 'No openings' }
 }
 
 const ATS_COLORS: Record<string, { bg: string; color: string }> = {
@@ -59,9 +64,12 @@ export function CompaniesPage({ onViewJobs }: Props) {
         careers_url: c.careers_url, company_search_url: '', ats_platform: c.ats_platform,
         enabled: c.enabled, last_scraped_at: c.last_scraped_at,
         scrape_error_count: c.scrape_error_count, notes: '',
-        usa_active_jobs: c.usa_active_jobs, viewable_jobs: c.usa_active_jobs,
-        engine: c.engine, auto_connected: c.enabled || !!c.engine,
-      })) as unknown as Company[]
+        total_active_jobs: c.total_active_jobs, usa_active_jobs: c.usa_active_jobs,
+        viewable_jobs: c.viewable_jobs, entry_level_jobs: c.entry_level_jobs,
+        new_jobs_today: c.new_jobs_today, parser_confidence: c.parser_confidence,
+        scrape_status: c.scrape_status, engine: c.engine,
+        auto_connected: c.auto_connected,
+        })) as unknown as Company[]
       return data
     }).then((data) => {
       _companiesCache = data
@@ -139,6 +147,42 @@ export function CompaniesPage({ onViewJobs }: Props) {
         </div>
       </div>
 
+      {/* Coverage at a glance. The directory previously gave no way to tell which
+          sources were actually feeding the board — every card looked the same
+          whether it was producing 97 roles or none. */}
+      {(() => {
+        const live = companies.filter((c) => (c.total_active_jobs ?? 0) > 0)
+        const withUs = companies.filter((c) => (c.viewable_jobs ?? 0) > 0)
+        const tracked = companies.filter((c) => c.enabled)
+        const usRoles = companies.reduce((n, c) => n + (c.viewable_jobs ?? 0), 0)
+        const erroring = companies.filter((c) => (c.scrape_error_count ?? 0) > 2)
+        const cards: { label: string; value: string; color: string; hint: string }[] = [
+          { label: 'Feeding the board', value: `${withUs.length}`, color: 'var(--success)',
+            hint: `${withUs.length} companies are returning US roles right now` },
+          { label: 'Connected sources', value: `${live.length}/${tracked.length}`, color: 'var(--primary)',
+            hint: `${live.length} of ${tracked.length} tracked companies returned postings on the last scrape` },
+          { label: 'US roles listed', value: usRoles.toLocaleString(), color: 'var(--teal)',
+            hint: 'Total US, hardware-relevant roles across every company' },
+          { label: 'Sources with errors', value: `${erroring.length}`,
+            color: erroring.length ? 'var(--danger)' : 'var(--success)',
+            hint: erroring.length ? 'These need a scraper fix' : 'No source is failing' },
+        ]
+        return (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+            {cards.map((c) => (
+              <div key={c.label} title={c.hint} style={{
+                flex: '1 1 150px', background: 'var(--surface)',
+                border: '1px solid var(--border)', borderLeft: `3px solid ${c.color}`,
+                borderRadius: 10, padding: '10px 14px', minWidth: 140,
+              }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: c.color, lineHeight: 1.1 }}>{c.value}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, fontWeight: 600 }}>{c.label}</div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
+
       {byPriority.filter((p) => grouped[p]?.length > 0).map((priority) => {
         const pri = priorityColor(priority)
         const tierLabels: Record<string, string> = {
@@ -174,7 +218,10 @@ export function CompaniesPage({ onViewJobs }: Props) {
                 return (
                   <div key={co.id} style={{
                     background: 'var(--surface)',
-                    border: '1px solid var(--border)',
+                    // Connected sources get a tinted edge so the directory reads
+                    // at a glance instead of needing the label to be parsed.
+                    border: `1px solid ${connected ? 'var(--success-border)' : 'var(--border)'}`,
+                    borderLeft: `3px solid ${connected ? dot.color : 'var(--border-strong)'}`,
                     borderRadius: 10, padding: '12px 14px',
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
@@ -186,12 +233,18 @@ export function CompaniesPage({ onViewJobs }: Props) {
                         </div>
                       </div>
                       {connected ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: dot.color }} title={dot.label} />
-                          <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{dot.label}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                          <span style={{
+                            width: 9, height: 9, borderRadius: '50%', background: dot.color,
+                            boxShadow: dot.label === 'Live' ? '0 0 0 3px rgba(34,197,94,0.18)' : 'none',
+                          }} title={dot.label} />
+                          <span style={{ fontSize: 10.5, fontWeight: 700, color: dot.color }}>{dot.label}</span>
                         </div>
                       ) : (
-                        <span className="pill pill-neutral" style={{ flexShrink: 0 }}>Direct search</span>
+                        <span className="pill pill-neutral" style={{ flexShrink: 0 }}
+                          title="Tracked, but no live openings matched right now">
+                          No openings
+                        </span>
                       )}
                     </div>
 
@@ -199,8 +252,8 @@ export function CompaniesPage({ onViewJobs }: Props) {
                       <>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                           <span style={{ background: atsStyle.bg, color: atsStyle.color, fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}>{co.ats_platform}</span>
-                          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{co.total_active_jobs} total</span>
-                          {(co.viewable_jobs ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--text-primary)', fontWeight: 600 }}>{co.viewable_jobs} USA/relevant</span>}
+                          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{co.total_active_jobs} scanned</span>
+                          {(co.viewable_jobs ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 700 }}>{co.viewable_jobs} US roles</span>}
                           {(co.entry_level_jobs ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--teal)', fontWeight: 600 }}>{co.entry_level_jobs} entry-lvl</span>}
                           {(co.new_jobs_today ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>{co.new_jobs_today} new today</span>}
                         </div>
@@ -223,7 +276,9 @@ export function CompaniesPage({ onViewJobs }: Props) {
                       </>
                     ) : (
                       <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.5 }}>
-                        Not auto-connected — search openings directly on their careers site.
+                        {co.enabled
+                          ? 'Connected, but no matching openings right now — search their careers site directly.'
+                          : 'Not auto-connected — search openings directly on their careers site.'}
                       </div>
                     )}
 

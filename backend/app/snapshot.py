@@ -26,7 +26,7 @@ from __future__ import annotations
 import gzip
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -64,7 +64,15 @@ LIST_FIELDS = (
 
 
 def _iso(v: Any) -> Any:
-    return v.isoformat() if isinstance(v, datetime) else v
+    """ISO-8601 with an explicit UTC offset.
+
+    The models default to naive datetime.utcnow(), and a naive string is parsed
+    as LOCAL time by browsers — which rendered "updated -3.7h ago" for a run that
+    had just finished. Stamping the offset makes the wire format unambiguous.
+    """
+    if not isinstance(v, datetime):
+        return v
+    return (v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v).isoformat()
 
 
 def build_snapshot(session: Session) -> tuple[dict, dict]:
@@ -100,13 +108,49 @@ def build_snapshot(session: Session) -> tuple[dict, dict]:
                  "scrape_error_count": c.scrape_error_count}
         for c in session.exec(select(Company)).all()
     }
-    counts: dict[str, int] = {}
+    # Per-company tallies the directory renders. "Connected" is derived from a
+    # company actually HAVING live postings, so the page states what is really
+    # working rather than what the config hopes for.
+    HIDDEN = {"Software / Compiler", "Unknown", "Adjacent / Backup"}
+    day_ago = datetime.now(timezone.utc) - timedelta(hours=24)
+
+    def _fresh(row: dict) -> bool:
+        raw = row.get("posted_date") if row.get("posted_date_known") else None
+        raw = raw or row.get("first_seen_at")
+        try:
+            d = datetime.fromisoformat(str(raw))
+        except (TypeError, ValueError):
+            return False
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        return d >= day_ago
+
+    stats: dict[str, dict] = {}
     for row in out:
-        if row.get("is_usa") and str(row.get("active_status", "")).endswith("active"):
-            counts[row["company"]] = counts.get(row["company"], 0) + 1
+        if not str(row.get("active_status", "")).endswith("active"):
+            continue
+        st = stats.setdefault(row["company"], {
+            "total": 0, "usa": 0, "viewable": 0, "entry": 0, "new_today": 0, "quality": [],
+        })
+        st["total"] += 1
+        if row.get("is_usa"):
+            st["usa"] += 1
+            if not row.get("is_software_only") and row.get("role_category") not in HIDDEN:
+                st["viewable"] += 1
+                if row.get("is_entry_level") or row.get("is_candidate_friendly"):
+                    st["entry"] += 1
+                if _fresh(row):
+                    st["new_today"] += 1
+        if row.get("data_quality_score"):
+            st["quality"].append(int(row["data_quality_score"]))
+
     companies = []
     for c in load_all_companies():
         name = c.get("name", "")
+        st = stats.get(name, {})
+        quality = st.get("quality") or []
+        errs = status.get(name, {}).get("scrape_error_count", 0)
+        total = st.get("total", 0)
         companies.append({
             "name": name,
             "category": c.get("category", ""),
@@ -115,7 +159,16 @@ def build_snapshot(session: Session) -> tuple[dict, dict]:
             "ats_platform": c.get("ats_platform", ""),
             "engine": c.get("engine", ""),
             "enabled": bool(c.get("enabled", True)),
-            "usa_active_jobs": counts.get(name, 0),
+            "total_active_jobs": total,
+            "usa_active_jobs": st.get("usa", 0),
+            "viewable_jobs": st.get("viewable", 0),
+            "entry_level_jobs": st.get("entry", 0),
+            "new_jobs_today": st.get("new_today", 0),
+            "parser_confidence": round(sum(quality) / len(quality)) if quality else 0,
+            # A source is "connected" when it is producing postings — the honest
+            # signal — not merely because the config lists it.
+            "auto_connected": total > 0,
+            "scrape_status": "error" if errs > 2 else ("ok" if total else "idle"),
             **status.get(name, {"last_scraped_at": None, "scrape_error_count": 0}),
         })
     runs = [
@@ -197,6 +250,29 @@ def load_snapshot_into_db(jobs_path: str | Path, details_path: str | Path | None
             return datetime.fromisoformat(str(v))
         except ValueError:
             return None
+
+    # Scrape-run history must be restored too. Each run starts from an EMPTY
+    # scratch database, so without this the snapshot only ever contained the one
+    # run that had just happened — which made Data Health report the other two
+    # engines as "never run" and the pipeline as stopped, while everything was
+    # in fact healthy.
+    runs_restored = 0
+    with Session(engine) as session:
+        for r in payload.get("runs", []) or []:
+            session.add(ScrapeRun(
+                started_at=_dt(r.get("started_at")) or datetime.now(timezone.utc),
+                finished_at=_dt(r.get("finished_at")),
+                companies_scraped=int(r.get("companies_scraped") or 0),
+                jobs_found=int(r.get("jobs_found") or 0),
+                new_jobs=int(r.get("new_jobs") or 0),
+                removed_jobs=int(r.get("removed_jobs") or 0),
+                errors=int(r.get("errors") or 0),
+                triggered_by=str(r.get("triggered_by") or ""),
+            ))
+            runs_restored += 1
+        session.commit()
+    if runs_restored:
+        logger.info("restored %d scrape run(s) from the snapshot", runs_restored)
 
     restored = 0
     with Session(engine) as session:
