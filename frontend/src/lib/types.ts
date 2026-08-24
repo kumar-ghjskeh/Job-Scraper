@@ -49,6 +49,8 @@ export interface Job {
   new_grad_fit_label: string
   overall_recommendation: string
   matched_keywords: string
+  /** Comma-separated skills extracted at scrape time; the primary skill source. */
+  job_skills?: string
   score_breakdown_json: string
   relevance_score_label: string
 
@@ -311,5 +313,8 @@ export interface Filters {
   level_filter?: string
   h1b_only?: boolean
   sort_by?: string
+  skills?: string
+  /** Collapse same company+role into one card (default true). */
+  group_roles?: boolean
   sort_order?: string
 }
