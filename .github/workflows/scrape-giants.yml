@@ -119,8 +119,13 @@ jobs:
               echo "Corpus unchanged — nothing to publish."
               exit 0
             fi
+          # NOTE: do NOT add [skip ci] here. Vercel honours it and skips the
+          # deploy, so the refreshed corpus would land in the repo but never
+          # reach the CDN — the app would keep serving whatever was built last.
+          # It is not needed to avoid re-triggering these workflows either:
+          # neither runs on `push`, only on schedule and manual dispatch.
             COUNT=$(python -c "import json;print(json.load(open('frontend/public/data/jobs.json'))['count'])")
-            git commit --quiet -m "data: refresh job snapshot (${COUNT} jobs), browser pass [skip ci]"
+            git commit --quiet -m "data: refresh job snapshot (${COUNT} jobs), browser pass"
             if git push --quiet; then
               echo "Published ${COUNT} jobs."
               exit 0
