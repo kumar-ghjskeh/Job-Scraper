@@ -16,6 +16,9 @@ import { groupByCanonical } from './lib/dedupe'
 import { useTheme } from './lib/theme'
 import { useIsMobile } from './lib/useIsMobile'
 import { api } from './lib/api'
+import { loadCorpus, loadDetails } from './lib/corpus'
+import { queryJobs, effectiveDate } from './lib/query'
+import * as userState from './lib/userState'
 import type { AnalyticsSummary, Filters, Job, PaginatedResponse } from './lib/types'
 
 const PAGE_SIZE = 50
@@ -198,19 +201,55 @@ export default function App() {
   // clear it via reload().
   const jobsCache = useRef<Map<string, PaginatedResponse<Job>>>(new Map())
 
+  // Analytics are counted off the corpus that is already in memory — the same
+  // numbers the /analytics/summary endpoint returned, without the round trip.
   const loadAnalytics = useCallback(async () => {
-    try { setAnalytics(await api.getAnalytics()) } catch { /* non-fatal */ }
+    try {
+      const corpus = await loadCorpus()
+      const browseable = corpus.jobs.filter(
+        (j) => j.is_usa && !j.is_software_only
+          && !['Software / Compiler', 'Unknown', 'Adjacent / Backup'].includes(j.role_category),
+      )
+      const dayAgo = Date.now() - 24 * 3600_000
+      setAnalytics({
+        total_active: browseable.length,
+        new_24h: browseable.filter((j) => effectiveDate(j) >= dayAgo).length,
+        entry_level_count: browseable.filter((j) => j.is_entry_level || j.is_candidate_friendly).length,
+        usa_count: browseable.length,
+        remote_count: browseable.filter((j) => /remote/i.test(j.remote_status || '')).length,
+        high_score_count: browseable.filter((j) => (j.new_grad_fit ?? 0) >= 65).length,
+        saved_count: userState.countByStatus('saved'),
+        applied_count: userState.countByStatus('applied'),
+        total_companies: corpus.companies.filter((c) => c.enabled).length,
+        last_run: (corpus.runs && corpus.runs[0]) || null,
+      } as AnalyticsSummary)
+    } catch { /* non-fatal */ }
   }, [])
 
+  // Everything is answered from the static corpus fetched once per load: no
+  // database, no per-keystroke round trip. The tabs differ only in which filters
+  // they add on top, which is exactly what the API endpoints used to do.
   const fetchJobs = useCallback(async (): Promise<PaginatedResponse<Job>> => {
-    switch (tab) {
-      case 'resume':      return api.getResumeMatches(page, PAGE_SIZE, !!filters.include_senior, undefined, resumeSort, filters)
-      case 'entry-level': return api.getEntryLevelJobs(filters, page, PAGE_SIZE)
-      case 'best':        return api.getBestJobs(filters, page, PAGE_SIZE)
-      case 'saved':       return api.getSavedJobs(page, PAGE_SIZE)
-      case 'applied':     return api.getAppliedJobs(page, PAGE_SIZE)
-      default:            return api.getJobs(filters, page, PAGE_SIZE)
+    const corpus = await loadCorpus()
+    // A free-text query should search descriptions too, as the server did. Those
+    // load lazily, so only pull them when there is actually something to search.
+    const bodies = filters.keyword?.trim() ? await loadDetails() : undefined
+    const withMarks = corpus.jobs.map((j) => userState.applyMark(j))
+
+    if (tab === 'saved' || tab === 'applied') {
+      // Your own lists: status comes from browser storage, and the relevance and
+      // seniority gates are deliberately off — you chose these jobs explicitly.
+      const wanted = tab === 'saved' ? 'saved' : 'applied'
+      const mine = withMarks.filter((j) => j.active_status === wanted)
+      return queryJobs(mine, { ...filters, usa_only: false, include_adjacent: true,
+                               include_senior: true, group_roles: false }, page, PAGE_SIZE, bodies)
     }
+
+    const tabFilters: Filters =
+      tab === 'entry-level' ? { ...filters, level_filter: 'entry' }
+      : tab === 'best'      ? { ...filters, min_score: Math.max(Number(filters.min_score ?? 0), 65) }
+      : filters
+    return queryJobs(withMarks, tabFilters, page, PAGE_SIZE, bodies)
   }, [tab, filters, page, resumeSort])
 
   const loadJobs = useCallback(async () => {
@@ -231,6 +270,8 @@ export default function App() {
       setSelectedJob((cur) => (cur ? data.items.find((j) => j.id === cur.id) ?? cur : cur))
       // Overlay resume-match badges on cards (non-resume tabs) — one batch call.
       if (tab !== 'resume' && data.items.length) {
+        // Résumé badges come from the stateless match service; the board works
+        // fine without them, so a failure here must never surface as an error.
         api.getMatchBatch(data.items.map((j) => j.id)).then(setMatchMap).catch(() => setMatchMap({}))
       } else if (tab === 'resume') {
         setMatchMap({})
@@ -340,8 +381,12 @@ export default function App() {
   }
 
   async function handleQuickAction(job: Job, action: 'saved' | 'applied' | 'ignored') {
+    // Saved/applied marks are yours, not corpus data, so they live in the
+    // browser keyed by the posting's fingerprint — which survives the corpus
+    // being rebuilt by every scrape, unlike its row id.
+    if (!job.key) return
     const newStatus = job.active_status === action ? 'active' : action
-    await api.updateJobStatus(job.id, { active_status: newStatus })
+    userState.setStatus(job.key, newStatus as userState.JobStatus)
     reload()
   }
 

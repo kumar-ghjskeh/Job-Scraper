@@ -1,5 +1,8 @@
 export interface Job {
   id: number
+  /** Stable content fingerprint (company+title+location+source id). Survives a
+   *  corpus rebuild, unlike `id`, so browser-held marks stay attached. */
+  key?: string
   company: string
   company_category: string
   company_priority: string
