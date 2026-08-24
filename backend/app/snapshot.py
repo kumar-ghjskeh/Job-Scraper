@@ -216,3 +216,78 @@ def load_snapshot_into_db(jobs_path: str | Path, details_path: str | Path | None
         session.commit()
     logger.info("restored %d job(s) from %s", restored, jobs_path)
     return restored
+
+
+# ── Merging concurrent publishes ──────────────────────────────────────────────
+
+def merge_snapshot_files(base_jobs: str | Path, ours_jobs: str | Path,
+                         base_details: str | Path | None = None,
+                         ours_details: str | Path | None = None) -> dict:
+    """Union another snapshot into ours, in place.
+
+    Two scrape runs (browserless and browser) publish the same two files. Each
+    regenerates the whole corpus from its own scratch database, so git cannot
+    auto-merge them and a plain "last writer wins" would be destructive: the
+    browser pass only knows about 3 companies, so publishing it over a full run
+    would drop ~1,200 jobs.
+
+    Union by the stable content fingerprint instead. For a posting both sides
+    know, keep whichever was seen more recently — that is the run whose data is
+    fresher. Postings only one side knows are always kept, which is exactly the
+    behaviour that makes an overlap harmless rather than lossy.
+    """
+    ours_path, base_path = Path(ours_jobs), Path(base_jobs)
+    if not base_path.exists():
+        return {"merged": 0, "kept_ours": 0, "added_from_base": 0}
+
+    ours = json.loads(ours_path.read_text(encoding="utf-8"))
+    base = json.loads(base_path.read_text(encoding="utf-8"))
+
+    def _seen(row: dict) -> str:
+        return str(row.get("last_seen_at") or row.get("first_seen_at") or "")
+
+    by_key: dict[str, dict] = {}
+    for row in base.get("jobs", []):
+        k = row.get("key")
+        if k:
+            by_key[k] = row
+    added_from_base = len(by_key)
+    kept_ours = 0
+    for row in ours.get("jobs", []):
+        k = row.get("key")
+        if not k:
+            continue
+        prev = by_key.get(k)
+        if prev is None or _seen(row) >= _seen(prev):
+            by_key[k] = row
+            kept_ours += 1
+
+    merged = list(by_key.values())
+    ours["jobs"] = merged
+    ours["count"] = sum(
+        1 for r in merged if str(r.get("active_status", "active")).endswith("active")
+    )
+    # Company tallies must reflect the union, not just this run's slice.
+    counts: dict[str, int] = {}
+    for r in merged:
+        if r.get("is_usa") and str(r.get("active_status", "active")).endswith("active"):
+            counts[r.get("company", "")] = counts.get(r.get("company", ""), 0) + 1
+    for c in ours.get("companies", []):
+        c["usa_active_jobs"] = counts.get(c.get("name", ""), 0)
+    ours_path.write_text(json.dumps(ours, separators=(",", ":"), ensure_ascii=False),
+                         encoding="utf-8")
+
+    if base_details and ours_details and Path(base_details).exists():
+        od = json.loads(Path(ours_details).read_text(encoding="utf-8"))
+        bd = json.loads(Path(base_details).read_text(encoding="utf-8"))
+        combined = {**bd.get("descriptions", {}), **od.get("descriptions", {})}
+        # Drop bodies whose posting is no longer in the corpus.
+        live = {str(r.get("id")) for r in merged}
+        od["descriptions"] = {k: v for k, v in combined.items() if k in live}
+        Path(ours_details).write_text(json.dumps(od, separators=(",", ":"), ensure_ascii=False),
+                                      encoding="utf-8")
+
+    report = {"merged": len(merged), "kept_ours": kept_ours,
+              "added_from_base": added_from_base, "active": ours["count"]}
+    logger.info("merged snapshot: %s", report)
+    return report

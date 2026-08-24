@@ -96,16 +96,36 @@ jobs:
           set -e
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/public/data/jobs.json frontend/public/data/details.json
-          if git diff --cached --quiet; then
-            echo "No change in the corpus — nothing to publish."
-            exit 0
-          fi
-          COUNT=$(python -c "import json;print(json.load(open('frontend/public/data/jobs.json'))['count'])")
-          git commit -m "data: refresh job snapshot, browser pass (${COUNT} jobs) [skip ci]"
-          for i in 1 2 3; do
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push && exit 0
-            echo "push race, retrying ($i)"
+
+          # Keep this run's output aside, then publish by starting from whatever
+          # is currently on the branch and merging our corpus into it. Rebase is
+          # the wrong tool: both scrape workflows regenerate the same two JSON
+          # files wholesale, so git can never auto-merge them and the rebase just
+          # stops on a conflict. A plain overwrite is worse than that — the
+          # browser pass only knows about 3 companies, so publishing it over a
+          # full run would silently drop ~1,200 jobs.
+          TMP=$(mktemp -d)
+          cp frontend/public/data/jobs.json frontend/public/data/details.json "$TMP"/
+
+          for attempt in 1 2 3; do
+            git fetch --quiet origin "${GITHUB_REF_NAME}"
+            git reset --hard --quiet "origin/${GITHUB_REF_NAME}"
+            # Working tree is now the published corpus; union it into ours.
+            DATA_DIR="$TMP" python -m backend.app.merge_publish               frontend/public/data/jobs.json frontend/public/data/details.json
+            cp "$TMP"/jobs.json "$TMP"/details.json frontend/public/data/
+
+            git add frontend/public/data/jobs.json frontend/public/data/details.json
+            if git diff --cached --quiet; then
+              echo "Corpus unchanged — nothing to publish."
+              exit 0
+            fi
+            COUNT=$(python -c "import json;print(json.load(open('frontend/public/data/jobs.json'))['count'])")
+            git commit --quiet -m "data: refresh job snapshot (${COUNT} jobs), browser pass [skip ci]"
+            if git push --quiet; then
+              echo "Published ${COUNT} jobs."
+              exit 0
+            fi
+            echo "Push race, retrying ($attempt)"
             sleep 5
           done
           echo "::error::Could not publish the snapshot after 3 attempts."
