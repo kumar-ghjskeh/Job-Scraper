@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
+import { facetsFromCorpus } from '../lib/corpus'
 import type { Filters, JobFacets, Watchlist } from '../lib/types'
 import { Icon } from './Icon'
 import { enablePushAlerts, pushPermission } from '../lib/push'
@@ -110,7 +111,7 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
   }
 
   useEffect(() => {
-    api.getFacets(filters.usa_only !== false, filters.include_software)
+    facetsFromCorpus(filters.usa_only !== false, filters.include_software)
       .then(setFacets)
       .catch(() => {/* non-fatal */})
   }, [filters.usa_only, filters.include_software])

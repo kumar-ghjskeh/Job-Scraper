@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
+import { loadCorpus, loadDetails } from '../lib/corpus'
+import { siblingsOf } from '../lib/query'
+import { getJobMatchDetail } from '../lib/resume'
 import { fmtDateLong, freshness } from '../lib/datetime'
 import type { Job, JobMatch } from '../lib/types'
 import { Icon } from './Icon'
@@ -155,8 +158,8 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
     if (!job) { setMatchData(null); return }
     let cancelled = false
     setMatchLoading(true); setMatchData(null)
-    api.getJobMatch(job.id)
-      .then((m) => { if (!cancelled) setMatchData(m) })
+    getJobMatchDetail(job)
+      .then((m) => { if (!cancelled) setMatchData(m as unknown as JobMatch | null) })
       .catch(() => { if (!cancelled) setMatchData(null) })
       .finally(() => { if (!cancelled) setMatchLoading(false) })
     return () => { cancelled = true }
@@ -169,8 +172,14 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
     let cancelled = false
     setSiblings([])
     if ((job.group_count ?? 1) > 1) {
-      api.getJobLocations(job.id)
-        .then((s) => { if (!cancelled) setSiblings(s) })
+      loadCorpus()
+        .then((c) => {
+          if (cancelled) return
+          setSiblings(siblingsOf(c.jobs, job).map((x) => ({
+            id: x.id, location: x.location || '', state: x.state || '',
+            apply_url: x.apply_url, remote_status: x.remote_status || '',
+          })))
+        })
         .catch(() => { if (!cancelled) setSiblings([]) })
     }
     return () => { cancelled = true }
@@ -180,8 +189,26 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
     if (!job) { setSimilar([]); return }
     let cancelled = false
     setSimilarLoading(true); setSimilar([])
-    api.getSimilarJobs(job.id)
-      .then((s) => { if (!cancelled) setSimilar(s) })
+    // "More like this": overlapping skills and role category, ranked by overlap.
+    // Computed over the corpus already in memory.
+    loadCorpus()
+      .then((c) => {
+        if (cancelled) return
+        const mine = new Set(String(job.job_skills || '').split(',').map((x) => x.trim()).filter(Boolean))
+        setSimilar(
+          c.jobs
+            .filter((x) => x.id !== job.id && x.is_usa && !x.is_software_only)
+            .map((x) => ({
+              x,
+              score: String(x.job_skills || '').split(',').filter((k) => mine.has(k.trim())).length
+                + (x.role_category === job.role_category ? 2 : 0),
+            }))
+            .filter((r) => r.score > 0)
+            .sort((a, b) => b.score - a.score || (b.x.new_grad_fit ?? 0) - (a.x.new_grad_fit ?? 0))
+            .slice(0, 6)
+            .map((r) => r.x),
+        )
+      })
       .catch(() => { if (!cancelled) setSimilar([]) })
       .finally(() => { if (!cancelled) setSimilarLoading(false) })
     return () => { cancelled = true }
@@ -193,9 +220,11 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
     if (!job) { setFullText(''); return }
     let cancelled = false
     setFullText(job.cleaned_description || job.full_description_text || '')
-    api.getJob(job.id)
-      .then((full) => {
-        if (!cancelled) setFullText(full.cleaned_description || full.full_description_text || job.description_snippet || '')
+    // Bodies are kept out of the corpus file so opening the app stays cheap;
+    // they load once, lazily, the first time a posting is opened.
+    loadDetails()
+      .then((bodies) => {
+        if (!cancelled && bodies[String(job.id)]) setFullText(bodies[String(job.id)])
       })
       .catch(() => { /* keep the seed/snippet */ })
     return () => { cancelled = true }

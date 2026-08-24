@@ -1155,6 +1155,74 @@ def _resume_brief(rp: ResumeProfile) -> dict:
     }
 
 
+# ── Stateless résumé service ──────────────────────────────────────────────────
+# The job corpus is now a static file and there is no database. Résumé matching
+# stays in Python because it is 500 lines of tuned scoring that would drift if
+# reimplemented — but it no longer STORES anything. The browser holds the parsed
+# profile and sends it with each request, so these endpoints are pure functions:
+# nothing to persist, nothing to exhaust, nothing to lose.
+
+class ParsedResume(BaseModel):
+    profile: dict
+    filename: str = ""
+    label: str = ""
+
+
+@app.post("/resume/parse", response_model=ParsedResume)
+async def parse_resume_stateless(file: UploadFile = File(...), label: str = Form(default="")):
+    """PDF/DOCX in, parsed profile out. Nothing is written anywhere."""
+    from .resume_parser import parse_resume
+    data = await file.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Resume too large (max 8 MB)")
+    try:
+        profile = parse_resume(data, file.filename or "resume.txt")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not parse resume: {e}")
+    prof = profile.to_dict()
+    return ParsedResume(
+        profile=prof,
+        filename=file.filename or "",
+        label=(label or "").strip() or prof.get("role_focus", "") or (file.filename or ""),
+    )
+
+
+class MatchRequest(BaseModel):
+    profile: dict
+    jobs: list[dict]
+    full: bool = False          # full=True returns the detail view's extras
+
+
+@app.post("/resume/match")
+def match_stateless(req: MatchRequest):
+    """Score a batch of postings against a profile the caller supplies.
+
+    The caller already has the corpus, so it sends the fields the scorer reads
+    rather than the server re-fetching them. Capped so one request cannot be
+    used to pin the free instance.
+    """
+    if not req.profile:
+        raise HTTPException(status_code=400, detail="No résumé profile supplied")
+    if len(req.jobs) > 4000:
+        raise HTTPException(status_code=413, detail="Too many jobs in one request")
+    from .resume_match import compute_match
+    out = []
+    for job in req.jobs:
+        try:
+            m = compute_match(req.profile, job, lite=not req.full)
+        except Exception:
+            continue                     # one bad row must not fail the batch
+        m["id"] = job.get("id")
+        out.append(m)
+    return {"matches": out}
+
+
+@app.get("/resume/skill-gaps-for")
+def skill_gaps_stateless(skills: str = "", top: int = 12):
+    """Kept for parity; the client computes gaps from the corpus it already has."""
+    return {"gaps": []}
+
+
 @app.post("/resume/upload")
 async def upload_resume(session: SessionDep, file: UploadFile = File(...), label: str = Form(default="")):
     invalidate_rank_cache()  # résumé set changed → cached rankings are stale

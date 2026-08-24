@@ -20,6 +20,7 @@ import { loadCorpus, loadDetails, clearCorpusCache } from './lib/corpus'
 import { queryJobs, effectiveDate } from './lib/query'
 import { freshness } from './lib/datetime'
 import * as userState from './lib/userState'
+import { getMatchScores } from './lib/resume'
 import type { AnalyticsSummary, Filters, Job, PaginatedResponse } from './lib/types'
 
 const PAGE_SIZE = 50
@@ -239,6 +240,32 @@ export default function App() {
     const bodies = filters.keyword?.trim() ? await loadDetails() : undefined
     const withMarks = corpus.jobs.map((j) => userState.applyMark(j))
 
+    if (tab === 'resume') {
+      // Scores come from the stateless matcher (cached per corpus version), then
+      // ranking and paging happen here — same order the endpoint produced.
+      const scores = await getMatchScores()
+      if (!scores.size) {
+        return { items: [], total_count: 0, page: 1, limit: PAGE_SIZE,
+                 total_pages: 1, has_next: false, has_prev: false,
+                 no_resume: true } as PaginatedResponse<Job> & { no_resume: boolean }
+      }
+      const scored = withMarks
+        .filter((j) => scores.has(j.id) && j.is_usa && !j.is_software_only)
+        .map((j) => ({ ...j, ...scores.get(j.id)! }))
+      const key = resumeSort === 'resume_match' ? 'resume_match'
+        : resumeSort === 'new_grad_fit' ? 'new_grad_fit'
+        : resumeSort === 'experience' ? 'experienced_fit'
+        : 'apply_priority_score'
+      const num = (j: unknown, f: string) => Number((j as Record<string, unknown>)[f] ?? 0)
+      scored.sort((a, b) => (num(b, key) - num(a, key)) || (num(b, 'resume_match') - num(a, 'resume_match')))
+      const total = scored.length
+      const start = (page - 1) * PAGE_SIZE
+      const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+      return { items: scored.slice(start, start + PAGE_SIZE) as Job[], total_count: total,
+               page, limit: PAGE_SIZE, total_pages: totalPages,
+               has_next: page < totalPages, has_prev: page > 1 }
+    }
+
     if (tab === 'saved' || tab === 'applied') {
       // Your own lists: status comes from browser storage, and the relevance and
       // seniority gates are deliberately off — you chose these jobs explicitly.
@@ -273,9 +300,18 @@ export default function App() {
       setSelectedJob((cur) => (cur ? data.items.find((j) => j.id === cur.id) ?? cur : cur))
       // Overlay resume-match badges on cards (non-resume tabs) — one batch call.
       if (tab !== 'resume' && data.items.length) {
-        // Résumé badges come from the stateless match service; the board works
-        // fine without them, so a failure here must never surface as an error.
-        api.getMatchBatch(data.items.map((j) => j.id)).then(setMatchMap).catch(() => setMatchMap({}))
+        // Résumé badges come from the same cached scores; the board works fine
+        // without a résumé, so a failure here must never surface as an error.
+        getMatchScores()
+          .then((scores) => {
+            const map: Record<string, { resume_match: number; apply_priority: string }> = {}
+            for (const j of data.items) {
+              const m = scores.get(j.id)
+              if (m) map[String(j.id)] = { resume_match: m.resume_match, apply_priority: m.apply_priority || '' }
+            }
+            setMatchMap(map)
+          })
+          .catch(() => setMatchMap({}))
       } else if (tab === 'resume') {
         setMatchMap({})
       }

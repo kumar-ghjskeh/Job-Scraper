@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from '../lib/api'
+import { parseResumeFile, getStoredResume, storeResume, getSkillGaps } from '../lib/resume'
 import type { ResumeProfile, ResumeVersion, SkillGap } from '../lib/types'
 import { Icon } from './Icon'
 
@@ -22,14 +22,20 @@ export function ResumeIntel({ onChanged }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const loadGaps = useCallback(async () => {
-    try { const g = await api.getSkillGaps(); setGaps(g.gaps || []); setHighMatch(g.high_match_jobs || 0) } catch { /* */ }
+    // Gaps are computed from the corpus already in the browser — no request.
+    try { setGaps(await getSkillGaps()); setHighMatch(0) } catch { /* */ }
   }, [])
 
   const loadAll = useCallback(async () => {
     try {
-      const vs = await api.getResumes()
+      // One résumé, held in this browser. There is no server-side résumé store
+      // any more, so the "versions" list is just the current one (or none).
+      const cur = getStoredResume()
+      const vs = cur ? [{ id: 1, label: cur.label, filename: cur.filename, is_active: true,
+                          uploaded_at: cur.uploaded_at, role_focus: cur.profile.role_focus || '',
+                          skill_count: (cur.profile.all_skills || []).length }] : []
       setVersions(vs)
-      const r = await api.getResume()
+      const r = { profile: cur ? cur.profile : null, filename: cur?.filename, label: cur?.label }
       setProfile(r.profile)
       setFilename(r.filename || '')
       if (r.profile) loadGaps(); else { setGaps([]); setHighMatch(0) }
@@ -41,7 +47,7 @@ export function ResumeIntel({ onChanged }: Props) {
   async function handleFile(file: File, label?: string) {
     setUploading(true); setError('')
     try {
-      await api.uploadResume(file, label || '')
+      await parseResumeFile(file, label || '')
       await loadAll()
       onChanged()
     } catch (e: unknown) {
@@ -69,20 +75,20 @@ export function ResumeIntel({ onChanged }: Props) {
   async function selectVersion(id: number) {
     if (busy) return
     setBusy(true)
-    try { await api.activateResume(id); await loadAll(); onChanged() } finally { setBusy(false) }
+    try { void id; await loadAll(); onChanged() } finally { setBusy(false) }  // single browser-held résumé
   }
 
   async function deleteVersion(id: number) {
     if (busy) return
     setBusy(true)
-    try { await api.deleteResumeOne(id); await loadAll(); onChanged() } finally { setBusy(false) }
+    try { void id; storeResume(null); await loadAll(); onChanged() } finally { setBusy(false) }
   }
 
   async function removeAll() {
     if (busy) return
     if (!window.confirm('Delete all resume versions? Job matches will be turned off until you upload again.')) return
     setBusy(true)
-    try { await api.deleteResume(); await loadAll(); onChanged() } finally { setBusy(false) }
+    try { storeResume(null); await loadAll(); onChanged() } finally { setBusy(false) }
   }
 
   const maxGap = gaps.length ? gaps[0].count : 1

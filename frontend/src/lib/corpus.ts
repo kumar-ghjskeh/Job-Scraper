@@ -98,3 +98,72 @@ export function clearCorpusCache(): void {
   _corpus = null
   _details = null
 }
+
+
+/** Filter counts, computed from the corpus (was GET /jobs/facets). */
+export async function facetsFromCorpus(usaOnly = true, includeSoftware = false) {
+  const c = await loadCorpus()
+  const hidden = ['Software / Compiler', 'Unknown', 'Adjacent / Backup']
+  const rows = c.jobs.filter(
+    (j) => (!usaOnly || j.is_usa) && (includeSoftware || !j.is_software_only)
+      && !hidden.includes(j.role_category),
+  )
+  const tally = (pick: (j: typeof rows[number]) => string) => {
+    const m = new Map<string, number>()
+    for (const j of rows) {
+      const v = pick(j)
+      if (v) m.set(v, (m.get(v) || 0) + 1)
+    }
+    return [...m.entries()].map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count)
+  }
+  const dayAgo = Date.now() - 24 * 3600_000
+  const eff = (j: typeof rows[number]) =>
+    Date.parse(String((j.posted_date && j.posted_date_known !== false ? j.posted_date : null) || j.first_seen_at))
+  return {
+    role_categories: tally((j) => j.role_category),
+    priorities: tally((j) => j.company_priority),
+    remote_statuses: tally((j) => j.remote_status),
+    states: tally((j) => j.state),
+    entry_level_count: rows.filter((j) => j.is_entry_level || j.is_candidate_friendly).length,
+    candidate_friendly_count: rows.filter((j) => j.is_candidate_friendly).length,
+    senior_count: rows.filter((j) => j.is_senior).length,
+    remote_count: rows.filter((j) => /remote/i.test(j.remote_status || '')).length,
+    new_24h_count: rows.filter((j) => eff(j) >= dayAgo).length,
+  }
+}
+
+/** Typed, counted autocomplete suggestions (was GET /jobs/search-suggestions). */
+export async function suggestionsFromCorpus(q: string, limit = 8) {
+  const term = q.trim().toLowerCase()
+  if (term.length < 2) return []
+  const c = await loadCorpus()
+  const rows = c.jobs.filter((j) => j.is_usa && !j.is_software_only)
+  const bucket = (pick: (j: typeof rows[number]) => string, type: 'company' | 'title' | 'skill') => {
+    const m = new Map<string, number>()
+    for (const j of rows) {
+      const v = (pick(j) || '').trim()
+      if (v && v.toLowerCase().includes(term)) m.set(v, (m.get(v) || 0) + 1)
+    }
+    return [...m.entries()].map(([value, count]) => ({
+      value, type, count,
+      rank: value.toLowerCase().startsWith(term) ? 0 : 1,
+    }))
+  }
+  const all = [
+    ...bucket((j) => j.company, 'company').sort((a, b) => a.rank - b.rank || b.count - a.count).slice(0, 3),
+    ...bucket((j) => j.job_title, 'title').sort((a, b) => a.rank - b.rank || b.count - a.count).slice(0, limit),
+    ...bucket((j) => j.role_category, 'skill').sort((a, b) => a.rank - b.rank || b.count - a.count).slice(0, 3),
+  ]
+  const seen = new Set<string>()
+  return all
+    .filter((s) => {
+      const k = s.value.toLowerCase()
+      if (seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
+    .sort((a, b) => Number(a.type !== 'company') - Number(b.type !== 'company') || b.count - a.count)
+    .slice(0, limit)
+    .map(({ value, type, count }) => ({ value, type, count }))
+}

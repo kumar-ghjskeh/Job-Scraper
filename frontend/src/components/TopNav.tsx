@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AnalyticsSummary, SearchSuggestion } from '../lib/types'
 import type { Theme } from '../lib/theme'
 import { useIsMobile } from '../lib/useIsMobile'
-import { api } from '../lib/api'
+import { suggestionsFromCorpus } from '../lib/corpus'
 import { Icon, type IconName } from './Icon'
 
 export type Tab = 'all' | 'resume' | 'entry-level' | 'best' | 'saved' | 'applied' | 'companies' | 'health'
@@ -53,7 +53,7 @@ export function TopNav({
     if (term.length < 2) { setSugs([]); setOpen(false); return }
     const ctl = new AbortController()
     const t = setTimeout(() => {
-      api.getSearchSuggestions(term, ctl.signal)
+      suggestionsFromCorpus(term)
         .then((s) => { setSugs(s); setOpen(s.length > 0); setActive(-1) })
         .catch(() => { /* aborted or offline — keep the previous list */ })
     }, 160)
