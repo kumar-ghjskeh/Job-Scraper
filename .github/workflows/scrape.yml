@@ -1,18 +1,32 @@
 name: Scrape jobs (24/7)
 
-# Free, PC-independent scraping: runs the browserless engines (httpx + curl_cffi)
-# on GitHub's servers on a schedule and writes straight to the production
-# Postgres. Needs one repo secret: DATABASE_URL (Render External connection
-# string). Does NOT touch the Render web service, so there's zero deploy risk.
+# Free, PC-independent scraping with NO hosted database.
+#
+# Each run builds a scratch SQLite file in the runner's temp dir, seeds it from
+# the committed snapshot, scrapes into it with the normal engine, and commits a
+# fresh snapshot back. The two JSON files in frontend/public/data ARE the system
+# of record; Vercel serves them straight from its CDN.
+#
+# Why: the corpus is ~270 KB gzipped and fully derived from public career sites.
+# Serving it from a metered Postgres exhausted the free transfer quota three
+# times and took the whole app down each time. There is now no connection to
+# meter, no quota to exhaust and no service to keep awake.
+#
+# Needs NO secrets to scrape. VAPID_PRIVATE_KEY stays optional, for push alerts.
 
 on:
   schedule:
-    - cron: "0 */3 * * *"   # every 3 hours = 8 scrapes/day (UTC), runs 24/7 on GitHub
+    - cron: "0 */3 * * *"   # every 3 hours = 8 scrapes/day (UTC), runs 24/7
   workflow_dispatch: {}       # manual "Run workflow" button
 
+# Shared with scrape-giants.yml: both jobs commit the same snapshot files, so
+# they must never run at the same time.
 concurrency:
-  group: scrape
+  group: snapshot-write
   cancel-in-progress: false
+
+permissions:
+  contents: write             # to commit the refreshed snapshot
 
 jobs:
   scrape:
@@ -29,25 +43,37 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Check DATABASE_URL secret is configured
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::error::The DATABASE_URL repository secret is not set. Add it under"
-            echo "::error::Settings -> Secrets and variables -> Actions (Render External Postgres URL)."
-            exit 1
-          fi
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
           pip install -r backend/requirements-cf.txt
 
-      - name: Run scrapers (httpx + curl_cffi) + saved-search alerts
+      - name: Scrape and rebuild the snapshot
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATA_DIR: frontend/public/data
           # Optional: set this secret to enable Web Push saved-search alerts.
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-        run: python -m backend.app.run_all
+        run: python -m backend.app.run_static
+
+      - name: Publish the snapshot
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/public/data/jobs.json frontend/public/data/details.json
+          if git diff --cached --quiet; then
+            echo "No change in the corpus — nothing to publish."
+            exit 0
+          fi
+          COUNT=$(python -c "import json;print(json.load(open('frontend/public/data/jobs.json'))['count'])")
+          git commit -m "data: refresh job snapshot (${COUNT} jobs) [skip ci]"
+          # Another scrape may have landed while this one ran; rebase rather than
+          # force so no run's results are silently discarded.
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push race, retrying ($i)"
+            sleep 5
+          done
+          echo "::error::Could not publish the snapshot after 3 attempts."
+          exit 1

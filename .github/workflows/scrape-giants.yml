@@ -4,10 +4,10 @@ name: Scrape giants (browser)
 # public APIs are protected/obfuscated. Installs Chromium on GitHub's runner and
 # DOM-scrapes the rendered job listings (engine: browser companies). Kept SEPARATE
 # from the main browserless scrape so a browser/bot-detection failure here never
-# affects the reliable httpx + curl_cffi pass. Writes to the same production
-# Postgres.
+# affects the reliable httpx + curl_cffi pass.
 #
-# Needs the same DATABASE_URL repo secret as the main scrape.
+# Seeds from and republishes the same static snapshot as scrape.yml — there is no
+# database. Needs NO secrets.
 #
 # ── History, so this isn't "improved" back into a hole ────────────────────────
 # Aug 2026: every run failed in ~50s. It looked like a browser/runner problem and
@@ -27,9 +27,14 @@ on:
                              # keeps the private-repo Actions budget comfortable)
   workflow_dispatch: {}       # manual "Run workflow" button (use this to test)
 
+# Shared with scrape.yml: both jobs commit the same snapshot files, so they must
+# never run at the same time.
 concurrency:
-  group: scrape-giants
+  group: snapshot-write
   cancel-in-progress: false
+
+permissions:
+  contents: write             # to commit the refreshed snapshot
 
 jobs:
   scrape-giants:
@@ -54,15 +59,6 @@ jobs:
           echo "OS:         $(. /etc/os-release && echo "$PRETTY_NAME")"
           echo "Python:     $(python --version 2>&1)"
           echo "Playwright: $(python -m playwright --version 2>&1 || echo 'not installed yet')"
-
-      - name: Check DATABASE_URL secret is configured
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::error::The DATABASE_URL repository secret is not set."
-            exit 1
-          fi
 
       # Split into separate steps so a setup failure names the exact stage that
       # broke (pip vs OS deps vs browser download vs launch) instead of one opaque
@@ -89,7 +85,28 @@ jobs:
               b.close()
           PY
 
-      - name: Run browser scraper (giants)
+      - name: Scrape (browser) and rebuild the snapshot
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python -m backend.app.run_browser_scrape
+          DATA_DIR: frontend/public/data
+          STATIC_ENGINE: browser
+        run: python -m backend.app.run_static
+
+      - name: Publish the snapshot
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/public/data/jobs.json frontend/public/data/details.json
+          if git diff --cached --quiet; then
+            echo "No change in the corpus — nothing to publish."
+            exit 0
+          fi
+          COUNT=$(python -c "import json;print(json.load(open('frontend/public/data/jobs.json'))['count'])")
+          git commit -m "data: refresh job snapshot, browser pass (${COUNT} jobs) [skip ci]"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push race, retrying ($i)"
+            sleep 5
+          done
+          echo "::error::Could not publish the snapshot after 3 attempts."
+          exit 1

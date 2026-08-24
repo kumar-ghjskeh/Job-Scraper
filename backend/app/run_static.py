@@ -28,6 +28,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger("run_static")
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "frontend/public/data"))
+# "browserless" = httpx + curl_cffi (the 3-hourly run); "browser" = Playwright
+# DOM scraping for the big-tech SPAs (the 8-hourly run). Both seed from and
+# publish to the same snapshot, serialised by a shared Actions concurrency group.
+ENGINE = os.getenv("STATIC_ENGINE", "browserless").strip().lower()
 
 
 def _use_scratch_db() -> Path:
@@ -52,6 +56,17 @@ async def _run() -> int:
     failures: list[str] = []
     scraped_ok = False
 
+    if ENGINE == "browser":
+        logger.info("=== browser pass (Playwright) ===")
+        try:
+            from .run_browser_scrape import run_browser_scrape
+            await run_browser_scrape(headless=True)
+            scraped_ok = True
+        except Exception as e:
+            logger.exception("browser pass FAILED")
+            failures.append(f"browser: {e}")
+        return await _finish(scraped_ok, failures)
+
     logger.info("=== httpx pass ===")
     try:
         run = await run_scrape(triggered_by="static")
@@ -72,6 +87,14 @@ async def _run() -> int:
         logger.exception("curl_cffi pass FAILED")
         failures.append(f"curl_cffi: {e}")
 
+    return await _finish(scraped_ok, failures)
+
+
+async def _finish(scraped_ok: bool, failures: list[str]) -> int:
+    """Sweep, then publish — but only if something actually scraped."""
+    from .scrape_engine import sweep_stale_jobs
+    from .snapshot import write_snapshot
+
     if scraped_ok:
         try:
             logger.info("stale sweep retired %s job(s)", sweep_stale_jobs())
@@ -86,7 +109,7 @@ async def _run() -> int:
     if not scraped_ok:
         logger.error("NOT writing a snapshot — no scrape pass succeeded; "
                      "the previous snapshot stays live")
-        raise RuntimeError("; ".join(failures))
+        raise RuntimeError("; ".join(failures) or "no scrape pass succeeded")
 
     report = write_snapshot(DATA_DIR)
     logger.info("snapshot written to %s: %s jobs", DATA_DIR, report["count"])
