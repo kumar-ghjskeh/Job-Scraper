@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../lib/api'
+import { loadCorpus } from '../lib/corpus'
 import { parseApiDate } from '../lib/datetime'
 import type { Company } from '../lib/types'
 import { CompanyLogo } from './CompanyLogo'
@@ -51,7 +51,19 @@ export function CompaniesPage({ onViewJobs }: Props) {
   const [filterPriority, setFilterPriority] = useState('')
 
   useEffect(() => {
-    api.getCompanies().then((data) => {
+    // Companies come from the static snapshot (sourced from the YAML config and
+    // tallied over the published corpus) — same data the endpoint returned.
+    loadCorpus().then((corpus) => {
+      const data = corpus.companies.map((c, i) => ({
+        id: i + 1, name: c.name, category: c.category, priority: c.priority,
+        careers_url: c.careers_url, company_search_url: '', ats_platform: c.ats_platform,
+        enabled: c.enabled, last_scraped_at: c.last_scraped_at,
+        scrape_error_count: c.scrape_error_count, notes: '',
+        usa_active_jobs: c.usa_active_jobs, viewable_jobs: c.usa_active_jobs,
+        engine: c.engine, auto_connected: c.enabled || !!c.engine,
+      })) as unknown as Company[]
+      return data
+    }).then((data) => {
       _companiesCache = data
       setCompanies(data)
       setLoading(false)

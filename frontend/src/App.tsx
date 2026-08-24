@@ -16,8 +16,9 @@ import { groupByCanonical } from './lib/dedupe'
 import { useTheme } from './lib/theme'
 import { useIsMobile } from './lib/useIsMobile'
 import { api } from './lib/api'
-import { loadCorpus, loadDetails } from './lib/corpus'
+import { loadCorpus, loadDetails, clearCorpusCache } from './lib/corpus'
 import { queryJobs, effectiveDate } from './lib/query'
+import { freshness } from './lib/datetime'
 import * as userState from './lib/userState'
 import type { AnalyticsSummary, Filters, Job, PaginatedResponse } from './lib/types'
 
@@ -186,6 +187,7 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [legal, setLegal] = useState<LegalTab | null>(null)
+  const [corpusStamp, setCorpusStamp] = useState<string>('')
   const [matchMap, setMatchMap] = useState<Record<string, { resume_match: number; apply_priority: string }>>({})
   // Default to New Grad Fit: for a new grad, "show me the roles I can realistically
   // get, best fit first" is the most intuitive ranking (a ng=100 New-College-Grad
@@ -206,6 +208,7 @@ export default function App() {
   const loadAnalytics = useCallback(async () => {
     try {
       const corpus = await loadCorpus()
+      setCorpusStamp(corpus.generated_at)
       const browseable = corpus.jobs.filter(
         (j) => j.is_usa && !j.is_software_only
           && !['Software / Compiler', 'Unknown', 'Adjacent / Backup'].includes(j.role_category),
@@ -357,27 +360,25 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // Scraping runs on a schedule in GitHub Actions (every 3h) and publishes a new
+  // snapshot; there is no server to ask for one on demand. So "Refresh" means
+  // "fetch the newest published snapshot", which is what a user actually wants
+  // from this button — previously it asked a backend to start a scrape and then
+  // polled for minutes, which now has nothing to talk to.
   async function handleRefresh() {
     setRefreshing(true)
+    setError(null)
     try {
-      const prevId = (await api.getScrapeRuns().catch(() => []))[0]?.id
-      await api.triggerScrape()
-      // Poll the scrape run until it actually finishes (a scrape takes minutes —
-      // the old fixed 10s reload showed stale counts), then refresh the list.
-      const deadline = Date.now() + 7 * 60 * 1000
-      const poll = async () => {
-        try {
-          const runs = (await api.getScrapeRuns()).sort((a, b) => (a.started_at < b.started_at ? 1 : -1))
-          const latest = runs[0]
-          if (latest && latest.id !== prevId && latest.finished_at) {
-            setRefreshing(false); reload(); return
-          }
-        } catch { /* keep polling */ }
-        if (Date.now() < deadline) setTimeout(poll, 4000)
-        else { setRefreshing(false); reload() }
-      }
-      setTimeout(poll, 4000)
-    } catch { setRefreshing(false) }
+      clearCorpusCache()
+      jobsCache.current.clear()
+      const corpus = await loadCorpus()
+      setCorpusStamp(corpus.generated_at)
+      await Promise.all([loadJobs(), loadAnalytics()])
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not reach the job data')
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   async function handleQuickAction(job: Job, action: 'saved' | 'applied' | 'ignored') {
@@ -471,6 +472,15 @@ export default function App() {
                 page={paginatedJobs?.page ?? 1}
                 totalPages={paginatedJobs?.total_pages ?? 1}
               />
+              {/* Scraping is on a schedule now rather than on demand, so say how
+                  fresh the data is — otherwise "Refresh" looks like it did
+                  nothing when the corpus simply hasn't changed. */}
+              {corpusStamp && !loading && (
+                <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', margin: '-6px 0 10px' }}>
+                  Job data updated {freshness(null, false, corpusStamp).label.replace('Added ', '')}
+                  {' · refreshes automatically every 3 hours'}
+                </div>
+              )}
 
               {/* Active-filter chips — visible on every filter tab so the user always
                   sees (and can remove) exactly what's narrowing the list. */}

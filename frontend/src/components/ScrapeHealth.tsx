@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../lib/api'
+import { loadCorpus } from '../lib/corpus'
 import { parseApiDate } from '../lib/datetime'
 import type { AnalyticsSummary, Company, PipelineHealth, ScrapeRun } from '../lib/types'
 
@@ -12,9 +12,43 @@ const TZ_OPTIONS: { label: string; value: string }[] = [
 ]
 const RUNS_PREVIEW = 20
 
+/** Is scraping actually happening? Derived from the snapshot's run history and
+ *  its generation time, so a stalled pipeline is visible in the app rather than
+ *  only in a workflow email — the thing that let a three-day outage go unnoticed. */
+function pipelineFromSnapshot(generatedAt: string, runs: ScrapeRun[]): PipelineHealth {
+  const now = Date.now()
+  const ageH = (iso?: string | null) =>
+    iso ? Math.round(((now - Date.parse(iso)) / 3600_000) * 10) / 10 : null
+  const engines = ([
+    ['static', 3, ['static', 'github-actions']],
+    ['browser', 8, ['browser']],
+    ['cf', 3, ['cf']],
+  ] as [string, number, string[]][]).map(([engine, cadence, names]) => {
+    const last = runs.find((r) => names.includes(r.triggered_by) && r.finished_at && r.companies_scraped > 0)
+    const h = ageH(last?.started_at)
+    const status: 'ok' | 'stale' | 'down' =
+      h == null ? 'down' : h <= cadence * 2 ? 'ok' : h <= cadence * 4 ? 'stale' : 'down'
+    return {
+      engine, cadence_hours: cadence, status,
+      hours_since_last_good_run: h,
+      last_good_run_at: last?.started_at ?? null,
+      companies_scraped: last?.companies_scraped ?? 0,
+      new_jobs: last?.new_jobs ?? 0,
+    }
+  })
+  const worst = engines.some((e) => e.status === 'down')
+    ? 'down' : engines.some((e) => e.status === 'stale') ? 'stale' : 'ok'
+  return {
+    status: worst, engines,
+    last_job_seen_at: generatedAt,
+    hours_since_any_job_seen: ageH(generatedAt),
+  }
+}
+
 // The pipeline reports engines by their internal identifiers; these are the
 // names a reader should actually see.
 const ENGINE_LABELS: Record<string, string> = {
+  static: 'Standard career APIs',
   'github-actions': 'Standard career APIs',
   cf: 'Protected career sites',
   browser: 'Large-employer sites',
@@ -27,17 +61,33 @@ let _healthCache: { runs: ScrapeRun[]; companies: Company[]; analytics: Analytic
 export function ScrapeHealth() {
   const [runs, setRuns] = useState<ScrapeRun[]>(() => _healthCache?.runs ?? [])
   const [companies, setCompanies] = useState<Company[]>(() => _healthCache?.companies ?? [])
-  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(() => _healthCache?.analytics ?? null)
+  const [analytics] = useState<AnalyticsSummary | null>(() => _healthCache?.analytics ?? null)
   const [loading, setLoading] = useState(() => _healthCache === null)
   const [tz, setTz] = useState<string>(() => localStorage.getItem('ashborne-tz') || 'local')
   const [showAllRuns, setShowAllRuns] = useState(false)
   const [pipeline, setPipeline] = useState<PipelineHealth | null>(null)
 
   useEffect(() => {
-    Promise.all([api.getScrapeRuns(), api.getCompanies(), api.getAnalytics().catch(() => null)])
-      .then(([r, c, a]) => { _healthCache = { runs: r, companies: c, analytics: a }; setRuns(r); setCompanies(c); setAnalytics(a) })
+    // Everything on this page comes from the published snapshot: the scrape runs
+    // it recorded, the company roster, and a pipeline verdict derived from the
+    // run history. No API, because there is no longer a server holding this.
+    loadCorpus()
+      .then((corpus) => {
+        const runs = (corpus.runs || []) as unknown as ScrapeRun[]
+        const companies = corpus.companies.map((c, i) => ({
+          id: i + 1, name: c.name, category: c.category, priority: c.priority,
+          careers_url: c.careers_url, company_search_url: '', ats_platform: c.ats_platform,
+          enabled: c.enabled, last_scraped_at: c.last_scraped_at,
+          scrape_error_count: c.scrape_error_count, notes: '',
+          usa_active_jobs: c.usa_active_jobs, viewable_jobs: c.usa_active_jobs,
+          engine: c.engine, auto_connected: c.enabled || !!c.engine,
+        })) as unknown as Company[]
+        _healthCache = { runs, companies, analytics: null }
+        setRuns(runs); setCompanies(companies)
+        setPipeline(pipelineFromSnapshot(corpus.generated_at, runs))
+      })
+      .catch(() => setPipeline(null))
       .finally(() => setLoading(false))
-    api.getPipelineHealth().then(setPipeline).catch(() => setPipeline(null))
   }, [])
 
   function changeTz(v: string) { setTz(v); localStorage.setItem('ashborne-tz', v) }
