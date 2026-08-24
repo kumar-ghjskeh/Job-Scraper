@@ -36,3 +36,6 @@ screenshots/
 # Editor
 .vscode/
 .idea/
+
+# Local scratch corpus used when developing the static pipeline
+data/static/
