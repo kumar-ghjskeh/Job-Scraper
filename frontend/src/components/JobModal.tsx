@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api } from '../lib/api'
+import * as userState from '../lib/userState'
 import type { Job } from '../lib/types'
 import { PriorityBadge } from './PriorityBadge'
 import { ScoreBar } from './ScoreBar'
@@ -18,11 +18,15 @@ export function JobModal({ job, onClose, onUpdate }: Props) {
   async function handleSave() {
     setSaving(true)
     try {
-      await api.updateJobStatus(job.id, {
-        active_status: job.active_status,
-        application_status: appStatus,
-        notes,
-      })
+      if (job.key) {
+        userState.patchMark(job.key, { notes })
+        if (appStatus) {
+          userState.setStatus(
+            job.key,
+            appStatus.toLowerCase() === 'applied' ? 'applied' : 'saved',
+          )
+        }
+      }
       onUpdate()
       onClose()
     } finally {
@@ -31,7 +35,7 @@ export function JobModal({ job, onClose, onUpdate }: Props) {
   }
 
   async function handleSetStatus(status: string) {
-    await api.updateJobStatus(job.id, { active_status: status })
+    if (job.key) userState.setStatus(job.key, status as userState.JobStatus)
     onUpdate()
     onClose()
   }

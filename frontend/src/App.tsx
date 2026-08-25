@@ -15,11 +15,11 @@ import { LegalModal, type LegalTab } from './components/LegalModal'
 import { groupByCanonical } from './lib/dedupe'
 import { useTheme } from './lib/theme'
 import { useIsMobile } from './lib/useIsMobile'
-import { api } from './lib/api'
 import { loadCorpus, loadDetails, clearCorpusCache } from './lib/corpus'
 import { queryJobs, effectiveDate } from './lib/query'
 import { freshness } from './lib/datetime'
 import * as userState from './lib/userState'
+import { exportMarkedJobs } from './lib/csv'
 import { getMatchScores } from './lib/resume'
 import type { AnalyticsSummary, Filters, Job, PaginatedResponse } from './lib/types'
 
@@ -143,10 +143,11 @@ function ResultsSummary({ tab, loading, total, page, totalPages, analytics }: {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {(tab === 'applied' || tab === 'saved') && total > 0 && (
-            <a href={api.applicationsCsvUrl()} download
-              style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
+            <button
+              onClick={() => exportMarkedJobs(tab === 'applied' ? 'applied' : 'saved')}
+              style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               <Icon name="external" size={12} color="var(--primary)" /> Export CSV
-            </a>
+            </button>
           )}
           {total > 0 && totalPages > 1 && (
             <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Page {page} of {totalPages}</span>

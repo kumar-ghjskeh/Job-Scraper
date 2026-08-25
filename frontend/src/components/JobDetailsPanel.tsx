@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { api } from '../lib/api'
 import { loadCorpus, loadDetails } from '../lib/corpus'
 import { siblingsOf } from '../lib/query'
 import { getJobMatchDetail } from '../lib/resume'
+import * as userState from '../lib/userState'
 import { fmtDateLong, freshness } from '../lib/datetime'
 import type { Job, JobMatch } from '../lib/types'
 import { Icon } from './Icon'
@@ -244,18 +244,23 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
 
   if (!job) return null
 
+  // Your marks and notes are yours, so they are stored in this browser keyed by
+  // the posting's content fingerprint — which survives the corpus being rebuilt
+  // by every scrape, unlike its row id.
   async function handleSetStatus(status: string) {
-    await api.updateJobStatus(job!.id, { active_status: status })
+    if (job!.key) userState.setStatus(job!.key, status as userState.JobStatus)
     onUpdate()
   }
 
   async function handleSaveNotes() {
     setSaving(true)
     try {
-      await api.updateJobStatus(job!.id, {
-        application_status: appStatus, notes, resume_version_used: resumeUsed,
-        follow_up_date: followUp, confirmation_id: confirmId, recruiter_contact: recruiter,
-      })
+      if (job!.key) {
+        userState.patchMark(job!.key, {
+          notes, resume_version_used: resumeUsed, follow_up_date: followUp,
+          confirmation_id: confirmId, recruiter_contact: recruiter,
+        })
+      }
       onUpdate()
     } finally {
       setSaving(false)

@@ -164,3 +164,4 @@ export function applyMark<T extends { key?: string; id: number }>(job: T): T {
     resume_version_used: mark.resume_version_used ?? '',
   }
 }
+
