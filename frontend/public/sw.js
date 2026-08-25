@@ -1,8 +1,15 @@
 // Ashborne Silicon — minimal service worker.
-// Strategy: never cache API responses (data must stay fresh); cache the app
-// shell + static assets so the installed PWA opens instantly and works offline
-// for navigation. Bump CACHE_VERSION to invalidate old caches on deploy.
-const CACHE_VERSION = 'ashborne-v2'
+// Strategy: the job corpus must ALWAYS be revalidated; cache the app shell +
+// static assets so the installed PWA opens instantly and works offline.
+// Bump CACHE_VERSION to invalidate old caches on deploy.
+//
+// The /data rule below is load-bearing. This file was written when job data
+// came from /api, so only /api was excluded from caching. When the corpus moved
+// to a static file at /data/jobs.json it silently fell into the cache-first
+// branch — the installed PWA then served the same corpus from disk forever and
+// never asked the server for a newer one, no matter how many scrapes published.
+// From the outside it looked exactly like the scrapes were not working.
+const CACHE_VERSION = 'ashborne-v3'
 const SHELL = ['/', '/index.html', '/ashborne-logo.png', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
@@ -57,6 +64,23 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
   // Never intercept API traffic — always hit the network for live job data.
   if (url.pathname.startsWith('/api') || url.hostname !== self.location.hostname) return
+
+  // The job corpus: network-first, so a freshly published snapshot is picked up
+  // on the next open. The cached copy is only a fallback for being offline.
+  if (url.pathname.startsWith('/data/')) {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const copy = res.clone()
+            caches.open(CACHE_VERSION).then((c) => c.put(request, copy)).catch(() => {})
+          }
+          return res
+        })
+        .catch(() => caches.match(request)),
+    )
+    return
+  }
 
   // Navigations: network-first, fall back to cached shell when offline.
   if (request.mode === 'navigate') {
