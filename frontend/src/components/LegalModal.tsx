@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { api } from '../lib/api'
+import * as userState from '../lib/userState'
+import * as studio from '../lib/studio'
+import { storeResume, getStoredResume } from '../lib/resume'
 import { Icon } from './Icon'
 
 export type LegalTab = 'privacy' | 'terms' | 'data'
@@ -72,8 +74,17 @@ function DeleteData() {
   async function run() {
     setBusy(true); setErr('')
     try {
-      const r = await api.deleteAllMyData()
-      setDone(r.deleted); setConfirming(false)
+      // Everything the app holds about you now lives in this browser, so
+      // deleting it is local and immediate — there is no server copy to ask.
+      const counts = {
+        saved_and_applied: Object.keys(userState.allMarks()).length,
+        resume: getStoredResume() ? 1 : 0,
+        saved_searches: studio.getWatchlists().length,
+      }
+      userState.clearState()
+      studio.clearStudioData()
+      storeResume(null)
+      setDone(counts); setConfirming(false)
     } catch {
       setErr('Could not delete your data. Please try again.')
     } finally { setBusy(false) }

@@ -2260,6 +2260,54 @@ def _assemble_tailor(session: Session, job_id: int, payload: TailorIn):
     return job, prompt, missing
 
 
+# ── Stateless prompt builders ─────────────────────────────────────────────────
+# These only ever assembled text from a job row and some user settings — no AI
+# call, no persistence. The client now holds both, so it supplies them and these
+# become pure functions, with no database to look the job up in.
+
+class StatelessTailorIn(BaseModel):
+    job_title: str
+    company: str = ""
+    description: str = ""
+    master_latex: str = ""
+    instructions: str = ""
+    missing_keywords: list[str] = []
+
+
+@app.post("/resume-studio/tailor-prompt")
+def tailor_prompt_stateless(payload: StatelessTailorIn):
+    """Copy-paste tailoring prompt for Claude/ChatGPT. Assembles text only."""
+    from .services.resume_studio import build_tailor_prompt
+    return {
+        "prompt": build_tailor_prompt(
+            job_title=payload.job_title, company=payload.company,
+            description=payload.description, master_latex=payload.master_latex,
+            missing_keywords=payload.missing_keywords, instructions=payload.instructions,
+        ),
+        "missing_keywords": payload.missing_keywords,
+        "job_title": payload.job_title, "company": payload.company,
+    }
+
+
+class StatelessInterviewIn(BaseModel):
+    job_title: str
+    company: str = ""
+    description: str = ""
+    role_category: str = ""
+
+
+@app.post("/resume-studio/interview-prompt")
+def interview_prompt_stateless(payload: StatelessInterviewIn):
+    """Copy-paste interview-prep prompt. Assembles text only."""
+    from .services.resume_studio import build_interview_prompt
+    return {
+        "prompt": build_interview_prompt(
+            job_title=payload.job_title, company=payload.company,
+            description=payload.description, role_category=payload.role_category,
+        )
+    }
+
+
 @app.post("/jobs/{job_id}/tailor-prompt")
 def tailor_prompt(job_id: int, payload: TailorIn, session: SessionDep):
     """Assemble the copy-paste prompt for Claude/ChatGPT (Option 1). No AI call."""

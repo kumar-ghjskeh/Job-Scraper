@@ -47,7 +47,22 @@ export async function enablePushAlerts(): Promise<EnableResult> {
         applicationServerKey: urlBase64ToUint8Array(key),
       })
     }
-    await api.subscribePush(sub.toJSON() as PushSubscriptionJSON)
+    // Registering the subscription is the one thing that still needs somewhere
+    // to store it. The rest of the app runs off a static corpus with no
+    // database, so this is currently the only feature that cannot complete —
+    // say so plainly instead of surfacing a 500.
+    try {
+      await api.subscribePush(sub.toJSON() as PushSubscriptionJSON)
+    } catch {
+      return {
+        ok: false,
+        reason: 'disabled',
+        message:
+          'Saved-search alerts aren’t available yet — the app no longer runs a '
+          + 'server that can store your subscription. Your saved searches still '
+          + 'track new matches; open the app to see the counts.',
+      }
+    }
     return { ok: true }
   } catch (e) {
     return { ok: false, reason: 'error', message: e instanceof Error ? e.message : 'Could not enable alerts.' }

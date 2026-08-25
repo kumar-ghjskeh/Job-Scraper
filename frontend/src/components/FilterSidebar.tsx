@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../lib/api'
-import { facetsFromCorpus } from '../lib/corpus'
+import { facetsFromCorpus, loadCorpus } from '../lib/corpus'
+import { queryJobs } from '../lib/query'
+import * as studio from '../lib/studio'
 import type { Filters, JobFacets, Watchlist } from '../lib/types'
 import { Icon } from './Icon'
 import { enablePushAlerts, pushPermission } from '../lib/push'
@@ -80,8 +81,25 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
   )
   const [alertMsg, setAlertMsg] = useState('')
 
+  // Saved searches are a named filter set plus the count when you last looked —
+  // your data, a few KB, so it lives in this browser. "N new" is measured by
+  // re-running the filters against the corpus, which is already in memory.
   const loadWatchlists = useCallback(() => {
-    api.getWatchlists().then(setWatchlists).catch(() => {/* non-fatal */})
+    loadCorpus()
+      .then((corpus) => {
+        const active = corpus.jobs.filter((j) => String(j.active_status ?? 'active') === 'active')
+        setWatchlists(
+          studio.getWatchlists().map((w) => {
+            const total = queryJobs(active, w.filters, 1, 1).total_count
+            return {
+              id: w.id, name: w.name, filters: w.filters,
+              alert_enabled: w.alert_enabled, last_checked_at: w.last_checked_at,
+              total, new_count: Math.max(0, total - (w.last_count ?? 0)),
+            } as Watchlist
+          }),
+        )
+      })
+      .catch(() => {/* non-fatal */})
   }, [])
 
   useEffect(() => { loadWatchlists() }, [loadWatchlists])
@@ -97,16 +115,18 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
     const name = window.prompt('Name this saved search (e.g. "New Grad DV in CA/TX"):')
     if (!name) return
     const clean = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== '' && v !== false))
-    await api.createWatchlist(name, clean)
+    const corpus = await loadCorpus()
+    const active = corpus.jobs.filter((j) => String(j.active_status ?? 'active') === 'active')
+    studio.createWatchlist(name, clean, queryJobs(active, clean, 1, 1).total_count)
     loadWatchlists()
   }
   async function applyWatchlist(w: Watchlist) {
-    onChange({ usa_only: true, include_senior: false, ...w.filters })
-    await api.checkWatchlist(w.id)
+    onChange({ usa_only: true, include_senior: true, ...w.filters })
+    studio.checkWatchlist(w.id, w.total ?? 0)
     loadWatchlists()
   }
   async function removeWatchlist(id: number) {
-    await api.deleteWatchlist(id)
+    studio.deleteWatchlist(id)
     loadWatchlists()
   }
 

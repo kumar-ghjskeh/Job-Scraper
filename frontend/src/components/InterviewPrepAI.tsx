@@ -1,10 +1,13 @@
 import { useState } from 'react'
+import type { Job } from '../lib/types'
 import { api } from '../lib/api'
+import { buildInterviewPrompt } from '../lib/studio'
 import { Icon } from './Icon'
 
 // On-demand, company+role-specific interview prep — copy the prompt into your
 // Claude/ChatGPT Pro chat, or generate it in-app with the free Gemini key.
-export function InterviewPrepAI({ jobId }: { jobId: number }) {
+export function InterviewPrepAI({ job }: { job: Job }) {
+  const jobId = job.id
   const [copied, setCopied] = useState(false)
   const [copying, setCopying] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -14,7 +17,7 @@ export function InterviewPrepAI({ jobId }: { jobId: number }) {
   async function copyPrompt() {
     setCopying(true)
     try {
-      const { prompt } = await api.getInterviewPrompt(jobId)
+      const { prompt } = await buildInterviewPrompt(job)
       await navigator.clipboard.writeText(prompt)
       setCopied(true); setTimeout(() => setCopied(false), 2200)
     } finally { setCopying(false) }

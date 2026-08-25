@@ -715,7 +715,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
                       </ul>
                     </>
                   )}
-                  <InterviewPrepAI jobId={job.id} />
+                  <InterviewPrepAI job={job} />
                 </div>
               </div>
             )}

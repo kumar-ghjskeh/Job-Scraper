@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
+import { getMasterResume, saveMasterResume, buildTailorPrompt } from '../lib/studio'
 import type { Job } from '../lib/types'
 import { Icon } from './Icon'
 
@@ -43,18 +44,19 @@ export function ResumeStudio({ job }: { job: Job }) {
       setGeminiEnabled(_master.gemini_enabled); loadedMaster.current = true
       return
     }
-    api.getMasterResume().then((m) => {
-      _master = m
-      setMasterLatex(m.master_latex); setInstructions(m.instructions); setGeminiEnabled(m.gemini_enabled)
-      loadedMaster.current = true
-    }).catch(() => { loadedMaster.current = true })
+    // Your master LaTeX and tailoring instructions are your data and a few KB,
+    // so they live in this browser rather than needing a server to hold them.
+    const m = { ...getMasterResume(), gemini_enabled: false }
+    _master = m
+    setMasterLatex(m.master_latex); setInstructions(m.instructions); setGeminiEnabled(false)
+    loadedMaster.current = true
   }, [])
 
   // Per-job: fetch the keywords this role wants (accurate, bound to this job id).
   useEffect(() => {
     let cancelled = false
     setLoadingKw(true); setMissing([]); setTailored(''); setGenError(''); setPdfMsg('')
-    api.getTailorPrompt(job.id, {})
+    buildTailorPrompt(job, {})
       .then((r) => { if (!cancelled) setMissing(r.missing_keywords || []) })
       .catch(() => { if (!cancelled) setMissing([]) })
       .finally(() => { if (!cancelled) setLoadingKw(false) })
@@ -62,7 +64,7 @@ export function ResumeStudio({ job }: { job: Job }) {
   }, [job.id])
 
   async function saveMaster() {
-    await api.saveMasterResume(masterLatex, instructions)
+    saveMasterResume(masterLatex, instructions)
     _master = { master_latex: masterLatex, instructions, gemini_enabled: geminiEnabled }
     setSavedMaster(true); setTimeout(() => setSavedMaster(false), 2000)
   }
@@ -70,7 +72,7 @@ export function ResumeStudio({ job }: { job: Job }) {
   async function copyPrompt() {
     setCopyingPrompt(true)
     try {
-      const { prompt } = await api.getTailorPrompt(job.id, { master_latex: masterLatex, instructions })
+      const { prompt } = await buildTailorPrompt(job, { master_latex: masterLatex, instructions })
       await navigator.clipboard.writeText(prompt)
       setCopiedPrompt(true); setTimeout(() => setCopiedPrompt(false), 2200)
     } finally { setCopyingPrompt(false) }
