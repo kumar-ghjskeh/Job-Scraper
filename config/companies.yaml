@@ -526,11 +526,21 @@ companies:
   - name: "Microsoft"
     category: "Hyperscaler"
     priority: "A"
+    # Was disabled because the careers SPA ignores its own query parameter, so the
+    # DOM scraper returned unfiltered jobs. Rendering that page shows the real
+    # backend is Eightfold — the same API Qualcomm uses. Needs engine:cf for the
+    # same reason Qualcomm does: Eightfold 403s a plain client, and curl_cffi with
+    # Chrome impersonation gets through.
+    # Verified live: 9 of the first 10 hits are RTL/DV — "Silicon Design
+    # Verification Engineer", "Senior IP Design Verification Engineer".
     careers_url: "https://careers.microsoft.com/us/en/search-results"
-    ats_platform: "microsoft"
+    ats_platform: "eightfold"
+    engine: "cf"
+    eightfold_tenant: "microsoft"
+    eightfold_domain: "microsoft.com"
     search_keywords: ["design verification", "rtl", "asic", "silicon design", "fpga"]
-    notes: "MicrosoftBrowserScraper exists in giants.py, but the careers SPA ignores the URL query param (returns unfiltered jobs) and MS has minimal silicon roles. Left without engine:browser so the runner skips it; re-add engine:browser once the search routing is solved. Low priority."
-    enabled: false
+    notes: "Eightfold position API via the curl_cffi pass, found by rendering the careers SPA."
+    enabled: true
 
   - name: "Meta"
     category: "Hyperscaler"
@@ -909,13 +919,19 @@ companies:
     ats_platform: "generic"
     notes: "Direct search — custom careers portal."
     enabled: false
-  - name: "Recogni"
+  - name: "Recogni (Tensordyne)"
     category: "AI Accelerator"
     priority: "B"
-    careers_url: "https://recogni.com/careers/"
-    ats_platform: "generic"
-    notes: "Direct search — custom careers portal."
-    enabled: false
+    # recogni.com/careers links to a Greenhouse board called "tensordyne" — the
+    # company renamed. Greenhouse reports the board owner as "Tensordyne", so this
+    # is the same company and not another org's board.
+    # Verified live: 18 postings, 6 RTL/DV, all Sunnyvale CA.
+    careers_url: "https://job-boards.greenhouse.io/tensordyne"
+    ats_platform: "greenhouse"
+    greenhouse_board: "tensordyne"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "soc", "silicon", "digital design"]
+    notes: "Formerly Recogni. Board identity confirmed as 'Tensordyne'."
+    enabled: true
   - name: "Celestial AI"
     category: "Photonics"
     priority: "B"

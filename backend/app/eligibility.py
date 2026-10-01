@@ -147,6 +147,7 @@ _SPONSOR_NAMES = (
     "Etched", "MatX", "Eliyan", "Baya Systems", "Axiado", "Mythic", "Ambiq",
     "SiMa.ai", "Untether AI", "Expedera", "Quadric", "Blaize", "Recogni",
     "Cornelis Networks", "Tetramem", "Axelera AI", "Rain AI", "Lemurian Labs",
+    "Recogni (Tensordyne)", "Tensordyne",
     "Graphcore", "Normal Computing", "Flex Logix", "Nubis Communications",
     "Lumotive", "EnCharge AI", "Kinara", "Hailo", "FuriosaAI", "Ethernovia",
     # Quantum and photonics — US-based, academic-pipeline hiring.
