@@ -98,7 +98,7 @@ async def _run() -> int:
 
 async def _finish(scraped_ok: bool, failures: list[str]) -> int:
     """Sweep, then publish — but only if something actually scraped."""
-    from .scrape_engine import sweep_stale_jobs
+    from .scrape_engine import purge_removed_jobs, sweep_stale_jobs
     from .snapshot import write_snapshot
 
     if scraped_ok:
@@ -106,8 +106,17 @@ async def _finish(scraped_ok: bool, failures: list[str]) -> int:
             logger.info("stale sweep retired %s job(s)", sweep_stale_jobs())
         except Exception as e:
             logger.error("stale sweep FAILED: %s", e)
+        try:
+            # Nothing ever deleted a job row, so retired postings accumulated
+            # forever: the corpus only grew and every scrape seeded a database
+            # that was increasingly dead postings. Same success gate as the sweep
+            # — during an outage everything looks dead, and deleting then is not
+            # recoverable.
+            logger.info("purged %s long-removed posting(s)", purge_removed_jobs())
+        except Exception as e:
+            logger.error("purge FAILED: %s", e)
     else:
-        logger.warning("stale sweep SKIPPED — no pass succeeded")
+        logger.warning("stale sweep and purge SKIPPED — no pass succeeded")
 
     # Only publish when something actually scraped. Writing a snapshot after a
     # total failure would replace good data with an empty corpus — the static

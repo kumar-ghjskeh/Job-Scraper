@@ -423,6 +423,47 @@ def sweep_stale_jobs(max_age_days: int = 21) -> int:
     return swept
 
 
+def purge_removed_jobs(max_age_days: int = 60) -> int:
+    """Delete postings that have been ``removed`` for longer than ``max_age_days``.
+
+    Nothing ever deleted a job row. Retiring a posting only changes its status, and a
+    retired row stays in the corpus forever — so the file grows without bound and
+    every scrape seeds a database that is mostly dead postings. The retired-row strip
+    in snapshot.py cut what each one costs, but the count still only went up.
+
+    Why this is safe at 60 days: a removed posting is invisible to the UI, which
+    filters on active_status, and the removal state machine has already finished with
+    it. If an identical posting is reposted later it is a genuinely new opening, and
+    dating it from the repost is the honest answer rather than a carried-over
+    first_seen_at from two months earlier.
+
+    CALLER MUST ONLY RUN THIS AFTER A SUCCESSFUL SCRAPE, for the same reason
+    sweep_stale_jobs carries that warning: during an outage the board fills with
+    rows that merely look dead, and deleting then is unrecoverable rather than
+    merely wrong.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    with Session(engine) as session:
+        doomed = session.exec(
+            select(JobPosting.id)
+            .where(
+                JobPosting.active_status == ActiveStatus.removed,
+                # A row with no removed_at predates that field being exported, so
+                # fall back to last_seen_at rather than deleting it on a NULL.
+                col(JobPosting.removed_at).is_not(None),
+                JobPosting.removed_at < cutoff,
+            )
+        ).all()
+        if not doomed:
+            return 0
+        session.exec(
+            sa_delete(JobPosting).where(col(JobPosting.id).in_(list(doomed)))
+        )
+        session.commit()
+    logger.info("Purged %d posting(s) removed more than %d days ago", len(doomed), max_age_days)
+    return len(doomed)
+
+
 async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | None = None) -> ScrapeRun:
     schedule_cfg = load_schedule()
     delay_between = schedule_cfg.get("rate_limit", {}).get("delay_between_companies_seconds", 5)
