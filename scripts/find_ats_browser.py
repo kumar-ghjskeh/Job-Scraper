@@ -158,7 +158,16 @@ async def discover(ctx, name, url):
         bare = slug.split(".")[0]
         if bare in NOT_A_SLUG:
             continue                       # static asset path, not a board
-        extra = f"={gh_count(slug)}" if ats == "greenhouse" else ""
+        extra = ""
+        if ats == "greenhouse":
+            n = gh_count(slug)
+            if n == "?":
+                # The page referenced this board but its API 404s — the board moved
+                # or was deleted. Printing it as OK invites pasting a dead slug into
+                # the config, where it reads as "connected, no openings" forever.
+                suspect.append(f"{ats}:{slug} (board API 404 — dead or moved)")
+                continue
+            extra = f"={n}"
         entry = f"{ats}:{slug}{extra}"
         (parts if looks_related(name, bare) else suspect).append(entry)
     if not parts and not suspect:
@@ -192,6 +201,29 @@ def targets_from_config(names: list[str]) -> dict[str, str]:
     }
 
 
+def already_in_catalog() -> set[str]:
+    """Names already in companies.yaml, normalised for comparison.
+
+    Only ENABLED entries. A disabled entry is a legitimate rediscovery target —
+    Groq is in the catalog but disabled precisely because its board was lost, so
+    skipping it would skip the thing worth looking for.
+
+    A sweep that reports an already-working source as a find wastes the reader's
+    attention on a duplicate — Eliyan surfaced that way, already enabled with 14
+    US jobs.
+    """
+    import pathlib
+    import re as _re
+
+    import yaml
+    cfg = pathlib.Path(__file__).resolve().parents[1] / "config" / "companies.yaml"
+    out = set()
+    for c in yaml.safe_load(cfg.read_text(encoding="utf-8"))["companies"]:
+        if c.get("enabled", True):
+            out.add(_re.sub(r"[^a-z0-9]", "", c["name"].lower()))
+    return out
+
+
 def targets_from_file(path: str) -> dict[str, str]:
     """Candidates NOT yet in the catalog: one `Name,https://careers-url` per line.
 
@@ -216,6 +248,22 @@ async def main():
     names = [a for a in args if not a.startswith("-")]
     targets = (targets_from_file(cand) if cand
                else targets_from_config(names) or TARGETS)
+    if cand:
+        import re as _re
+        have = already_in_catalog()
+
+        def _dup(n: str) -> bool:
+            # NOT exact membership: the catalog says "Eliyan" while a candidate list
+            # says "Eliyan Corp", and an exact check reports a company we already
+            # scrape as a fresh find. Same failure as the H1B lookup that missed
+            # "Cadence Design Systems" because the key was "cadence".
+            k = _re.sub(r"[^a-z0-9]", "", n.lower())
+            return any(k.startswith(h) or h.startswith(k) for h in have if len(h) >= 4)
+
+        dupes = [n for n in targets if _dup(n)]
+        for n in dupes:
+            print(f"--  {n:24} already in the catalog, skipping", flush=True)
+            targets.pop(n, None)
     print(f"probing {len(targets)} companies", flush=True)
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
