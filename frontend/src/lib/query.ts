@@ -17,7 +17,15 @@
  */
 import type { Filters, Job } from './types'
 
-const HIDDEN_CATEGORIES = new Set(['Software / Compiler', 'Unknown', 'Adjacent / Backup'])
+// Hidden unless `include_adjacent` is set. 'Physical Design' is here because
+// backend implementation — floorplan, place-and-route, STA, timing closure,
+// signoff — is a different career track from RTL design and verification. These
+// were previously filed under RTL Design and the verification categories (30 of
+// them as "RTL Design", twelve as "Formal Verification"), so 11% of the visible
+// US jobs were roles outside the board's scope. Still reachable, just not default.
+const HIDDEN_CATEGORIES = new Set([
+  'Software / Compiler', 'Unknown', 'Adjacent / Backup', 'Physical Design',
+])
 
 const lc = (s: unknown) => String(s ?? '').toLowerCase()
 

@@ -34,7 +34,12 @@ jobs:
     # LTS releases and takes the whole scrape down on GitHub's schedule rather
     # than ours. Bump this deliberately.
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # 45 companies take ~15.5 min (~19 s each), so 30 min capped us at roughly 90
+    # companies — below the catalog we are building. 60 min gives room for ~180.
+    # The real fix past that is sharding the company list across a matrix so each
+    # shard stays short and one bad shard is not an outage; this is headroom to
+    # grow into, not a substitute for it.
+    timeout-minutes: 60
     steps:
       # Pinned to a SHA, not a tag. v4 targets Node 20, which GitHub has
       # deprecated — the run logs already warn it is being forced onto Node 24.
@@ -70,6 +75,7 @@ jobs:
       #   data_health         the health panel lying about pipeline state
       #   company_identity    a board token belonging to a DIFFERENT company
       #   h1b_filter          an unclassified company vanishing from the H1B view
+      #   role_scope          backend/physical-design roles leaking into RTL+DV
       - name: Guard tests
         run: |
           pip install -q pytest
@@ -78,7 +84,8 @@ jobs:
             backend/tests/test_scrape_egress.py \
             backend/tests/test_data_health.py \
             backend/tests/test_company_identity.py \
-            backend/tests/test_h1b_filter.py
+            backend/tests/test_h1b_filter.py \
+            backend/tests/test_role_scope.py
 
       - name: Scrape and rebuild the snapshot
         env:

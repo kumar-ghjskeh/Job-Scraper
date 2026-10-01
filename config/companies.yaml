@@ -718,6 +718,29 @@ companies:
     search_keywords: ["verification", "rtl", "design verification", "asic", "fpga"]
     notes: "Jobvite Engage behind Cloudflare — scraped via curl_cffi (TLS impersonation) by the local cf runner."
     enabled: false
+  # ── Added 2026-10-01 via scripts/discover_companies.py. Both cleared the
+  #    identity check: Greenhouse reports the board owner as "Ethernovia, Inc."
+  #    and "IonQ", so neither is another company's board.
+  - name: "Ethernovia"
+    category: "Networking"
+    priority: "B"
+    careers_url: "https://job-boards.greenhouse.io/ethernovia"
+    ats_platform: "greenhouse"
+    greenhouse_board: "ethernovia"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "silicon", "digital design"]
+    notes: "Automotive Ethernet SoCs. Verified 4 RTL/DV of 30 postings; board identity 'Ethernovia, Inc.'"
+    enabled: true
+
+  - name: "IonQ"
+    category: "Quantum"
+    priority: "C"
+    careers_url: "https://job-boards.greenhouse.io/ionq"
+    ats_platform: "greenhouse"
+    greenhouse_board: "ionq"
+    search_keywords: ["verification", "rtl", "fpga", "design verification", "digital design"]
+    notes: "Trapped-ion quantum; FPGA control electronics. Verified 2 FPGA roles of 119; board identity 'IonQ'"
+    enabled: true
+
   - name: "Kioxia"
     category: "Memory"
     priority: "C"

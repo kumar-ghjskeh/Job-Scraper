@@ -521,6 +521,19 @@ def score_breakdown_json(breakdown: dict[str, int]) -> str:
 
 # ── Classification helpers ─────────────────────────────────────────────────────
 
+# Backend-implementation title shapes. Kept narrow and anchored on words that
+# only appear in physical-design work, so an RTL or DV title cannot trip it.
+_PHYSICAL_DESIGN_TITLE = re.compile(
+    r"\b(physical design|floorplan(ning)?|place\s*(and|&)\s*route|pnr|p\s*&\s*r"
+    r"|static timing|\bsta\b|timing closure|timing signoff|signoff"
+    r"|\btiming\s+(engineer|analysis|convergence)\b"
+    r"|\bgds(ii)?\b|rtl2gds|rtl to gds|clock tree|\bcts\b"
+    r"|power integrity|signal integrity|\bdrc\b|\blvs\b"
+    r"|library characteri[sz]ation|backend design|back[- ]end implementation)",
+    re.I,
+)
+
+
 def detect_role_category(title: str, description: str = "") -> str:
     """Expanded role category detection using both title and description signals."""
     t = title.lower()
@@ -530,6 +543,22 @@ def detect_role_category(title: str, description: str = "") -> str:
     # Software-only → not RTL/DV
     if is_software_only(title, description):
         return "Software / Compiler"
+
+    # Physical design / backend implementation, decided on the TITLE ALONE and
+    # before everything else.
+    #
+    # Deliberately title-only: the checks below match against title + description,
+    # and chip-company descriptions routinely mention UVM, testbenches and
+    # coverage regardless of the role, so a "Physical Design Engineer" was being
+    # filed as Design Verification by its own boilerplate. Meanwhile the title
+    # fallback at the bottom mapped "physical design" straight to RTL Design.
+    # Between them, 87 of 790 visible US jobs — 11% — were backend roles sitting in
+    # RTL and verification categories, including twelve under Formal Verification.
+    #
+    # Title-only also protects the other direction: an RTL Design posting whose
+    # description says "partner with the physical design team" stays RTL Design.
+    if _PHYSICAL_DESIGN_TITLE.search(t):
+        return RoleCategory.physical_design
 
     # Priority order: most specific first
     dv_signals = [
@@ -592,7 +621,8 @@ def detect_role_category(title: str, description: str = "") -> str:
         return RoleCategory.design_verification
     if any(s in t for s in [
         "rtl", "asic", "soc", "silicon", "digital design", "logic design",
-        "physical design", "hardware design", "chip design", "microarchitecture",
+        # "physical design" removed: it is its own category now, caught above.
+        "hardware design", "chip design", "microarchitecture",
         "ip design", "design engineer", "hardware engineer",
     ]):
         return RoleCategory.rtl_design

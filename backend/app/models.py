@@ -85,6 +85,11 @@ class RoleCategory(str, Enum):
     pre_silicon = "Pre-Silicon Validation"
     post_silicon = "Post-Silicon Validation"
     eda_tools = "EDA / Verification Tools"
+    # Backend implementation: floorplan, place-and-route, STA, timing closure,
+    # signoff. A separate career track from RTL design and verification, so it is
+    # its own category and hidden from the default view rather than filed under
+    # "RTL Design" — which is where 30 of these were landing.
+    physical_design = "Physical Design"
     adjacent = "Adjacent / Backup"
     unknown = "Unknown"
 

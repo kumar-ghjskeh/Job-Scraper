@@ -148,7 +148,7 @@ _SPONSOR_NAMES = (
     "SiMa.ai", "Untether AI", "Expedera", "Quadric", "Blaize", "Recogni",
     "Cornelis Networks", "Tetramem", "Axelera AI", "Rain AI", "Lemurian Labs",
     "Graphcore", "Normal Computing", "Flex Logix", "Nubis Communications",
-    "Lumotive", "EnCharge AI", "Kinara", "Hailo", "FuriosaAI",
+    "Lumotive", "EnCharge AI", "Kinara", "Hailo", "FuriosaAI", "Ethernovia",
     # Quantum and photonics — US-based, academic-pipeline hiring.
     "PsiQuantum", "Atom Computing", "IonQ", "Rigetti Computing", "QuEra Computing",
     "Infleqtion", "Quantinuum", "Xanadu",
