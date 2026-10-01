@@ -135,3 +135,66 @@ def test_tallies_ignore_retired_postings():
     rows = [_job("X", "a"), {**_job("X", "b"), "active_status": "possibly_removed"}]
     st = company_tallies(rows)["X"]
     assert st["total"] == 1 and st["usa"] == 1
+
+
+def _retired(key: str, misses: int, seen: str) -> dict:
+    return {
+        "key": key, "company": "AMD", "job_title": "DV Engineer", "apply_url": "u",
+        "active_status": "possibly_removed", "missed_scrapes": misses,
+        "last_seen_at": seen, "first_seen_at": seen, "is_usa": True,
+        "role_category": "Design Verification", "is_software_only": False,
+    }
+
+
+def test_merge_does_not_rewind_the_removal_counter(tmp_path):
+    """last_seen_at cannot break the tie for a posting that was NOT seen.
+
+    It does not advance while a posting is missing, so for every missing posting the
+    two sides tied and `ours` won by default. The browser pass seeds from an older
+    snapshot, so its stale missed_scrapes=1 overwrote the httpx pass's 2 on every
+    cycle. The counter could never pass 1, nothing reached the threshold of 4, and no
+    posting was ever marked `removed` — 1,137 rows sat at possibly_removed with
+    missed_scrapes=1 and removed_at unset, so the retired set grew without bound.
+    """
+    seen = "2026-10-01T00:00:00+00:00"
+    base = tmp_path / "base.json"
+    ours = tmp_path / "ours.json"
+
+    # httpx pass has advanced to 3; browser pass still holds the stale 1.
+    _write(base, [_retired("k1", 3, seen)], [_company("AMD")], [])
+    _write(ours, [_retired("k1", 1, seen)], [_company("AMD")], [])
+    merge_snapshot_files(base, ours)
+    got = json.loads(ours.read_text(encoding="utf-8"))["jobs"][0]
+    assert got["missed_scrapes"] == 3, (
+        "the publishing pass rewound the removal counter; postings can then never "
+        "reach the threshold and are never retired"
+    )
+
+    # Symmetric: whichever side is further along wins.
+    _write(base, [_retired("k1", 1, seen)], [_company("AMD")], [])
+    _write(ours, [_retired("k1", 3, seen)], [_company("AMD")], [])
+    merge_snapshot_files(base, ours)
+    assert json.loads(ours.read_text(encoding="utf-8"))["jobs"][0]["missed_scrapes"] == 3
+
+
+def test_a_fresher_sighting_still_resets_the_counter(tmp_path):
+    """Keeping the higher counter must not override a genuine re-sighting: a posting
+    seen again is active, and its miss count belongs back at zero."""
+    base = tmp_path / "base.json"
+    ours = tmp_path / "ours.json"
+    _write(base, [_retired("k1", 3, "2026-10-01T00:00:00+00:00")], [_company("AMD")], [])
+    fresh = _retired("k1", 0, "2026-10-02T00:00:00+00:00")
+    fresh["active_status"] = "active"
+    _write(ours, [fresh], [_company("AMD")], [])
+    merge_snapshot_files(base, ours)
+    got = json.loads(ours.read_text(encoding="utf-8"))["jobs"][0]
+    assert got["missed_scrapes"] == 0 and got["active_status"] == "active"
+
+
+def test_retired_rows_keep_every_field_the_state_machine_needs():
+    """Retired rows are stripped to cut the payload; the strip must not drop a field
+    the removal pass or the merge reads back."""
+    from backend.app.snapshot import RETIRED_ROW_FIELDS
+    for f in ("key", "company", "job_title", "apply_url", "job_id_from_company",
+              "active_status", "missed_scrapes", "last_seen_at", "removed_at"):
+        assert f in RETIRED_ROW_FIELDS, f"{f} must survive on a retired row"

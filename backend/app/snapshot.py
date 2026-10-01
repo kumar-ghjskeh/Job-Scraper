@@ -41,6 +41,21 @@ logger = logging.getLogger(__name__)
 
 # Fields the job list, filters, sorting and the details header need. Deliberately
 # excludes the two large text columns — those live in details.json.
+# What a RETIRED posting keeps when the snapshot is written. Everything here is
+# load-bearing:
+#   company / job_title / apply_url   required by the JobPosting model
+#   job_id_from_company / location    how find_existing re-matches a posting
+#   active_status / missed_scrapes     the removal state machine itself
+#   removed_at / last_seen_at          read by the sweep and the removal pass
+#   first_seen_at                      so a posting that returns keeps its age
+#   key                                how merge_snapshot_files pairs rows
+# Adding a field to the scrape path that a retired row needs means adding it here
+# too, or the value silently resets on every rebuild.
+RETIRED_ROW_FIELDS = frozenset({
+    "key", "company", "job_title", "location", "job_id_from_company", "apply_url",
+    "active_status", "missed_scrapes", "removed_at", "first_seen_at", "last_seen_at",
+})
+
 LIST_FIELDS = (
     "id", "company", "company_category", "company_priority", "job_title",
     "normalized_title", "role_category", "experience_level",
@@ -65,6 +80,8 @@ LIST_FIELDS = (
     # posting that flickers out of a source would reset its miss counter every
     # run and could never be retired.
     "active_status", "missed_scrapes",
+    # Was missing, so a retired posting lost its removal timestamp on each rebuild.
+    "removed_at",
 )
 
 
@@ -175,6 +192,15 @@ def build_snapshot(session: Session) -> tuple[dict, dict]:
             j.company or "", j.job_title or "", j.location or "",
             j.job_id_from_company or "", j.apply_url or "",
         )
+        # Retired postings carry only what the removal state machine and the merge
+        # need. They are never rendered — the UI filters on active_status — but they
+        # must stay in the file, because dropping them would reset missed_scrapes
+        # every run and a posting that flickers out of a source could never be
+        # retired on schedule. Stripping them instead keeps that intact while taking
+        # ~32% off the payload the browser downloads, which matters more with every
+        # company added: 1,137 of 2,939 rows here are retired.
+        if not str(row.get("active_status", "active")).endswith("active"):
+            row = {k: v for k, v in row.items() if k in RETIRED_ROW_FIELDS}
         out.append(row)
         body = (j.cleaned_description or "").strip()
         if body:
@@ -387,12 +413,36 @@ def merge_snapshot_files(base_jobs: str | Path, ours_jobs: str | Path,
             by_key[k] = row
     added_from_base = len(by_key)
     kept_ours = 0
+    def _misses(row: dict) -> int:
+        try:
+            return int(row.get("missed_scrapes") or 0)
+        except (TypeError, ValueError):
+            return 0
+
     for row in ours.get("jobs", []):
         k = row.get("key")
         if not k:
             continue
         prev = by_key.get(k)
-        if prev is None or _seen(row) >= _seen(prev):
+        if prev is None:
+            by_key[k] = row
+            kept_ours += 1
+            continue
+        # last_seen_at breaks the tie — but it does NOT advance for a posting that
+        # was not seen, so for every missing posting the two sides tie and `ours`
+        # won by default. The browser pass seeds from an older snapshot, so its
+        # stale missed_scrapes=1 overwrote the httpx pass's 2 on every cycle: the
+        # removal counter could never pass 1, nothing ever reached the threshold of
+        # 4, and so no posting was ever marked `removed`. 1,137 rows sat at
+        # possibly_removed / missed_scrapes=1 with removed_at never set, and the
+        # retired set grew without bound — which is also why the payload keeps
+        # growing.
+        #
+        # The state machine only moves forward, so on a tie keep the further-along
+        # row whichever side it came from.
+        if _seen(row) > _seen(prev) or (
+            _seen(row) == _seen(prev) and _misses(row) >= _misses(prev)
+        ):
             by_key[k] = row
             kept_ours += 1
 
