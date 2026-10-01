@@ -151,10 +151,16 @@ companies:
     priority: "A"
     careers_url: "https://job-boards.greenhouse.io/ventana"
     ats_platform: "greenhouse"
-    greenhouse_board: "ventana"
+    greenhouse_board: "ventana"   # WRONG BOARD — see note; disabled
     search_keywords: ["verification", "rtl", "design verification", "risc-v", "cpu", "soc"]
     locations_of_interest: ["Santa Clara", "Remote"]
-    enabled: true
+    # DISABLED 2026-10-01: greenhouse board "ventana" resolves to "Ventana by
+    # Buckner", a senior-living operator — the postings were CNA/LVN/housekeeping
+    # roles, not silicon. It yielded 0 only because the keyword filter rejected
+    # every nursing title; the filter was the only thing standing between a
+    # nursing home's board and this app. Re-enable ONLY with a board token whose
+    # Greenhouse metadata name reads "Ventana Micro Systems".
+    enabled: false
 
   - name: "Lattice Semiconductor"
     category: "FPGA"
@@ -308,7 +314,11 @@ companies:
     ashby_org: "rain"
     search_keywords: ["verification", "rtl", "asic", "design verification", "soc"]
     locations_of_interest: ["San Diego", "Remote", "United States"]
-    enabled: true
+    # DISABLED 2026-10-01: ashby board "rain" resolves to Rain the fintech
+    # (Paralegal, Regulatory & Security Compliance Manager). Rain AI's own site
+    # links jobs.ashbyhq.com/rain-ai-jobs, but that board 404s on the Ashby
+    # posting API (all slug variants tried), so there is no clean endpoint yet.
+    enabled: false
 
   - name: "Axelera AI"
     category: "AI Accelerator"
@@ -435,7 +445,10 @@ companies:
     ats_platform: "smartrecruiters"
     smartrecruiters_company: "Groq"
     search_keywords: ["verification", "rtl", "design verification", "asic"]
-    enabled: true
+    # DISABLED 2026-10-01: smartrecruiters "Groq" returns totalFound=0 — Groq
+    # has moved off SmartRecruiters. No Greenhouse/Lever/Ashby board responded
+    # either. Needs rediscovery; Groq is a high-value A-priority source.
+    enabled: false
 
   - name: "SiFive"
     category: "RISC-V"
@@ -708,7 +721,7 @@ companies:
   - name: "Kioxia"
     category: "Memory"
     priority: "C"
-    careers_url: "https://careers.smartrecruiters.com/KIOXIAAmerica"
+    careers_url: "https://careers.smartrecruiters.com/kioxia"
     ats_platform: "smartrecruiters"
     smartrecruiters_company: "kioxia"
     search_keywords: ["verification", "rtl", "asic", "design", "firmware"]
@@ -885,10 +898,13 @@ companies:
     priority: "C"
     careers_url: "https://job-boards.greenhouse.io/flex"
     ats_platform: "greenhouse"
-    greenhouse_board: "flex"
+    greenhouse_board: "flex"   # WRONG BOARD — see note; disabled
     search_keywords: ["verification", "rtl", "fpga", "design verification", "digital design"]
     notes: "Greenhouse public JSON (board: flex) — discovered live, clean-API httpx pass."
-    enabled: true
+    # DISABLED 2026-10-01: greenhouse board "flex" resolves to "Flex" (postings
+    # like "Chief of Staff to the GM of Housing"), not Flex Logix. flex-logix.com
+    # no longer serves either, consistent with the eFPGA business winding down.
+    enabled: false
   - name: "Quadric"
     category: "Edge AI"
     priority: "C"

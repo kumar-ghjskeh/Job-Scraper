@@ -406,7 +406,7 @@ export function FilterSidebar({ filters, onChange, totalCount, mobile = false, o
                     border: `1px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
                     borderRadius: 6, padding: '4px 9px',
                     fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    color: active ? '#fff' : 'var(--text-muted)',
+                    color: active ? 'var(--on-primary)' : 'var(--text-muted)',
                   }}
                 >
                   {n === 0 ? 'Any' : `${n}+`}

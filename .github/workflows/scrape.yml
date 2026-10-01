@@ -61,16 +61,18 @@ jobs:
           pip install -r backend/requirements.lock.txt
           pip install -r backend/requirements-cf.txt
 
-      # Run the suite against the LOCKED stack before scraping. Nine days of
-      # failures were a type error the tests would have caught in seconds — but
-      # nothing ran them, so the first sign of trouble was a scheduled run dying
-      # at 03:00. Two of these guards exist specifically to catch the classes
-      # that have taken this app down before (naive datetimes, scrape-path
-      # queries loading the heavy description columns).
+      # Run the suite against the LOCKED stack BEFORE scraping. Nine days of
+      # failures were a type error pytest catches in seconds, but nothing ran it,
+      # so the first sign of trouble was a scheduled run dying at 03:00. Each of
+      # these guards covers a class that has taken this app down before:
+      #   datetime_awareness  naive vs aware timestamps (the nine-day outage)
+      #   scrape_egress       scrape queries loading heavy description columns
+      #   data_health         the health panel lying about pipeline state
+      #   company_identity    a board token belonging to a DIFFERENT company
       - name: Guard tests
         run: |
           pip install -q pytest
-          python -m pytest backend/tests/test_datetime_awareness.py                            backend/tests/test_scrape_egress.py                            backend/tests/test_data_health.py -q
+          python -m pytest -q             backend/tests/test_datetime_awareness.py             backend/tests/test_scrape_egress.py             backend/tests/test_data_health.py             backend/tests/test_company_identity.py
 
       - name: Scrape and rebuild the snapshot
         env:

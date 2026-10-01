@@ -52,6 +52,10 @@
   --shadow-panel: 0 8px 30px rgba(15,23,42,0.12);
 
   --brand-tile: linear-gradient(135deg, #15171F 0%, #0B0B0F 100%);
+  /* Backing for THIRD-PARTY company logos (CompanyLogo), which are mostly dark
+     marks on transparency and so need a light tile. Distinct from --brand-tile,
+     which is the dark tile for our own logo in TopNav. */
+  --logo-tile: #FFFFFF;
 
   color-scheme: light;
 }
@@ -101,6 +105,9 @@
   --shadow-panel: 0 10px 34px rgba(0,0,0,0.60);
 
   --brand-tile: linear-gradient(135deg, #1B2030 0%, #0B0B0F 100%);
+  /* Dimmed rather than pure white: a full-white tile punches a hole in the dark
+     page, but the mark still needs a light ground to read against. */
+  --logo-tile: #E7E9EE;
 
   color-scheme: dark;
 }

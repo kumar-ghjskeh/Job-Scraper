@@ -5,13 +5,27 @@ import type { Company } from '../lib/types'
 import { CompanyLogo } from './CompanyLogo'
 import { Icon } from './Icon'
 
-function priorityColor(p: string): { bg: string; color: string } {
-  switch (p) {
-    case 'S': return { bg: '#FEF3C7', color: '#B45309' }
-    case 'A': return { bg: '#DBEAFE', color: '#1D4ED8' }
-    case 'B': return { bg: '#CFFAFE', color: '#0891B2' }
-    default:  return { bg: '#F3F4F6', color: '#6B7280' }
+// Chips are derived from ONE hue each, mixed against the live surface/text
+// tokens rather than hardcoded as pale pastels. A fixed pastel background does
+// not move when the theme toggles, so these chips used to glow on the dark page
+// while their dark text went unreadable. color-mix() re-resolves per theme, so
+// light mode keeps the same tint it always had and dark mode gets a dark one.
+function tint(hue: string, bgPct = 14, fgPct = 72) {
+  return {
+    bg: `color-mix(in srgb, ${hue} ${bgPct}%, var(--surface))`,
+    color: `color-mix(in srgb, ${hue} ${fgPct}%, var(--text))`,
   }
+}
+
+const PRIORITY_HUES: Record<string, string> = {
+  S: 'var(--accent-gold)',
+  A: 'var(--primary)',
+  B: 'var(--teal)',
+}
+
+function priorityColor(p: string): { bg: string; color: string } {
+  const hue = PRIORITY_HUES[p]
+  return hue ? tint(hue) : tint('var(--text-muted)', 10, 90)
 }
 
 function statusDot(co: Company) {
@@ -25,21 +39,26 @@ function statusDot(co: Company) {
   const usable = co.viewable_jobs ?? 0
   if (live > 0 && usable > 0) return { color: 'var(--success)', label: 'Live' }
   if (live > 0) return { color: 'var(--teal)', label: 'Live · no US roles' }
-  return { color: '#9CA3AF', label: 'No openings' }
+  return { color: 'var(--text-faint)', label: 'No openings' }
 }
 
-const ATS_COLORS: Record<string, { bg: string; color: string }> = {
-  greenhouse: { bg: '#DCFCE7', color: '#166534' },
-  lever:      { bg: '#DBEAFE', color: '#1E40AF' },
-  ashby:      { bg: '#E0F5F9', color: '#0E7490' },
-  workday:    { bg: '#FEF3C7', color: '#92400E' },
-  amazon:     { bg: '#FFF7ED', color: '#C2410C' },
-  apple:      { bg: '#F3F4F6', color: '#374151' },
-  google:     { bg: '#FEF9C3', color: '#713F12' },
-  microsoft:  { bg: '#DBEAFE', color: '#1D4ED8' },
-  meta:       { bg: '#EFF6FF', color: '#1D4ED8' },
-  generic:    { bg: '#F3F4F6', color: '#6B7280' },
+// One recognisable hue per platform; the chip itself is derived via tint().
+const ATS_HUES: Record<string, string> = {
+  greenhouse: '#16A34A',
+  lever:      '#2563EB',
+  ashby:      '#0E7490',
+  workday:    '#D97706',
+  amazon:     '#EA580C',
+  apple:      '#64748B',
+  google:     '#CA8A04',
+  microsoft:  '#2563EB',
+  meta:       '#3B82F6',
+  generic:    '#64748B',
 }
+
+const ATS_COLORS: Record<string, { bg: string; color: string }> = Object.fromEntries(
+  Object.entries(ATS_HUES).map(([k, hue]) => [k, tint(hue)]),
+)
 
 interface Props {
   onViewJobs?: (companyName: string) => void
@@ -138,7 +157,7 @@ export function CompaniesPage({ onViewJobs }: Props) {
                 border: `1px solid ${filterPriority === p ? 'var(--primary)' : 'var(--border)'}`,
                 borderRadius: 6, padding: '5px 10px', fontSize: 12,
                 fontWeight: 600, cursor: 'pointer',
-                color: filterPriority === p ? '#fff' : 'var(--text-muted)',
+                color: filterPriority === p ? 'var(--on-primary)' : 'var(--text-muted)',
               }}
             >
               {p || 'All'}

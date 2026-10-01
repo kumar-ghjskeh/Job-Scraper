@@ -16,7 +16,7 @@ export function Pagination({ page, totalPages, totalCount, limit, hasNext, hasPr
 
   const btnStyle = (active: boolean, disabled: boolean): React.CSSProperties => ({
     background: active ? 'var(--primary)' : 'var(--surface)',
-    color: active ? '#fff' : disabled ? 'var(--text-faint)' : 'var(--text)',
+    color: active ? 'var(--on-primary)' : disabled ? 'var(--text-faint)' : 'var(--text)',
     border: `1px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
     borderRadius: 6, padding: '5px 10px', fontSize: 13,
     cursor: disabled ? 'not-allowed' : 'pointer',

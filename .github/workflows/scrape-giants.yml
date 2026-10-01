@@ -97,6 +97,19 @@ jobs:
               b.close()
           PY
 
+      # Run the suite against the LOCKED stack BEFORE scraping. Nine days of
+      # failures were a type error pytest catches in seconds, but nothing ran it,
+      # so the first sign of trouble was a scheduled run dying at 03:00. Each of
+      # these guards covers a class that has taken this app down before:
+      #   datetime_awareness  naive vs aware timestamps (the nine-day outage)
+      #   scrape_egress       scrape queries loading heavy description columns
+      #   data_health         the health panel lying about pipeline state
+      #   company_identity    a board token belonging to a DIFFERENT company
+      - name: Guard tests
+        run: |
+          pip install -q pytest
+          python -m pytest -q             backend/tests/test_datetime_awareness.py             backend/tests/test_scrape_egress.py             backend/tests/test_data_health.py             backend/tests/test_company_identity.py
+
       - name: Scrape (browser) and rebuild the snapshot
         env:
           DATA_DIR: frontend/public/data

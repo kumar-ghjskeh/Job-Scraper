@@ -77,7 +77,10 @@ export function CompanyLogo({ company, size = 46, radius = 10 }: Props) {
 
   return (
     <div style={{
-      width: size, height: size, borderRadius: radius, background: '#FFFFFF',
+      // --logo-tile, not hard white: vendor marks need a light backing, but a
+      // pure-white square punches a hole in the dark page, so the shade has to
+      // be tunable per theme. (--brand-tile is the DARK tile for our own logo.)
+      width: size, height: size, borderRadius: radius, background: 'var(--logo-tile)',
       border: '1px solid var(--border)', display: 'flex', alignItems: 'center',
       justifyContent: 'center', flexShrink: 0, overflow: 'hidden',
     }}>

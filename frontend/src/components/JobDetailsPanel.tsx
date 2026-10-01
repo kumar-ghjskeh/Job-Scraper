@@ -40,11 +40,14 @@ const fieldInput: React.CSSProperties = {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 85) return '#057642'
-  if (score >= 75) return '#0A66C2'
-  if (score >= 65) return '#0E7490'
-  if (score >= 50) return '#915907'
-  return '#6B7280'
+  // Semantic tokens, not fixed hex: these are drawn on --surface, which inverts
+  // with the theme. The old values were tuned for the light page only and went
+  // nearly unreadable against the dark one.
+  if (score >= 85) return 'var(--success)'
+  if (score >= 75) return 'var(--primary)'
+  if (score >= 65) return 'var(--teal)'
+  if (score >= 50) return 'var(--accent-gold)'
+  return 'var(--text-muted)'
 }
 
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -422,7 +425,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
             target="_blank" rel="noopener noreferrer"
             className="btn btn-primary"
           >
-            Apply Now <Icon name="external" size={14} color="#fff" />
+            Apply Now <Icon name="external" size={14} color="var(--on-primary)" />
           </a>
           <button
             onClick={() => handleSetStatus(job.active_status === 'saved' ? 'active' : 'saved')}
@@ -1120,7 +1123,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
               onClick={handleSaveNotes}
               disabled={saving}
               style={{
-                background: 'var(--primary)', color: '#fff',
+                background: 'var(--primary)', color: 'var(--on-primary)',
                 border: 'none', borderRadius: 8, padding: '9px 20px',
                 fontSize: 13, fontWeight: 600,
                 cursor: saving ? 'not-allowed' : 'pointer',
