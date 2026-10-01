@@ -95,9 +95,28 @@ def test_zombie_run_cutoff_is_aware():
 
 def test_snapshot_restores_aware_datetimes():
     """Snapshots written before the fix hold naive strings; restoring them must
-    not reintroduce naive values into a freshly built database."""
-    src = inspect.getsource(snapshot.load_snapshot_into_db)
-    assert "tzinfo=timezone.utc" in src, (
-        "load_snapshot_into_db no longer coerces parsed timestamps to UTC. An "
-        "older snapshot would then seed naive values and break the next scrape."
+    not reintroduce naive values into a freshly built database.
+
+    Asserted on behaviour rather than on the source of one function: the parser
+    was lifted out of load_snapshot_into_db to module scope so the company-health
+    restore could share it, and a source-text check broke on that refactor while
+    the guarantee itself was intact. Behaviour is what matters here.
+    """
+    assert hasattr(snapshot, "_parse_aware"), (
+        "the shared timestamp parser is gone; whatever replaced it must still "
+        "coerce naive values to UTC on the way into the database"
     )
+    naive = snapshot._parse_aware("2026-01-01T00:00:00")
+    assert naive is not None and naive.tzinfo is not None, (
+        "a stored timestamp WITHOUT an offset was restored as naive. Older "
+        "snapshots are written that way, so this reseeds the mixed-awareness bug "
+        "that killed every scrape for nine days."
+    )
+    assert naive.utcoffset() == timedelta(0), "must be read as UTC, not local time"
+
+    aware = snapshot._parse_aware("2026-01-01T00:00:00+05:30")
+    assert aware is not None and aware.utcoffset() == timedelta(hours=5, minutes=30), (
+        "an explicit offset must be preserved, not overwritten with UTC"
+    )
+    assert snapshot._parse_aware(None) is None
+    assert snapshot._parse_aware("not a date") is None

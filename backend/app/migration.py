@@ -35,6 +35,8 @@ _MIGRATIONS: list[tuple[str, str, str]] = [
     ("job_postings", "experienced_fit",              "INTEGER NOT NULL DEFAULT 0"),
     # Company new fields
     ("companies",    "company_search_url",           "TEXT NOT NULL DEFAULT ''"),
+    # Consecutive successful-but-empty scrapes — the silent failure counter.
+    ("companies",    "consecutive_empty_scrapes",     "INTEGER NOT NULL DEFAULT 0"),
     # ResumeProfile new fields (multi-resume support)
     ("resume_profile", "label",                       "TEXT NOT NULL DEFAULT ''"),
     ("resume_profile", "is_active",                   "INTEGER NOT NULL DEFAULT 1"),

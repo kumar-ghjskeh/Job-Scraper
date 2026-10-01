@@ -47,11 +47,17 @@ async def _run() -> int:
     from .database import init_db
     from .run_cf_scrape import main as cf_main
     from .scrape_engine import run_scrape, sweep_stale_jobs
-    from .snapshot import load_snapshot_into_db, write_snapshot
+    from .snapshot import load_snapshot_into_db, seed_companies_into_db, write_snapshot
 
     init_db()
     restored = load_snapshot_into_db(DATA_DIR / "jobs.json", DATA_DIR / "details.json")
     logger.info("seeded scratch database with %d job(s) from the last snapshot", restored)
+    # Company rows, with their health counters carried over from the snapshot.
+    # Nothing created these before, so every select(Company) in the scrape path
+    # returned None: quarantine never fired, error counts never rose above zero,
+    # and the dashboard's broken-source panel could not populate. Required before
+    # adding DOM-scraped sources, whose failure mode is silent.
+    seed_companies_into_db(DATA_DIR / "jobs.json")
 
     failures: list[str] = []
     scraped_ok = False

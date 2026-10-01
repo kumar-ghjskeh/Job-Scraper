@@ -203,6 +203,10 @@ export interface Company {
   enabled: boolean
   last_scraped_at: string | null
   scrape_error_count: number
+  /** Consecutive runs that succeeded but returned nothing — the silent failure. */
+  consecutive_empty_scrapes?: number
+  /** Auto-skipped after too many consecutive hard failures. */
+  quarantined?: boolean
   notes: string
   total_active_jobs?: number
   relevant_active_jobs?: number

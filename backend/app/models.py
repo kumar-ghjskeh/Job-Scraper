@@ -114,6 +114,14 @@ class Company(SQLModel, table=True):
     enabled: bool = True
     last_scraped_at: Optional[datetime] = Field(default=None, sa_type=UtcDateTime)
     scrape_error_count: int = 0
+    # Consecutive runs where the source answered successfully but returned NOTHING.
+    # The silent failure mode, and the one that matters for DOM scraping: when a
+    # selector stops matching, the adapter raises nothing, returns an empty list,
+    # and the run counts the company as scraped. scrape_error_count stays 0, so
+    # quarantine never sees it and the company simply reads "no openings" forever.
+    # A genuinely empty board looks identical for one run, which is why this is a
+    # counter to surface rather than grounds to quarantine.
+    consecutive_empty_scrapes: int = 0
     notes: str = ""
 
 

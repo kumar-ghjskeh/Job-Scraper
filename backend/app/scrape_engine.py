@@ -51,6 +51,12 @@ logger = logging.getLogger(__name__)
 # so broken endpoints never keep throwing errors into the dashboard.
 ERROR_QUARANTINE_THRESHOLD = 8
 
+# After this many consecutive runs that SUCCEED but return zero postings, a source
+# is reported as stalled. Not quarantined: a board really can be empty, and
+# skipping it would mean never noticing when it refills. At 8 runs/day this is
+# about a day and a half of silence, which no active employer sustains.
+EMPTY_STALL_THRESHOLD = 12
+
 
 def _sane_posted_date(d, now):
     """Trust a scraper-provided posted date only if it's a plausible PAST date.
@@ -473,6 +479,29 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
 
             scraped_count += 1
             total_found += len(raw_jobs)
+
+            # A successful fetch that returned nothing is the silent failure: no
+            # exception, so scrape_error_count stays 0 and quarantine never looks
+            # at it, while the directory just reads "no openings". Track it so the
+            # case is distinguishable from an employer that genuinely has none.
+            with Session(engine) as session:
+                co = session.exec(
+                    select(Company).where(Company.name == company_name)
+                ).first()
+                if co:
+                    if raw_jobs:
+                        co.consecutive_empty_scrapes = 0
+                    else:
+                        co.consecutive_empty_scrapes += 1
+                        if co.consecutive_empty_scrapes >= EMPTY_STALL_THRESHOLD:
+                            logger.warning(
+                                "%s has returned 0 postings for %d consecutive runs "
+                                "— likely a broken selector or a dead board, not an "
+                                "employer with nothing open",
+                                company_name, co.consecutive_empty_scrapes,
+                            )
+                    session.add(co)
+                    session.commit()
 
             new_count, removed_count = await persist_company_results(
                 company_cfg, raw_jobs, removed_threshold

@@ -32,6 +32,8 @@ export interface CorpusCompany {
   scrape_status: string
   last_scraped_at: string | null
   scrape_error_count: number
+  consecutive_empty_scrapes?: number
+  quarantined?: boolean
 }
 
 export interface CorpusRun {

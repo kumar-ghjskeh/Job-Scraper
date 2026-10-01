@@ -34,6 +34,7 @@ from sqlmodel import Session, select
 
 from .database import engine
 from .models import ActiveStatus, Company, JobPosting, ScrapeRun
+from .scrape_engine import EMPTY_STALL_THRESHOLD, ERROR_QUARANTINE_THRESHOLD
 from .services.dedupe import make_fingerprint
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,26 @@ def _iso(v: Any) -> Any:
     return (v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v).isoformat()
 
 
+def _parse_aware(v):
+    """Parse a stored timestamp, always returning an AWARE datetime.
+
+    Older snapshots were written without an offset. Restoring those as naive
+    values reintroduces the mixed-awareness bug the models now forbid, so
+    anything without a timezone is read as UTC — which is what it always was.
+
+    Module level rather than nested inside the job restore: the company-health
+    restore needs it too, and a second copy is a second place to get awareness
+    wrong.
+    """
+    if not v:
+        return None
+    try:
+        d = datetime.fromisoformat(str(v))
+    except ValueError:
+        return None
+    return d.replace(tzinfo=timezone.utc) if d.tzinfo is None else d
+
+
 def build_snapshot(session: Session) -> tuple[dict, dict]:
     """Return ``(jobs_payload, details_payload)`` for the active corpus."""
     # possibly_removed rows are included so their miss counter persists; the
@@ -110,7 +131,8 @@ def build_snapshot(session: Session) -> tuple[dict, dict]:
     from .config import load_all_companies
     status = {
         c.name: {"last_scraped_at": _iso(c.last_scraped_at),
-                 "scrape_error_count": c.scrape_error_count}
+                 "scrape_error_count": c.scrape_error_count,
+                 "consecutive_empty_scrapes": c.consecutive_empty_scrapes}
         for c in session.exec(select(Company)).all()
     }
     # Per-company tallies the directory renders. "Connected" is derived from a
@@ -155,6 +177,7 @@ def build_snapshot(session: Session) -> tuple[dict, dict]:
         st = stats.get(name, {})
         quality = st.get("quality") or []
         errs = status.get(name, {}).get("scrape_error_count", 0)
+        empties = status.get(name, {}).get("consecutive_empty_scrapes", 0)
         total = st.get("total", 0)
         companies.append({
             "name": name,
@@ -173,8 +196,18 @@ def build_snapshot(session: Session) -> tuple[dict, dict]:
             # A source is "connected" when it is producing postings — the honest
             # signal — not merely because the config lists it.
             "auto_connected": total > 0,
-            "scrape_status": "error" if errs > 2 else ("ok" if total else "idle"),
-            **status.get(name, {"last_scraped_at": None, "scrape_error_count": 0}),
+            "scrape_status": (
+                "quarantined" if errs >= ERROR_QUARANTINE_THRESHOLD
+                else "error" if errs > 2
+                else "stalled" if empties >= EMPTY_STALL_THRESHOLD
+                else "ok" if total else "idle"
+            ),
+            # Surfaced so a source that answers but returns nothing is visible as
+            # a problem rather than indistinguishable from one with no openings.
+            "consecutive_empty_scrapes": empties,
+            "quarantined": errs >= ERROR_QUARANTINE_THRESHOLD,
+            **status.get(name, {"last_scraped_at": None, "scrape_error_count": 0,
+                                "consecutive_empty_scrapes": 0}),
         })
     runs = [
         {"id": r.id, "started_at": _iso(r.started_at), "finished_at": _iso(r.finished_at),
@@ -253,20 +286,7 @@ def load_snapshot_into_db(jobs_path: str | Path, details_path: str | Path | None
     if details_path and Path(details_path).exists():
         bodies = json.loads(Path(details_path).read_text(encoding="utf-8")).get("descriptions", {})
 
-    def _dt(v):
-        """Parse a stored timestamp, always returning an AWARE datetime.
-
-        Older snapshots were written without an offset. Restoring those as naive
-        values reintroduces the mixed-awareness bug the models now forbid, so
-        anything without a timezone is read as UTC — which is what it always was.
-        """
-        if not v:
-            return None
-        try:
-            d = datetime.fromisoformat(str(v))
-        except ValueError:
-            return None
-        return d.replace(tzinfo=timezone.utc) if d.tzinfo is None else d
+    _dt = _parse_aware
 
     # Scrape-run history must be restored too. Each run starts from an EMPTY
     # scratch database, so without this the snapshot only ever contained the one
@@ -384,3 +404,63 @@ def merge_snapshot_files(base_jobs: str | Path, ours_jobs: str | Path,
               "added_from_base": added_from_base, "active": ours["count"]}
     logger.info("merged snapshot: %s", report)
     return report
+
+
+def seed_companies_into_db(jobs_path: str | Path) -> int:
+    """Create the Company rows a scrape run needs, restoring their health counters.
+
+    Without this the quarantine machinery is dead code. The scratch database is
+    built fresh every run, and nothing ever created Company rows in it — so every
+    `select(Company)` in scrape_engine returned None. That meant:
+
+      * the quarantine check `co and co.scrape_error_count >= THRESHOLD` was
+        always False, so a permanently broken source was retried forever;
+      * the failure handler's `if co: co.scrape_error_count += 1` recorded
+        nothing, so counts never accumulated past zero;
+      * Data Health's "companies with errors" panel was structurally always
+        empty, which is why it has never once flagged a broken source.
+
+    The config is the source of truth for which companies exist; the previous
+    snapshot carries their accumulated counters. Both are needed: config alone
+    resets the counters to zero every run, which is the bug restated.
+    """
+    from .config import load_all_companies
+
+    prior: dict[str, dict] = {}
+    jobs_path = Path(jobs_path)
+    if jobs_path.exists():
+        try:
+            payload = json.loads(jobs_path.read_text(encoding="utf-8"))
+            for row in payload.get("companies", []):
+                prior[row.get("name", "")] = row
+        except Exception as e:  # a corrupt snapshot must not stop the scrape
+            logger.warning("could not read prior company health: %s", e)
+
+    created = 0
+    with Session(engine) as session:
+        existing = {c.name for c in session.exec(select(Company)).all()}
+        for cfg in load_all_companies():
+            name = cfg.get("name", "")
+            if not name or name in existing:
+                continue
+            was = prior.get(name, {})
+            last = was.get("last_scraped_at")
+            session.add(Company(
+                name=name,
+                category=cfg.get("category", ""),
+                priority=cfg.get("priority", "C"),
+                careers_url=cfg.get("careers_url", ""),
+                ats_platform=cfg.get("ats_platform", ""),
+                enabled=bool(cfg.get("enabled", True)),
+                # Carried forward so quarantine and stall detection can actually
+                # accumulate across runs instead of resetting to zero each time.
+                scrape_error_count=int(was.get("scrape_error_count") or 0),
+                consecutive_empty_scrapes=int(was.get("consecutive_empty_scrapes") or 0),
+                last_scraped_at=_parse_aware(last),
+                notes=cfg.get("notes", ""),
+            ))
+            created += 1
+        session.commit()
+    logger.info("seeded %d company row(s); health counters restored from snapshot",
+                created)
+    return created

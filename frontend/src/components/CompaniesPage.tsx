@@ -83,6 +83,8 @@ export function CompaniesPage({ onViewJobs }: Props) {
         careers_url: c.careers_url, company_search_url: '', ats_platform: c.ats_platform,
         enabled: c.enabled, last_scraped_at: c.last_scraped_at,
         scrape_error_count: c.scrape_error_count, notes: '',
+        consecutive_empty_scrapes: c.consecutive_empty_scrapes,
+        quarantined: c.quarantined,
         total_active_jobs: c.total_active_jobs, usa_active_jobs: c.usa_active_jobs,
         viewable_jobs: c.viewable_jobs, entry_level_jobs: c.entry_level_jobs,
         new_jobs_today: c.new_jobs_today, parser_confidence: c.parser_confidence,

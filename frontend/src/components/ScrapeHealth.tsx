@@ -90,6 +90,8 @@ export function ScrapeHealth() {
           careers_url: c.careers_url, company_search_url: '', ats_platform: c.ats_platform,
           enabled: c.enabled, last_scraped_at: c.last_scraped_at,
           scrape_error_count: c.scrape_error_count, notes: '',
+          consecutive_empty_scrapes: c.consecutive_empty_scrapes,
+          quarantined: c.quarantined,
           total_active_jobs: c.total_active_jobs, usa_active_jobs: c.usa_active_jobs,
           viewable_jobs: c.viewable_jobs, entry_level_jobs: c.entry_level_jobs,
           new_jobs_today: c.new_jobs_today, parser_confidence: c.parser_confidence,
@@ -118,6 +120,17 @@ export function ScrapeHealth() {
 
   const errCompanies = companies.filter((c) => c.scrape_error_count > 0)
     .sort((a, b) => b.scrape_error_count - a.scrape_error_count)
+
+  // Sources needing attention, worst first. A quarantined source has been skipped
+  // outright; a stalled one still runs and answers, but has returned nothing for
+  // long enough that an empty board is no longer the likely explanation. Both
+  // were invisible before — nothing created the Company rows these counts live
+  // on, so every count was permanently zero and this panel could never fill.
+  const needsAttention = companies
+    .filter((c) => c.quarantined || c.scrape_status === 'stalled')
+    .sort((a, b) =>
+      Number(b.quarantined ?? false) - Number(a.quarantined ?? false) ||
+      (b.consecutive_empty_scrapes ?? 0) - (a.consecutive_empty_scrapes ?? 0))
 
   if (loading) {
     return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
@@ -313,6 +326,42 @@ export function ScrapeHealth() {
           </div>
         )}
       </div>
+
+      {/* Sources needing attention: skipped outright, or answering with nothing. */}
+      {needsAttention.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: 'var(--warning)' }}>
+            Sources Needing Attention ({needsAttention.length})
+          </h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
+            Quarantined sources are being skipped after repeated hard failures.
+            Stalled sources still run and answer, but have returned nothing for long
+            enough that “no openings” is no longer the likely explanation — usually a
+            selector or endpoint that has moved.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {needsAttention.map((c) => {
+              const q = Boolean(c.quarantined)
+              return (
+                <div key={c.id} style={{
+                  background: q ? 'var(--danger-light)' : 'var(--warning-light)',
+                  border: `1px solid ${q ? 'var(--danger-border)' : 'var(--warning-border)'}`,
+                  borderRadius: 8, padding: '7px 12px', fontSize: 13,
+                }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>{c.name}</span>
+                  <span style={{
+                    color: q ? 'var(--error)' : 'var(--warning)', marginLeft: 8, fontSize: 12,
+                  }}>
+                    {q
+                      ? `quarantined · ${c.scrape_error_count} failures`
+                      : `stalled · ${c.consecutive_empty_scrapes ?? 0} empty runs`}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Error companies */}
       {errCompanies.length > 0 && (
