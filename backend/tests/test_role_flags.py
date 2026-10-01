@@ -42,9 +42,23 @@ def test_hw_sw_codesign_not_pure_software():
     ) is False
 
 
-def test_software_with_hw_overlap_not_excluded():
-    # "firmware" has HW overlap
-    assert is_software_only("Firmware Engineer", "embedded C ARM Cortex FPGA") is False
+def test_firmware_developer_title_is_software_even_with_hardware_keywords():
+    """A firmware DEVELOPER title is out of scope whatever its description says.
+
+    This previously asserted the opposite — that "firmware" counted as hardware
+    overlap and such a role should be kept. is_software_only was then deliberately
+    changed to treat a clear software/firmware developer TITLE as software-only
+    regardless of hardware keywords, because this board is for RTL design and
+    verification and a firmware role is neither. Postings routinely list FPGA or
+    ARM in the stack without the job being hardware design, so the title has to
+    win. The test was left asserting the old rule and had been failing ever since.
+    """
+    assert is_software_only("Firmware Engineer", "embedded C ARM Cortex FPGA") is True
+    # The distinction is the TITLE: co-design keeps its hardware overlap.
+    assert is_software_only(
+        "C/C++ HW/SW Co-Design Engineer",
+        "RTL co-simulation hardware accelerator FPGA",
+    ) is False
 
 
 def test_full_stack_is_software_only():

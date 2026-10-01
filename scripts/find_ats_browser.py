@@ -156,10 +156,30 @@ def targets_from_config(names: list[str]) -> dict[str, str]:
     }
 
 
+def targets_from_file(path: str) -> dict[str, str]:
+    """Candidates NOT yet in the catalog: one `Name,https://careers-url` per line.
+
+    The config-driven mode only sees companies already listed, so this is how a
+    fresh candidate sweep is run. Blank lines and `#` comments are ignored.
+    """
+    import pathlib
+    out: dict[str, str] = {}
+    for line in pathlib.Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "," not in line:
+            continue
+        name, url = line.split(",", 1)
+        out[name.strip()] = url.strip()
+    return out
+
+
 async def main():
     import sys
-    names = [a for a in sys.argv[1:] if not a.startswith("-")]
-    targets = targets_from_config(names) or TARGETS
+    args = sys.argv[1:]
+    cand = next((a.split("=", 1)[1] for a in args if a.startswith("--candidates=")), None)
+    names = [a for a in args if not a.startswith("-")]
+    targets = (targets_from_file(cand) if cand
+               else targets_from_config(names) or TARGETS)
     print(f"probing {len(targets)} companies", flush=True)
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)

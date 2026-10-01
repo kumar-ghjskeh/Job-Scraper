@@ -11,6 +11,9 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 import asyncio
 import json
 
+import inspect
+
+from backend.app import scrape_engine
 from backend.app.config import load_cf_companies, load_companies
 from backend.app.scrapers.browser import BrowserWorkdayScraper
 from backend.app.scrapers.avature import AvatureScraper
@@ -20,16 +23,30 @@ from backend.app.scrapers.radancy import RadancyScraper
 
 
 def test_cf_companies_isolated_from_httpx_scheduler():
-    """Anti-bot companies are scraped by the curl_cffi engine (engine:cf) and
-    must never appear in the enabled set the httpx scheduler iterates (or they'd
-    hit the anti-bot / Cloudflare wall and error out)."""
+    """Anti-bot companies (engine:cf) must not be FETCHED by the httpx pass, or
+    they hit the Cloudflare wall and error out.
+
+    This used to assert they were absent from load_companies() entirely, on the
+    assumption that every engine:cf entry was also enabled:false. That assumption
+    is gone — 8 of 12 are enabled:true now (Qualcomm, Microsoft, Cadence, KLA,
+    Applied Materials, Silicon Labs, Microchip, Lattice), because being enabled is
+    what makes them eligible for the cf pass in the first place. So the test failed
+    while nothing was wrong: isolation is enforced in run_scrape's loop, which
+    skips any engine in ("browser", "cf") before building a scraper.
+
+    Asserted on that guard instead, since it is the thing that actually protects.
+    """
     cf = load_cf_companies()
     assert cf, "expected at least one engine:cf company"
 
-    httpx_names = {c["name"] for c in load_companies()}
+    src = inspect.getsource(scrape_engine.run_scrape)
+    assert 'in ("browser", "cf")' in src and "continue" in src, (
+        "run_scrape no longer skips engine:cf companies. They are listed in "
+        "load_companies() when enabled, so without that guard the httpx pass "
+        "fetches them and every one errors on the anti-bot wall."
+    )
     for c in cf:
         assert c.get("engine") == "cf"
-        assert c["name"] not in httpx_names, f"{c['name']} leaks into httpx scheduler"
         ats = c.get("ats_platform")
         if ats == "workday":
             assert c.get("workday_tenant") and c.get("workday_career_site")

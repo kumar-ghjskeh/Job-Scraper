@@ -456,8 +456,15 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
 
         # Browser-engine (Playwright) and cf-engine (curl_cffi TLS impersonation)
         # companies are scraped by the separate LOCAL runners — never by this httpx
-        # scheduler, which would only hit the anti-bot / Cloudflare wall. Skip them
-        # defensively (they are also enabled:false, so excluded from load_companies).
+        # scheduler, which would only hit the anti-bot / Cloudflare wall.
+        #
+        # This guard is load-bearing, not defensive. The comment here used to claim
+        # these were "also enabled:false, so excluded from load_companies" — that is
+        # no longer true for most of them (Qualcomm, Microsoft, Cadence, KLA,
+        # Applied Materials, Silicon Labs, Microchip, Lattice are all enabled:true,
+        # because being enabled is what makes them eligible for the cf pass at all).
+        # So load_companies() DOES return them and this skip is the only thing
+        # keeping the httpx pass from fetching them and erroring on every one.
         if company_cfg.get("engine") in ("browser", "cf"):
             continue
 
