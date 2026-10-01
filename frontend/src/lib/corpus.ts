@@ -149,7 +149,20 @@ export async function suggestionsFromCorpus(q: string, limit = 8) {
   const term = q.trim().toLowerCase()
   if (term.length < 2) return []
   const c = await loadCorpus()
-  const rows = c.jobs.filter((j) => j.is_usa && !j.is_software_only)
+  // Suggest only what a search can actually return. This filtered on is_usa and
+  // is_software_only alone, so it drew on retired postings and on the categories
+  // the default view hides — meaning it would offer a title (or "Physical Design")
+  // and then the search for it came back empty, which reads as a broken search.
+  const HIDDEN = new Set([
+    'Software / Compiler', 'Unknown', 'Adjacent / Backup', 'Physical Design',
+  ])
+  const rows = c.jobs.filter(
+    (j) =>
+      j.is_usa &&
+      !j.is_software_only &&
+      (j.active_status ?? 'active') === 'active' &&
+      !HIDDEN.has(String(j.role_category)),
+  )
   const bucket = (pick: (j: typeof rows[number]) => string, type: 'company' | 'title' | 'skill') => {
     const m = new Map<string, number>()
     for (const j of rows) {
