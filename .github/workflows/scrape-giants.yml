@@ -44,9 +44,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to a SHA, not a tag. v4 targets Node 20, which GitHub has
+      # deprecated — the run logs already warn it is being forced onto Node 24.
+      # When that shim is removed a floating tag would break every workflow at
+      # once, which is exactly the class of surprise the dependency lock exists
+      # to prevent. A SHA cannot move under us; bump it deliberately.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
         with:
           python-version: "3.12"
           cache: pip

@@ -36,12 +36,23 @@ function pipelineFromSnapshot(generatedAt: string, runs: ScrapeRun[]): PipelineH
       new_jobs: last?.new_jobs ?? 0,
     }
   })
-  const worst = engines.some((e) => e.status === 'down')
-    ? 'down' : engines.some((e) => e.status === 'stale') ? 'stale' : 'ok'
+  // The headline reflects whether jobs are STILL ARRIVING, not the worst single
+  // engine. Taking the worst meant one stalled source printed "Scraping has
+  // stopped" in red while the other two had just pulled 49 companies minutes
+  // earlier — alarming and simply untrue. Only "nothing is getting through"
+  // deserves the red state; one source behind is degraded, and the engine chips
+  // below say exactly which.
+  const working = engines.filter((e) => e.status === 'ok').length
+  const corpusAgeH = ageH(generatedAt)
+  const corpusFresh = corpusAgeH != null && corpusAgeH <= 12
+  const status: 'ok' | 'stale' | 'down' =
+    working === engines.length ? 'ok'
+    : working > 0 || corpusFresh ? 'stale'
+    : 'down'
   return {
-    status: worst, engines,
+    status, engines,
     last_job_seen_at: generatedAt,
-    hours_since_any_job_seen: ageH(generatedAt),
+    hours_since_any_job_seen: corpusAgeH,
   }
 }
 
@@ -131,11 +142,16 @@ export function ScrapeHealth() {
           pipeline used to be invisible here: one workflow emailed, the other
           reported success while scraping nothing for three days. */}
       {pipeline && (() => {
+        const behind = pipeline.engines.filter((e) => e.status !== 'ok')
+        const naming = behind.map((e) => ENGINE_LABELS[e.engine] ?? e.engine).join(', ')
         const tone = pipeline.status === 'ok'
-          ? { bg: 'rgba(34,197,94,0.10)', bd: 'var(--success)', fg: 'var(--success)', text: 'Scraping is healthy' }
+          ? { bg: 'rgba(34,197,94,0.10)', bd: 'var(--success)', fg: 'var(--success)',
+              text: 'Scraping is healthy' }
           : pipeline.status === 'stale'
-          ? { bg: 'rgba(234,179,8,0.10)', bd: 'var(--warning)', fg: 'var(--warning)', text: 'Scraping is falling behind' }
-          : { bg: 'rgba(239,68,68,0.10)', bd: 'var(--danger)', fg: 'var(--danger)', text: 'Scraping has stopped' }
+          ? { bg: 'rgba(234,179,8,0.10)', bd: 'var(--warning)', fg: 'var(--warning)',
+              text: `Jobs are still arriving — ${naming} ${behind.length === 1 ? 'is' : 'are'} behind` }
+          : { bg: 'rgba(239,68,68,0.10)', bd: 'var(--danger)', fg: 'var(--danger)',
+              text: 'Scraping has stopped — no source is reporting' }
         return (
           <div style={{ background: tone.bg, border: `1px solid ${tone.bd}`, borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
