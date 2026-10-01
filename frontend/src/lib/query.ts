@@ -80,7 +80,15 @@ export function matchesFilters(j: Job, f: Filters, bodies?: Record<string, strin
   if (f.state && lc(j.state) !== lc(f.state)) return false
   if (f.remote && !lc(j.remote_status).includes(lc(f.remote))) return false
   if (f.min_score != null && (j.new_grad_fit ?? 0) < Number(f.min_score)) return false
-  if (f.h1b_only && j.sponsors_h1b === false) return false
+  // H1B: STRICT — only employers known to sponsor, and only postings whose own
+  // text does not demand citizenship, a green card or ITAR access. The old line
+  // was `j.sponsors_h1b === false`, which (a) let every unknown employer through
+  // and (b) read a field the corpus never carried, so it matched everything.
+  if (f.h1b_only) {
+    if (j.sponsors_h1b !== true) return false
+    const risk = lc(j.eligibility_risk || 'low')
+    if (risk === 'high' || risk === 'medium') return false
+  }
 
   if (f.level_filter) {
     const want = lc(f.level_filter)

@@ -54,6 +54,10 @@ LIST_FIELDS = (
     "job_skills", "relevance_score_label", "relevance_reason",
     "description_snippet", "is_software_only", "role_flags_json",
     "eligibility_risk", "eligibility_terms",
+    # A model @property, not a column — but hasattr/getattr below pick it up.
+    # It was missing here, so the corpus carried no sponsorship signal at all and
+    # the frontend's H1B filter compared against undefined and matched EVERYTHING.
+    "sponsors_h1b",
     "seniority_confidence", "classification_confidence", "data_quality_score",
     "source_reliability",
     # Carried so the removal state machine survives a rebuild: without these a
@@ -184,7 +188,12 @@ def build_snapshot(session: Session) -> tuple[dict, dict]:
 
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "count": len(out),
+        # ACTIVE jobs, not len(out): the export also carries retired postings so
+        # the removal state machine survives a rebuild. merge_snapshot_files
+        # already counts only active ones, so counting rows here made the two
+        # publish paths report different totals for the same corpus — and that
+        # number is what the commit message and the workflow log quote.
+        "count": sum(1 for r in out if (r.get("active_status") or "active") == "active"),
         "jobs": out,
         "companies": companies,
         "runs": runs,

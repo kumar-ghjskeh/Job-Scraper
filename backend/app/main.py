@@ -562,11 +562,25 @@ def _build_job_query(
             if flag_name and hasattr(JobPosting, flag_name):
                 conditions.append(getattr(JobPosting, flag_name) == True)
 
-    # H1B sponsor-friendly: restrict to companies known to sponsor (sponsors_h1b is
-    # a company-level signal, not a column, so filter by the known-sponsor name set).
+    # H1B: STRICT — only employers known to sponsor, and only postings whose own
+    # text does not demand citizenship, a green card or ITAR access.
+    #
+    # Must resolve real company names here rather than comparing against
+    # _KNOWN_SPONSOR directly: that set holds NORMALISED names ("cadence"), so a
+    # lower(company) IN (...) against it silently matches nothing for every
+    # multi-word employer. Normalisation cannot run in SQL, so the catalog is
+    # filtered in Python and the resulting actual names go into the IN clause.
     if h1b_only:
-        from .eligibility import _KNOWN_SPONSOR
-        conditions.append(func.lower(col(JobPosting.company)).in_(list(_KNOWN_SPONSOR)))
+        from .config import load_all_companies
+        from .eligibility import sponsors_h1b as _sponsors
+        sponsor_names = [
+            c["name"].lower() for c in load_all_companies()
+            if _sponsors(c.get("name", "")) is True
+        ]
+        conditions.append(func.lower(col(JobPosting.company)).in_(sponsor_names))
+        conditions.append(
+            func.lower(col(JobPosting.eligibility_risk)).notin_(["high", "medium"])
+        )
 
     for cond in conditions:
         stmt = stmt.where(cond)

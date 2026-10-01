@@ -105,10 +105,16 @@ jobs:
       #   scrape_egress       scrape queries loading heavy description columns
       #   data_health         the health panel lying about pipeline state
       #   company_identity    a board token belonging to a DIFFERENT company
+      #   h1b_filter          an unclassified company vanishing from the H1B view
       - name: Guard tests
         run: |
           pip install -q pytest
-          python -m pytest -q             backend/tests/test_datetime_awareness.py             backend/tests/test_scrape_egress.py             backend/tests/test_data_health.py             backend/tests/test_company_identity.py
+          python -m pytest -q \
+            backend/tests/test_datetime_awareness.py \
+            backend/tests/test_scrape_egress.py \
+            backend/tests/test_data_health.py \
+            backend/tests/test_company_identity.py \
+            backend/tests/test_h1b_filter.py
 
       - name: Scrape (browser) and rebuild the snapshot
         env:
