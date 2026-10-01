@@ -81,6 +81,61 @@ def _iso(v: Any) -> Any:
     return (v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v).isoformat()
 
 
+# Categories the default view hides. MUST match HIDDEN_CATEGORIES in
+# frontend/src/lib/query.ts and the set in corpus.ts — "Physical Design" was added
+# to those two when backend implementation roles were moved out of RTL/DV scope, and
+# omitting it here made viewable_jobs count roles the UI does not show.
+HIDDEN_CATEGORIES = {
+    "Software / Compiler", "Unknown", "Adjacent / Backup", "Physical Design",
+}
+
+
+def company_tallies(rows: list[dict]) -> dict[str, dict]:
+    """Per-company counts over a set of job rows.
+
+    Shared by build_snapshot and merge_snapshot_files on purpose. The merge used to
+    recompute only `usa_active_jobs` and leave every other tally as the publishing
+    run had computed it — over that run's own slice of companies. So after the
+    browser pass published, a company scraped by the httpx pass read
+    total_active_jobs=0, auto_connected=false and scrape_status="idle" while
+    usa_active_jobs said 20. The directory then showed "no openings" for a source
+    that had just returned twenty US jobs.
+    """
+    day_ago = datetime.now(timezone.utc) - timedelta(hours=24)
+
+    def _fresh(row: dict) -> bool:
+        raw = row.get("posted_date") if row.get("posted_date_known") else None
+        raw = raw or row.get("first_seen_at")
+        try:
+            d = datetime.fromisoformat(str(raw))
+        except (TypeError, ValueError):
+            return False
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        return d >= day_ago
+
+    stats: dict[str, dict] = {}
+    for row in rows:
+        if not str(row.get("active_status", "")).endswith("active"):
+            continue
+        st = stats.setdefault(row.get("company", ""), {
+            "total": 0, "usa": 0, "viewable": 0, "entry": 0, "new_today": 0, "quality": [],
+        })
+        st["total"] += 1
+        if row.get("is_usa"):
+            st["usa"] += 1
+            if (not row.get("is_software_only")
+                    and row.get("role_category") not in HIDDEN_CATEGORIES):
+                st["viewable"] += 1
+                if row.get("is_entry_level") or row.get("is_candidate_friendly"):
+                    st["entry"] += 1
+                if _fresh(row):
+                    st["new_today"] += 1
+        if row.get("data_quality_score"):
+            st["quality"].append(int(row["data_quality_score"]))
+    return stats
+
+
 def _parse_aware(v):
     """Parse a stored timestamp, always returning an AWARE datetime.
 
@@ -135,41 +190,7 @@ def build_snapshot(session: Session) -> tuple[dict, dict]:
                  "consecutive_empty_scrapes": c.consecutive_empty_scrapes}
         for c in session.exec(select(Company)).all()
     }
-    # Per-company tallies the directory renders. "Connected" is derived from a
-    # company actually HAVING live postings, so the page states what is really
-    # working rather than what the config hopes for.
-    HIDDEN = {"Software / Compiler", "Unknown", "Adjacent / Backup"}
-    day_ago = datetime.now(timezone.utc) - timedelta(hours=24)
-
-    def _fresh(row: dict) -> bool:
-        raw = row.get("posted_date") if row.get("posted_date_known") else None
-        raw = raw or row.get("first_seen_at")
-        try:
-            d = datetime.fromisoformat(str(raw))
-        except (TypeError, ValueError):
-            return False
-        if d.tzinfo is None:
-            d = d.replace(tzinfo=timezone.utc)
-        return d >= day_ago
-
-    stats: dict[str, dict] = {}
-    for row in out:
-        if not str(row.get("active_status", "")).endswith("active"):
-            continue
-        st = stats.setdefault(row["company"], {
-            "total": 0, "usa": 0, "viewable": 0, "entry": 0, "new_today": 0, "quality": [],
-        })
-        st["total"] += 1
-        if row.get("is_usa"):
-            st["usa"] += 1
-            if not row.get("is_software_only") and row.get("role_category") not in HIDDEN:
-                st["viewable"] += 1
-                if row.get("is_entry_level") or row.get("is_candidate_friendly"):
-                    st["entry"] += 1
-                if _fresh(row):
-                    st["new_today"] += 1
-        if row.get("data_quality_score"):
-            st["quality"].append(int(row["data_quality_score"]))
+    stats = company_tallies(out)
 
     companies = []
     for c in load_all_companies():
@@ -380,13 +401,49 @@ def merge_snapshot_files(base_jobs: str | Path, ours_jobs: str | Path,
     ours["count"] = sum(
         1 for r in merged if str(r.get("active_status", "active")).endswith("active")
     )
-    # Company tallies must reflect the union, not just this run's slice.
-    counts: dict[str, int] = {}
-    for r in merged:
-        if r.get("is_usa") and str(r.get("active_status", "active")).endswith("active"):
-            counts[r.get("company", "")] = counts.get(r.get("company", ""), 0) + 1
+    # EVERY company tally must reflect the union, not just this run's slice.
+    #
+    # This used to recompute usa_active_jobs alone. So after the browser pass
+    # published, HPE — scraped by the httpx pass minutes earlier — read
+    # total_active_jobs=0, auto_connected=false, scrape_status="idle" alongside
+    # usa_active_jobs=20, and the directory showed "no openings" for a source that
+    # had just returned twenty US jobs. Same shape as the bug where every company
+    # read "no openings" at once.
+    stats = company_tallies(merged)
     for c in ours.get("companies", []):
-        c["usa_active_jobs"] = counts.get(c.get("name", ""), 0)
+        st = stats.get(c.get("name", ""), {})
+        quality = st.get("quality") or []
+        total = st.get("total", 0)
+        errs = c.get("scrape_error_count", 0) or 0
+        empties = c.get("consecutive_empty_scrapes", 0) or 0
+        c["total_active_jobs"] = total
+        c["usa_active_jobs"] = st.get("usa", 0)
+        c["viewable_jobs"] = st.get("viewable", 0)
+        c["entry_level_jobs"] = st.get("entry", 0)
+        c["new_jobs_today"] = st.get("new_today", 0)
+        c["parser_confidence"] = round(sum(quality) / len(quality)) if quality else 0
+        c["auto_connected"] = total > 0
+        c["scrape_status"] = (
+            "quarantined" if errs >= ERROR_QUARANTINE_THRESHOLD
+            else "error" if errs > 2
+            else "stalled" if empties >= EMPTY_STALL_THRESHOLD
+            else "ok" if total else "idle"
+        )
+
+    # Run history must be unioned too. `ours` won wholesale, so whichever pass
+    # published second erased the other's entry: the httpx and curl_cffi runs
+    # disappeared from the corpus the moment the browser pass published, and Data
+    # Health then reported those engines as hours stale when they had just run.
+    runs_by_id: dict[str, dict] = {}
+    for r in list(base.get("runs") or []) + list(ours.get("runs") or []):
+        # id is per-scratch-database and collides across passes, so key on what
+        # actually identifies a run.
+        k = f"{r.get('triggered_by')}|{r.get('started_at')}"
+        runs_by_id[k] = r
+    ours["runs"] = sorted(
+        runs_by_id.values(),
+        key=lambda r: str(r.get("started_at") or ""), reverse=True,
+    )[:20]
     ours_path.write_text(json.dumps(ours, separators=(",", ":"), ensure_ascii=False),
                          encoding="utf-8")
 
