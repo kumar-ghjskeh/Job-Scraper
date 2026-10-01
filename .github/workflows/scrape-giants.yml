@@ -66,7 +66,14 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
+          # Install from the LOCK, not the ranges. CI used to resolve fresh
+          # versions on every run while local development stayed on older ones,
+          # so a library could tighten behaviour and break the scrape with no
+          # commit from us — and the same code still passed locally. That is the
+          # "fails by itself every couple of weeks" loop. sqlmodel 0.0.38 (local)
+          # vs 0.0.47 (CI) was the last one: it started rejecting naive datetimes
+          # and killed every scrape for nine days.
+          pip install -r backend/requirements.lock.txt
           pip install -r backend/requirements-browser.txt
 
       - name: Install Chromium system libraries

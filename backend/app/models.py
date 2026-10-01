@@ -2,12 +2,57 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import Column, ForeignKey, Integer
+from sqlalchemy import Column, DateTime, ForeignKey, Integer
+from sqlalchemy.types import TypeDecorator
 from sqlmodel import Field, SQLModel
+
+
+class UtcDateTime(TypeDecorator):
+    """A DateTime column that cannot hold a naive value.
+
+    Coercing here rather than at each call site is deliberate. Timestamps reach
+    these models from many directions — scraper date parsers, restored snapshots,
+    tests — and four scrapers (amazon, avature, giants, jobs2web) build theirs
+    with ``strptime``, which is naive. Fixing callers one at a time is how this
+    bug kept coming back: sqlmodel 0.0.47 started rejecting naive datetimes and
+    every scrape died for nine days, having passed locally on 0.0.38.
+
+    Anything naive is read as UTC, which is what it always meant.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, datetime) and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if isinstance(value, datetime) and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+
+def utcnow() -> datetime:
+    """Timezone-aware UTC now — the ONLY datetime factory the models may use.
+
+    Every stored timestamp used to default to ``datetime.utcnow()``, which is
+    naive, while the rest of the codebase compares against
+    ``datetime.now(timezone.utc)``, which is aware. Mixing the two is a latent
+    type error that sits dormant until a dependency tightens validation — which
+    sqlmodel 0.0.47 did, with "Datetime values must have timezone information",
+    killing every scrape on every engine.
+
+    Keeping one factory here means the naive/aware split cannot reappear one
+    field at a time. tests/test_datetime_awareness.py enforces it.
+    """
+    return datetime.now(timezone.utc)
+
 
 
 class ActiveStatus(str, Enum):
@@ -62,7 +107,7 @@ class Company(SQLModel, table=True):
     company_search_url: str = ""
     ats_platform: str
     enabled: bool = True
-    last_scraped_at: Optional[datetime] = None
+    last_scraped_at: Optional[datetime] = Field(default=None, sa_type=UtcDateTime)
     scrape_error_count: int = 0
     notes: str = ""
 
@@ -116,10 +161,10 @@ class JobPosting(SQLModel, table=True):
     apply_url_reason: str = ""
 
     # Dates
-    posted_date: Optional[datetime] = None
-    first_seen_at: datetime = Field(default_factory=datetime.utcnow)
-    last_seen_at: datetime = Field(default_factory=datetime.utcnow)
-    removed_at: Optional[datetime] = None
+    posted_date: Optional[datetime] = Field(default=None, sa_type=UtcDateTime)
+    first_seen_at: datetime = Field(default_factory=utcnow, sa_type=UtcDateTime)
+    last_seen_at: datetime = Field(default_factory=utcnow, sa_type=UtcDateTime)
+    removed_at: Optional[datetime] = Field(default=None, sa_type=UtcDateTime)
 
     # Status
     active_status: str = Field(default=ActiveStatus.active, index=True)
@@ -207,9 +252,9 @@ class JobPosting(SQLModel, table=True):
     application_status: str = ""   # Saved|Applied|Assessment|Interview|Rejected|Offer|Archived|Ignored
     notes: str = ""
     resume_version_used: str = ""
-    saved_at: Optional[datetime] = None
-    applied_at: Optional[datetime] = None
-    ignored_at: Optional[datetime] = None
+    saved_at: Optional[datetime] = Field(default=None, sa_type=UtcDateTime)
+    applied_at: Optional[datetime] = Field(default=None, sa_type=UtcDateTime)
+    ignored_at: Optional[datetime] = Field(default=None, sa_type=UtcDateTime)
     # Application-tracking pipeline (Phase 4)
     follow_up_date: str = ""
     confirmation_id: str = ""
@@ -227,7 +272,7 @@ class ResumeProfile(SQLModel, table=True):
     label: str = ""              # user-facing version name, e.g. "DV/UVM v3"
     is_active: bool = True       # the version used for default ranking/badges
     profile_json: str = ""       # JSON of ResumeProfileData
-    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+    uploaded_at: datetime = Field(default_factory=utcnow, sa_type=UtcDateTime)
 
 
 class Setting(SQLModel, table=True):
@@ -237,7 +282,7 @@ class Setting(SQLModel, table=True):
 
     key: str = Field(primary_key=True)
     value: str = ""
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=utcnow, sa_type=UtcDateTime)
 
 
 class PushSubscription(SQLModel, table=True):
@@ -249,7 +294,7 @@ class PushSubscription(SQLModel, table=True):
     endpoint: str = Field(index=True, unique=True)
     p256dh: str = ""
     auth: str = ""
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow, sa_type=UtcDateTime)
 
 
 class Watchlist(SQLModel, table=True):
@@ -260,16 +305,16 @@ class Watchlist(SQLModel, table=True):
     name: str
     filters_json: str = ""          # JSON of the saved filter set
     alert_enabled: bool = True
-    last_checked_at: datetime = Field(default_factory=datetime.utcnow)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    last_checked_at: datetime = Field(default_factory=utcnow, sa_type=UtcDateTime)
+    created_at: datetime = Field(default_factory=utcnow, sa_type=UtcDateTime)
 
 
 class ScrapeRun(SQLModel, table=True):
     __tablename__ = "scrape_runs"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    started_at: datetime = Field(default_factory=datetime.utcnow)
-    finished_at: Optional[datetime] = None
+    started_at: datetime = Field(default_factory=utcnow, sa_type=UtcDateTime)
+    finished_at: Optional[datetime] = Field(default=None, sa_type=UtcDateTime)
     companies_scraped: int = 0
     jobs_found: int = 0
     new_jobs: int = 0
@@ -295,4 +340,4 @@ class ScrapeError(SQLModel, table=True):
     company: str
     error_message: str
     error_type: str = ""
-    occurred_at: datetime = Field(default_factory=datetime.utcnow)
+    occurred_at: datetime = Field(default_factory=utcnow, sa_type=UtcDateTime)

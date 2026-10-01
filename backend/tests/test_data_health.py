@@ -3,7 +3,7 @@
 without ever deleting a run that is still legitimately in progress."""
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
@@ -42,7 +42,9 @@ def test_deletes_zombie_runs_but_keeps_recent_running():
 
 def test_fifo_prunes_to_fifteen():
     s = _session()
-    base = datetime.utcnow()
+    # Aware: timestamps are stored as aware UTC, so a naive base would compare
+    # unequal to the value that comes back even though it is the same instant.
+    base = datetime.now(timezone.utc)
     for i in range(25):
         s.add(ScrapeRun(triggered_by="manual",
                         started_at=base - timedelta(minutes=i),

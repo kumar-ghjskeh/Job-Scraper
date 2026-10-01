@@ -66,9 +66,10 @@ LIST_FIELDS = (
 def _iso(v: Any) -> Any:
     """ISO-8601 with an explicit UTC offset.
 
-    The models default to naive datetime.utcnow(), and a naive string is parsed
-    as LOCAL time by browsers — which rendered "updated -3.7h ago" for a run that
-    had just finished. Stamping the offset makes the wire format unambiguous.
+    A timestamp written without an offset is parsed as LOCAL time by browsers,
+    which rendered "updated -3.7h ago" for a run that had just finished. Stamping
+    the offset makes the wire format unambiguous. The naive branch below is kept
+    for rows that predate the models becoming timezone-aware.
     """
     if not isinstance(v, datetime):
         return v
@@ -244,12 +245,19 @@ def load_snapshot_into_db(jobs_path: str | Path, details_path: str | Path | None
         bodies = json.loads(Path(details_path).read_text(encoding="utf-8")).get("descriptions", {})
 
     def _dt(v):
+        """Parse a stored timestamp, always returning an AWARE datetime.
+
+        Older snapshots were written without an offset. Restoring those as naive
+        values reintroduces the mixed-awareness bug the models now forbid, so
+        anything without a timezone is read as UTC — which is what it always was.
+        """
         if not v:
             return None
         try:
-            return datetime.fromisoformat(str(v))
+            d = datetime.fromisoformat(str(v))
         except ValueError:
             return None
+        return d.replace(tzinfo=timezone.utc) if d.tzinfo is None else d
 
     # Scrape-run history must be restored too. Each run starts from an EMPTY
     # scratch database, so without this the snapshot only ever contained the one

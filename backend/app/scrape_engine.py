@@ -64,7 +64,11 @@ def _sane_posted_date(d, now):
         return None
     if dd < now - timedelta(days=5 * 365):  # >5 yrs old → almost certainly noise
         return None
-    return d
+    # Return the AWARE value, not the original: several scrapers build their
+    # dates with strptime, which is naive, and every posted_date passes through
+    # here. The column type coerces too, but leaking naive values out of this
+    # gate makes every downstream comparison a latent bug.
+    return dd
 
 
 async def persist_company_results(
@@ -352,7 +356,10 @@ def maintain_scrape_runs(session: Session, keep: int = 20, stale_minutes: int = 
     passes that catch their own exceptions. Keep the child delete ahead of the
     parent delete.
     """
-    cutoff = datetime.utcnow() - timedelta(minutes=stale_minutes)
+    # Aware, to match the stored values. A naive cutoff here is what sqlmodel
+    # 0.0.47 began rejecting outright — and because this runs at the very start
+    # of every scrape, it killed every engine before a company was fetched.
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
     doomed: list[ScrapeRun] = list(session.exec(
         select(ScrapeRun).where(ScrapeRun.finished_at == None, ScrapeRun.started_at < cutoff)  # noqa: E711
     ).all())
