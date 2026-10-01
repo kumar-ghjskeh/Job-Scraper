@@ -386,14 +386,19 @@ companies:
   - name: "Arm"
     category: "Tier1"
     priority: "A"
+    # Three dead ends, recorded so they are not retried:
+    #   workday  arm.wd1 tenant answers 422 to everything (anti-bot)
+    #   icims    careers-arm.icims.com serves, but the iCIMS adapter returns 0
+    #   generic  DOES work — 4 real RTL/DV titles — but only via the Playwright
+    #            fallback, which cannot run in either workflow today (see below)
     careers_url: "https://careers.arm.com/"
-    ats_platform: "workday"
-    workday_tenant: "arm"
-    workday_instance: "wd1"
-    workday_career_site: "Arm_External_Careers"
+    ats_platform: "generic"
     search_keywords: ["verification", "rtl", "cpu", "gpu", "design verification"]
-    notes: "Workday CXS returns 422 (anti-bot)."
-    enabled: false
+    notes: "Needs the Playwright-backed generic path; see generic.py fallback note."
+    # Routed to the browser workflow: the plain-HTTP pass sees a JS shell
+    # here. Verified locally through the Playwright path — 4 RTL/DV titles.
+    engine: "browser"
+    enabled: true
 
   - name: "Synopsys"
     category: "EDA"
@@ -433,7 +438,10 @@ companies:
     ats_platform: "generic"
     search_keywords: ["verification", "rtl", "asic", "design verification", "silicon"]
     notes: "Phenom CMS but careers.cisco.com/api/jobs returns HTTP 500 to the standard query — needs param reverse-engineering before enabling."
-    enabled: false
+    # Routed to the browser workflow: the plain-HTTP pass sees a JS shell
+    # here. Verified locally through the Playwright path — 2 RTL/DV titles.
+    engine: "browser"
+    enabled: true
 
   # Greenhouse/Ashby boards whose slug could not be auto-resolved.
   - name: "Groq"
@@ -623,7 +631,9 @@ companies:
   - name: "MediaTek"
     category: "Tier1"
     priority: "B"
-    careers_url: "https://www.google.com/search?q=MediaTek+RTL+verification+jobs+careers"
+    # Was a Google search URL, which is neither scrapable nor permitted to
+    # scrape. MediaTek's own careers site (307 -> /en).
+    careers_url: "https://careers.mediatek.com/en"
     ats_platform: "generic"
     notes: "Direct search — custom careers portal."
     enabled: false
@@ -704,10 +714,14 @@ companies:
   - name: "Rambus"
     category: "IP / Memory"
     priority: "B"
-    careers_url: "https://www.rambus.com/careers/"
-    ats_platform: "generic"
-    notes: "Workday anti-bot (422) — direct search."
-    enabled: false
+    # rambus.com/careers answers 403 to httpx and times out under Playwright, but
+    # it links to iCIMS, which serves fine.
+    careers_url: "https://careers-rambus.icims.com/jobs/search"
+    ats_platform: "icims"
+    icims_host: "careers-rambus.icims.com"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "digital design"]
+    notes: "iCIMS, found by following rambus.com/careers."
+    enabled: true
   - name: "Ampere Computing"
     category: "Cloud Silicon"
     priority: "A"
@@ -721,6 +735,21 @@ companies:
   # ── Added 2026-10-01 via scripts/discover_companies.py. Both cleared the
   #    identity check: Greenhouse reports the board owner as "Ethernovia, Inc."
   #    and "IonQ", so neither is another company's board.
+  - name: "Hewlett Packard Enterprise"
+    category: "Networking"
+    priority: "A"
+    # Found by following Juniper Networks' careers page, which now points here:
+    # HPE acquired Juniper, so Juniper's silicon roles post on HPE's Workday.
+    # Verified live — 1,399 hits for "verification", 18 of the first 20 RTL/DV.
+    careers_url: "https://hpe.wd5.myworkdayjobs.com/Jobsathpe"
+    ats_platform: "workday"
+    workday_tenant: "hpe"
+    workday_instance: "wd5"
+    workday_career_site: "Jobsathpe"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "silicon", "digital design"]
+    notes: "Includes Juniper Networks silicon roles post-acquisition."
+    enabled: true
+
   - name: "Ethernovia"
     category: "Networking"
     priority: "B"
@@ -753,7 +782,10 @@ companies:
   - name: "SK Hynix"
     category: "Memory"
     priority: "C"
-    careers_url: "https://www.google.com/search?q=SK+Hynix+America+verification+jobs+careers"
+    # Was a Google search URL. This is the real careers site, but it answers
+    # 403 to non-browser clients and careers.skhynix.com does not resolve, so
+    # this stays disabled rather than configured-but-broken.
+    careers_url: "https://www.skhynix.com/careers/"
     ats_platform: "generic"
     notes: "Direct search — custom careers portal."
     enabled: false
@@ -844,6 +876,8 @@ companies:
     ats_platform: "generic"
     notes: "Direct search — custom careers portal."
     enabled: false
+  # Juniper was acquired by HPE; its silicon roles now post on the HPE Workday
+  # tenant above. Kept disabled here so the same jobs are not ingested twice.
   - name: "Juniper Networks"
     category: "Networking"
     priority: "C"
@@ -857,7 +891,10 @@ companies:
     careers_url: "https://ayarlabs.com/careers/"
     ats_platform: "generic"
     notes: "Direct search — custom careers portal."
-    enabled: false
+    # Routed to the browser workflow: the plain-HTTP pass sees a JS shell
+    # here. Verified locally through the Playwright path — 1 RTL/DV titles.
+    engine: "browser"
+    enabled: true
   - name: "Rivos"
     category: "RISC-V"
     priority: "A"
@@ -885,7 +922,10 @@ companies:
     careers_url: "https://www.celestial.ai/careers"
     ats_platform: "generic"
     notes: "Direct search — custom careers portal."
-    enabled: false
+    # Routed to the browser workflow: the plain-HTTP pass sees a JS shell
+    # here. Verified locally through the Playwright path — 1 RTL/DV titles.
+    engine: "browser"
+    enabled: true
   - name: "Mythic"
     category: "Edge AI"
     priority: "C"
@@ -934,7 +974,10 @@ companies:
     careers_url: "https://quadric.io/careers/"
     ats_platform: "generic"
     notes: "Direct search — custom careers portal."
-    enabled: false
+    # Routed to the browser workflow: the plain-HTTP pass sees a JS shell
+    # here. Verified locally through the Playwright path — 4 RTL/DV titles.
+    engine: "browser"
+    enabled: true
   - name: "Expedera"
     category: "AI Accelerator"
     priority: "C"

@@ -37,7 +37,10 @@ from sqlmodel import Session, select  # noqa: E402
 from backend.app.config import load_browser_companies, load_schedule  # noqa: E402
 from backend.app.database import engine, init_db  # noqa: E402
 from backend.app.models import Company, ScrapeError, ScrapeRun  # noqa: E402
-from backend.app.scrape_engine import persist_company_results  # noqa: E402
+from backend.app.scrape_engine import (  # noqa: E402
+    EMPTY_STALL_THRESHOLD,
+    persist_company_results,
+)
 from backend.app.scrapers.browser import (  # noqa: E402
     browser_context,
     browser_scraper_for,
@@ -90,6 +93,28 @@ async def run_browser_scrape(headless: bool = True, only: str | None = None) -> 
                 total_removed += removed_count
                 logger.info("  %-22s found=%-3d new=%-3d removed=%-3d",
                             name, len(raw_jobs), new_count, removed_count)
+
+                # Stall tracking matters most here. A DOM scrape fails by returning
+                # an empty list, not by raising, so scrape_error_count stays 0 and
+                # nothing flags it. These are the fragile sources; without this a
+                # broken selector reads as "no openings" indefinitely.
+                with Session(engine) as session:
+                    co = session.exec(
+                        select(Company).where(Company.name == name)
+                    ).first()
+                    if co:
+                        if raw_jobs:
+                            co.consecutive_empty_scrapes = 0
+                        else:
+                            co.consecutive_empty_scrapes += 1
+                            if co.consecutive_empty_scrapes >= EMPTY_STALL_THRESHOLD:
+                                logger.warning(
+                                    "  %-22s has returned 0 postings for %d runs — "
+                                    "likely a broken selector, not an empty board",
+                                    name, co.consecutive_empty_scrapes,
+                                )
+                        session.add(co)
+                        session.commit()
             except Exception as e:
                 total_errors += 1
                 logger.error("  %-22s FAILED: %s", name, e)

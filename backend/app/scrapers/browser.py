@@ -155,6 +155,16 @@ def browser_scraper_for(company_config: dict, context: Any):
         return giant
     if ats == "eightfold":
         return BrowserEightfoldScraper(company_config, context)
+    if ats == "generic":
+        # Without this branch a `generic` company fell through to the Workday
+        # scraper, which is simply the wrong adapter — and since playwright is only
+        # installed by the giants workflow, the GenericScraper's own Playwright
+        # fallback raised ImportError in the main scrape. So the entire `generic`
+        # cohort could only ever get a plain-HTTP pass, and the careers pages that
+        # render their listing in JS returned nothing. Routed here, they get a real
+        # browser, which is the only way those pages produce anything.
+        from .generic import GenericScraper
+        return GenericScraper(company_config)
     return BrowserWorkdayScraper(company_config, context)
 
 

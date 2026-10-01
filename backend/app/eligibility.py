@@ -138,7 +138,7 @@ _SPONSOR_NAMES = (
     # Big-tech silicon teams.
     "Apple", "Google", "Meta", "Amazon", "Microsoft", "Cisco",
     "Juniper Networks", "Arista Networks", "Tesla", "Waymo", "Nokia", "Ciena",
-    "IBM", "Oracle", "ByteDance",
+    "IBM", "Oracle", "ByteDance", "Hewlett Packard Enterprise",
     # Venture-backed silicon startups. These hire heavily out of US graduate
     # programmes, which in practice means cap-exempt-to-cap H1B transfers.
     "Tenstorrent", "Cerebras Systems", "SambaNova Systems", "Groq", "SiFive",
