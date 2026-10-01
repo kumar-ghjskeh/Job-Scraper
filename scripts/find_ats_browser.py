@@ -62,6 +62,33 @@ CAPTURE = re.compile(
 )
 
 
+# Path segments that are NOT board slugs. jobs.lever.co also serves its static
+# assets, so the slug capture happily read "cdn-cgi", "img" and "js" as company
+# boards on one candidate. A tool whose output needs manual filtering is a tool
+# that will eventually have a wrong board pasted out of it.
+NOT_A_SLUG = {
+    "cdn-cgi", "img", "images", "js", "css", "static", "assets", "fonts",
+    "favicon", "api", "embed", "v0", "v1", "v2", "jobs", "job", "postings",
+    "search", "careers", "about", "privacy", "terms", "login", "signup",
+}
+
+
+def looks_related(company: str, slug: str) -> bool:
+    """Does this identifier plausibly belong to this company?
+
+    One candidate's page referenced nxp.my.site.com — another company's portal,
+    embedded or linked. Reporting that as the candidate's board is the same class
+    of error as the greenhouse "ventana" entry that turned out to be a nursing
+    home, so anything unrelated is flagged rather than printed as a find.
+    """
+    import re as _re
+    a = _re.sub(r"[^a-z0-9]", "", company.lower())
+    b = _re.sub(r"[^a-z0-9]", "", slug.lower())
+    if not a or not b:
+        return False
+    return a[:5] in b or b[:5] in a
+
+
 def gh_count(slug):
     try:
         req = urllib.request.Request(
@@ -126,11 +153,20 @@ async def discover(ctx, name, url):
 
     if not hits:
         return f"XX  {name:24} -> no ATS calls captured"
-    parts = []
+    parts, suspect = [], []
     for ats, slug in sorted(hits):
+        bare = slug.split(".")[0]
+        if bare in NOT_A_SLUG:
+            continue                       # static asset path, not a board
         extra = f"={gh_count(slug)}" if ats == "greenhouse" else ""
-        parts.append(f"{ats}:{slug}{extra}")
-    return f"OK  {name:24} -> " + ", ".join(parts)
+        entry = f"{ats}:{slug}{extra}"
+        (parts if looks_related(name, bare) else suspect).append(entry)
+    if not parts and not suspect:
+        return f"XX  {name:24} -> only static-asset paths captured"
+    line = f"OK  {name:24} -> " + ", ".join(parts) if parts else f"??  {name:24} ->"
+    if suspect:
+        line += "   [SUSPECT, name mismatch: " + ", ".join(suspect) + "]"
+    return line
 
 
 def targets_from_config(names: list[str]) -> dict[str, str]:

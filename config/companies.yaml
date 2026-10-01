@@ -760,6 +760,21 @@ companies:
     notes: "Includes Juniper Networks silicon roles post-acquisition."
     enabled: true
 
+  - name: "Auradine"
+    category: "AI Accelerator"
+    priority: "B"
+    # Lever board slug is "velaura", not "auradine" (which 404s) — found by
+    # capturing the ATS call from auradine.com/careers. The discovery tool flagged
+    # it SUSPECT because the slug does not resemble the company name; verified by
+    # hand before enabling, which is exactly what that flag is for.
+    # Verified live: 35 postings, 12 RTL/DV, all Santa Clara CA.
+    careers_url: "https://jobs.lever.co/velaura"
+    ats_platform: "lever"
+    lever_company: "velaura"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "soc", "silicon", "digital design"]
+    notes: "Lever slug velaura. 12 RTL/DV roles incl. DV Engineer (AI Accelerator / CPU), RTL Lead."
+    enabled: true
+
   - name: "Ethernovia"
     category: "Networking"
     priority: "B"

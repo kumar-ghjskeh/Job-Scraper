@@ -150,6 +150,7 @@ _SPONSOR_NAMES = (
     "Recogni (Tensordyne)", "Tensordyne",
     "Graphcore", "Normal Computing", "Flex Logix", "Nubis Communications",
     "Lumotive", "EnCharge AI", "Kinara", "Hailo", "FuriosaAI", "Ethernovia",
+    "Auradine",
     # Quantum and photonics — US-based, academic-pipeline hiring.
     "PsiQuantum", "Atom Computing", "IonQ", "Rigetti Computing", "QuEra Computing",
     "Infleqtion", "Quantinuum", "Xanadu",
