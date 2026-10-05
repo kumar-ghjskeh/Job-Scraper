@@ -49,6 +49,7 @@ import re
 _HARD_OUT: tuple[tuple[str, "re.Pattern[str]"], ...] = (
     ("EDA / Verification Tools", re.compile(
         r"design\s+automation|\bsolutions?\s+engineer\b|\btools?\s+engineer\b"
+        r"|\bcad\b|\beda\b|physical\s+design\s+verification"
         r"|\blibrarian\b", re.I)),
     ("Adjacent / Backup", re.compile(
         r"chief\s+of\s+staff|program\s+manage|project\s+manage|product\s+manage"
@@ -66,7 +67,9 @@ _DV_TITLE = re.compile(
     r"|\bstatic\s+verification\b"
     r"|\b(functional|formal|pre[- ]silicon|hardware|silicon|chip|block|ip|soc|cpu|gpu"
     r"|subsystem|fabric|memory|protocol|coherency|interconnect)\s+verification\b"
-    r"|\bemulation\b|\bemulator\b"
+    # NOTE: emulation deliberately lives in _DV_WEAK_TITLE, not here. "Emulation"
+    # names a technique, not the role: "Sr. Emulation Methodology Engineer" is
+    # tooling, and ranking emulation as strong evidence put it on the board.
     r"|\b(systemverilog|system\s+verilog)\b"
     r"|\buvm\b"
     r"|\btestbench\b"
@@ -75,7 +78,7 @@ _DV_TITLE = re.compile(
     re.I,
 )
 
-_RTL_TITLE = re.compile(
+_RTL_WEAK_TITLE = re.compile(
     r"\brtl\b"
     r"|\b(logic|front[- ]end|frontend)\s+design\b"
     # "ASIC Digital / DSP Design Engineer" — the words are separated, so a literal
@@ -133,6 +136,11 @@ _OUT_OF_SCOPE: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 # ── Tier 3: GENERIC — a bare IC-engineering title, in scope once tier 2 is clear ─
 
+# Verification TECHNIQUES. Real DV signals, but weak ones: they name a method rather
+# than the role, so a discipline word beside them should win. Checked at tier 3 with
+# the weak RTL signals.
+_DV_WEAK_TITLE = re.compile(r"\bemulation\b|\bemulator\b|\bprototyping\b", re.I)
+
 _GENERIC_IC_TITLE = re.compile(
     r"\b(asic|soc|silicon|vlsi)\s+(engineer|engineering)\b"
     r"|\bhardware\s+design\s+engineer\b"
@@ -156,14 +164,26 @@ def classify_scope(title: str) -> tuple[bool, str | None]:
     for category, pattern in _HARD_OUT:
         if pattern.search(t):
             return False, category
-    # Tier 1 — explicit RTL/DV wins over any specialisation named beside it.
-    if _DV_TITLE.search(t) or _RTL_TITLE.search(t):
+    # Tier 1 — a STRONG verification phrase, where verification IS the role. Only
+    # this outranks tier 2, which is what keeps "ASIC Design Verification Engineer,
+    # DFT" a DV role while "ASIC DFT Engineer" is not.
+    if _DV_TITLE.search(t):
         return True, None
     # Tier 2 — a different discipline is named.
+    #
+    # This deliberately outranks the WEAK RTL signals below. A bare "X design" is
+    # not strong evidence: "ASIC Design STA Engineer", "Digital Physical Design
+    # (P&R) Intern", "Senior DFT Logic Design Engineer" and "FE RTL Infrastructure -
+    # CAD Engineer" all matched an RTL-ish phrase while plainly belonging to another
+    # discipline. Ranking every positive above this tier put all four on the board.
     for category, pattern in _OUT_OF_SCOPE:
         if pattern.search(t):
             return False, category
-    # Tier 3 — generic IC engineering, safe now that the specialisations are gone.
+    # Tier 3 — RTL design evidence, and verification techniques, both trustworthy
+    # now the specialisations are gone.
+    if _RTL_WEAK_TITLE.search(t) or _DV_WEAK_TITLE.search(t):
+        return True, None
+    # Tier 4 — generic IC engineering.
     if _GENERIC_IC_TITLE.search(t):
         return True, None
     return False, "Adjacent / Backup"

@@ -7,7 +7,7 @@ import re
 from typing import Optional
 
 from .config import load_keywords
-from .role_scope import _DV_TITLE, _RTL_TITLE, classify_scope
+from .role_scope import _DV_TITLE, _RTL_WEAK_TITLE, classify_scope
 from .models import ExperienceLevel, RemoteStatus, RoleCategory
 
 _kw = load_keywords()
@@ -595,7 +595,7 @@ def detect_role_category(title: str, description: str = "") -> str:
         if re.search(r"\b(soc|subsystem|fabric|interconnect)\b", t):
             return RoleCategory.soc_verification
         return RoleCategory.design_verification
-    if _RTL_TITLE.search(title):
+    if _RTL_WEAK_TITLE.search(title):
         if re.search(r"\bfpga\b", t):
             return RoleCategory.fpga_rtl
         return RoleCategory.rtl_design

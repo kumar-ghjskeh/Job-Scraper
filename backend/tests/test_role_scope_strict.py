@@ -153,7 +153,8 @@ def test_patterns_have_real_word_boundaries():
     this project's history, and grep renders that invisibly so the file reads as
     correct. Unbounded, short tokens like 'sta' match inside 'Staff'."""
     from backend.app import role_scope
-    patterns = [role_scope._DV_TITLE, role_scope._RTL_TITLE, role_scope._GENERIC_IC_TITLE]
+    patterns = [role_scope._DV_TITLE, role_scope._RTL_WEAK_TITLE,
+                role_scope._DV_WEAK_TITLE, role_scope._GENERIC_IC_TITLE]
     patterns += [p for _c, p in role_scope._OUT_OF_SCOPE]
     patterns += [p for _c, p in role_scope._HARD_OUT]
     for p in patterns:
@@ -162,3 +163,60 @@ def test_patterns_have_real_word_boundaries():
     # And the behavioural consequence.
     assert is_rtl_or_dv("Staff Design Verification Engineer")
     assert not re.search(r"\bsta\b", "Staff", re.I)
+
+
+# Titles found LEAKING onto the live board after the first version of this gate.
+# Each matched an RTL-ish phrase while plainly belonging to another discipline,
+# because every positive signal outranked the out-of-scope tier. A bare "X design"
+# is now weaker than an explicit discipline, and CAD/EDA/physical-design-verification
+# outrank even a strong verification phrase.
+LIVE_LEAKS = {
+    "ASIC Design STA Engineer": "Physical Design",
+    "Digital Physical Design (P&R) Intern": "Physical Design",
+    "Experienced Digital Physical Design Engineer": "Physical Design",
+    "Physical Design Engineer: Die-to-Die Interface (RTL to GDSII)": "Physical Design",
+    "Principal CPU Architect - High-Performance and Physical Design": "Physical Design",
+    "Senior DFT Logic Design Engineer": "DFT",
+    "ASIC Design-for-Test (DFT) Engineer Intern": "DFT",
+    "Principal Digital Engineer (DFT Design)": "DFT",
+    "FE RTL Infrastructure - CAD Engineer": "EDA / Verification Tools",
+    "CPU Design Methodology Engineer": "EDA / Verification Tools",
+    "RTL Tools & Methodology Engineer": "EDA / Verification Tools",
+    "Sr. Staff CAD- ASIC Design Verification Agentic Workflow": "EDA / Verification Tools",
+    "Staff Physical Design Verification, CAD": "EDA / Verification Tools",
+    "Full-Chip Physical Design Verification Engineer": "EDA / Verification Tools",
+    "Senior ASIC Design Infrastructure & Methodologies engineer": "EDA / Verification Tools",
+    "Sr. Emulation Methodology Engineer": "EDA / Verification Tools",
+}
+
+
+def test_live_leaks_stay_out():
+    """Regression for every title that reached the board when the tiers were wrong."""
+    wrong = []
+    for title, expected in LIVE_LEAKS.items():
+        in_scope, category = classify_scope(title)
+        if in_scope:
+            wrong.append(f"{title!r} is back on the board")
+        elif category != expected:
+            wrong.append(f"{title!r} -> {category!r}, expected {expected!r}")
+    assert not wrong, "\n  ".join(["leaks:"] + wrong)
+
+
+def test_a_weak_rtl_phrase_does_not_beat_a_named_discipline():
+    """The ordering fix, stated as its own rule.
+
+    "ASIC design" in "ASIC Design STA Engineer" is context, not the role. But
+    "design verification" in "ASIC Design Verification Engineer, DFT" IS the role.
+    Strong verification outranks a discipline; weak RTL does not.
+    """
+    assert not is_rtl_or_dv("ASIC Design STA Engineer")
+    assert is_rtl_or_dv("ASIC Design Verification Engineer, DFT")
+    # And with no competing discipline, the weak signal is trusted.
+    assert is_rtl_or_dv("ASIC Design Engineer")
+
+
+def test_cad_outranks_even_a_strong_verification_phrase():
+    """Tier 0. "Sr. Staff CAD- ASIC Design Verification Agentic Workflow" contains
+    "design verification" but is a CAD role, so CAD has to win."""
+    assert not is_rtl_or_dv("Sr. Staff CAD- ASIC Design Verification Agentic Workflow")
+    assert not is_rtl_or_dv("Staff Physical Design Verification, CAD")
