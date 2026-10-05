@@ -7,6 +7,7 @@ import re
 from typing import Optional
 
 from .config import load_keywords
+from .role_scope import _DV_TITLE, _RTL_TITLE, classify_scope
 from .models import ExperienceLevel, RemoteStatus, RoleCategory
 
 _kw = load_keywords()
@@ -559,6 +560,45 @@ def detect_role_category(title: str, description: str = "") -> str:
     # description says "partner with the physical design team" stays RTL Design.
     if _PHYSICAL_DESIGN_TITLE.search(t):
         return RoleCategory.physical_design
+
+    # Strict scope gate, on the title, before any description-based matching below.
+    #
+    # The cascade that follows matches title PLUS description, and chip-company
+    # descriptions mention everything — which is how "PRINCIPAL RTL DESIGN" ended up
+    # filed as Pre-Silicon Validation and "Principal Product Application Engineer"
+    # counted as an in-scope role. This decides the discipline from the title and
+    # routes anything that is not RTL design or design verification to the category
+    # it belongs in, which the default view hides.
+    #
+    # When the title IS in scope the cascade still runs, because it picks WHICH core
+    # category applies (DV vs RTL Design vs Formal vs Emulation), and that
+    # granularity is worth keeping.
+    in_scope, out_category = classify_scope(title)
+    if not in_scope and out_category:
+        return out_category
+
+    # For an in-scope posting, pick the core category from the TITLE as well.
+    #
+    # The cascade below reads title + description, so "PRINCIPAL RTL DESIGN" whose
+    # description mentioned UVM and coverage was filed as Design Verification. Both
+    # categories are visible, so nothing disappeared — but the category is what the
+    # role filter works on, so a DV filter was returning RTL design jobs and vice
+    # versa. Verification is checked first: a title carrying both words, like
+    # "RTL Design Verification Engineer", is a verification role.
+    if _DV_TITLE.search(title):
+        if re.search(r"\b(formal|property|assertion)\b", t):
+            return RoleCategory.formal_verification
+        if re.search(r"\b(emulation|emulator|palladium|veloce|zebu)\b", t):
+            return RoleCategory.emulation
+        if re.search(r"\b(cpu|gpu|processor|core)\b", t):
+            return RoleCategory.cpu_gpu_verification
+        if re.search(r"\b(soc|subsystem|fabric|interconnect)\b", t):
+            return RoleCategory.soc_verification
+        return RoleCategory.design_verification
+    if _RTL_TITLE.search(title):
+        if re.search(r"\bfpga\b", t):
+            return RoleCategory.fpga_rtl
+        return RoleCategory.rtl_design
 
     # Priority order: most specific first
     dv_signals = [

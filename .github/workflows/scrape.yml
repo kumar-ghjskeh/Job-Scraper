@@ -76,6 +76,8 @@ jobs:
       #   company_identity    a board token belonging to a DIFFERENT company
       #   h1b_filter          an unclassified company vanishing from the H1B view
       #   role_scope          backend/physical-design roles leaking into RTL+DV
+      #   role_scope_strict   anything that is not RTL design or DV on the board
+      #   snapshot_merge      one pass discarding the other pass's tallies/runs
       - name: Guard tests
         run: |
           pip install -q pytest
@@ -85,7 +87,9 @@ jobs:
             backend/tests/test_data_health.py \
             backend/tests/test_company_identity.py \
             backend/tests/test_h1b_filter.py \
-            backend/tests/test_role_scope.py
+            backend/tests/test_role_scope.py \
+            backend/tests/test_role_scope_strict.py \
+            backend/tests/test_snapshot_merge.py
 
       - name: Scrape and rebuild the snapshot
         env:

@@ -23,8 +23,14 @@ import type { Filters, Job } from './types'
 // were previously filed under RTL Design and the verification categories (30 of
 // them as "RTL Design", twelve as "Formal Verification"), so 11% of the visible
 // US jobs were roles outside the board's scope. Still reachable, just not default.
+// MUST match snapshot.HIDDEN_CATEGORIES in the backend. RTL design and design
+// verification are the whole scope of this board; these are real disciplines whose
+// postings are kept but not shown by default, and include_adjacent still reaches
+// them. Post-Silicon Validation, DFT and EDA/Verification Tools were added once the
+// title-level scope gate stopped RTL and DV roles from being misfiled into them.
 const HIDDEN_CATEGORIES = new Set([
   'Software / Compiler', 'Unknown', 'Adjacent / Backup', 'Physical Design',
+  'Post-Silicon Validation', 'DFT', 'EDA / Verification Tools',
 ])
 
 const lc = (s: unknown) => String(s ?? '').toLowerCase()

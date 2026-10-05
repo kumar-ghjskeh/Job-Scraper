@@ -153,8 +153,11 @@ export async function suggestionsFromCorpus(q: string, limit = 8) {
   // is_software_only alone, so it drew on retired postings and on the categories
   // the default view hides — meaning it would offer a title (or "Physical Design")
   // and then the search for it came back empty, which reads as a broken search.
+  // Same set as query.ts: a suggestion whose search returns nothing reads as a
+  // broken search, so autocomplete must draw only on what the default view shows.
   const HIDDEN = new Set([
     'Software / Compiler', 'Unknown', 'Adjacent / Backup', 'Physical Design',
+    'Post-Silicon Validation', 'DFT', 'EDA / Verification Tools',
   ])
   const rows = c.jobs.filter(
     (j) =>

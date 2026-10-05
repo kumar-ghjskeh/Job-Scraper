@@ -103,7 +103,17 @@ def _iso(v: Any) -> Any:
 # to those two when backend implementation roles were moved out of RTL/DV scope, and
 # omitting it here made viewable_jobs count roles the UI does not show.
 HIDDEN_CATEGORIES = {
-    "Software / Compiler", "Unknown", "Adjacent / Backup", "Physical Design",
+    # RTL design and design verification are the whole scope of this board. These
+    # are real engineering disciplines and the postings are kept — they are simply
+    # not what this board is for, so the default view hides them and the
+    # include_adjacent toggle still reaches them.
+    "Software / Compiler",      # firmware and software developer roles
+    "Unknown",                  # nothing identifiable in the title
+    "Adjacent / Backup",        # architecture/modelling, analog, RF, packaging, non-engineering
+    "Physical Design",          # floorplan, place-and-route, STA, timing closure, signoff
+    "Post-Silicon Validation",  # lab bring-up and characterisation, after the chip exists
+    "DFT",                      # design-for-test: scan, ATPG, MBIST
+    "EDA / Verification Tools", # CAD, methodology, flow and tooling work
 }
 
 
