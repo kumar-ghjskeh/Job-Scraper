@@ -19,6 +19,7 @@ from .config import settings
 from .database import get_session, init_db
 from .models import ActiveStatus, Company, JobPosting, PushSubscription, ResumeProfile, ScrapeError, ScrapeRun, Setting, Watchlist
 from .scheduler import create_scheduler
+from .snapshot import HIDDEN_CATEGORIES
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -551,8 +552,13 @@ def _build_job_query(
     # employers (equipment makers, etc.) can't introduce nuisance. Saved/Applied
     # tabs pass relevant_only=False since the user explicitly chose those jobs.
     if relevant_only:
+        # Shared with the frontend rather than hardcoded. This was a literal 3-tuple
+        # ("Software / Compiler", "Unknown", "Adjacent / Backup") and never picked up
+        # Physical Design, Post-Silicon Validation, DFT or EDA / Verification Tools,
+        # so the API returned backend and tooling roles the app itself hides — the
+        # two paths disagreeing about what the board is for.
         conditions.append(
-            col(JobPosting.role_category).notin_(("Software / Compiler", "Unknown", "Adjacent / Backup"))
+            col(JobPosting.role_category).notin_(tuple(HIDDEN_CATEGORIES))
         )
 
     # Role flags filter: comma-separated list of flag names that must be True
@@ -879,7 +885,7 @@ def job_facets(session: SessionDep, usa_only: bool = True, include_software: boo
     # Same relevance gate as discovery, so facet counts/categories match what the
     # job list actually shows (no nuisance categories, no inflated counts).
     base_conds.append(
-        col(JobPosting.role_category).notin_(("Software / Compiler", "Unknown", "Adjacent / Backup"))
+        col(JobPosting.role_category).notin_(tuple(HIDDEN_CATEGORIES))
     )
 
     def facet_count(extra_conds):

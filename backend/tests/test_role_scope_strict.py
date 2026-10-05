@@ -220,3 +220,31 @@ def test_cad_outranks_even_a_strong_verification_phrase():
     "design verification" but is a CAD role, so CAD has to win."""
     assert not is_rtl_or_dv("Sr. Staff CAD- ASIC Design Verification Agentic Workflow")
     assert not is_rtl_or_dv("Staff Physical Design Verification, CAD")
+
+
+def test_every_path_agrees_on_what_is_hidden():
+    """Four places decide what the board shows. A divergence between them is how a
+    filter starts returning rows the list view hides.
+
+    backend/app/main.py carried a literal 3-tuple and had never picked up Physical
+    Design, Post-Silicon Validation, DFT or EDA / Verification Tools, so the API
+    returned backend and tooling roles that the app itself excluded.
+    """
+    import inspect
+    from pathlib import Path
+
+    from backend.app import main
+
+    assert "tuple(HIDDEN_CATEGORIES)" in inspect.getsource(main), (
+        "main.py no longer shares the hidden set; a hardcoded list here drifts from "
+        "the frontend silently"
+    )
+
+    root = Path(__file__).resolve().parents[2]
+    for rel in ("frontend/src/lib/query.ts", "frontend/src/lib/corpus.ts"):
+        text = (root / rel).read_text(encoding="utf-8")
+        for category in HIDDEN_CATEGORIES:
+            assert f"'{category}'" in text, (
+                f"{rel} does not hide {category!r}, so the UI and the backend "
+                "disagree about the board's scope"
+            )
