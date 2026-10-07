@@ -15,4 +15,12 @@ rate_limit:
   delay_between_companies_seconds: 5
   max_concurrent_requests: 3
 
-removed_job_threshold: 2  # missed scrapes before marking removed
+# Consecutive missed scrapes before a posting is marked removed.
+#
+# Was 2, which at the 3-hourly cadence is SIX HOURS. One paginated or flaky
+# response from a source therefore retired live jobs, and because retired rows are
+# stripped to 11 fields and purged after 60 days there is no way back — the
+# posting's first_seen_at and description are gone. 6 is about a day of consistent
+# absence, which no transient hiccup survives, and still well inside the 21-day
+# stale sweep that catches sources which quietly stop responding altogether.
+removed_job_threshold: 6

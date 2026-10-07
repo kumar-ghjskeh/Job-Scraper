@@ -198,3 +198,87 @@ def test_retired_rows_keep_every_field_the_state_machine_needs():
     for f in ("key", "company", "job_title", "apply_url", "job_id_from_company",
               "active_status", "missed_scrapes", "last_seen_at", "removed_at"):
         assert f in RETIRED_ROW_FIELDS, f"{f} must survive on a retired row"
+
+
+def test_removed_rows_are_exported_so_retirement_can_stick(tmp_path, monkeypatch):
+    """Retirement was structurally impossible, and this is the assertion that says why.
+
+    build_snapshot used to select only active + possibly_removed. So a job that hit
+    removed_job_threshold became `removed` in the scratch database, got DROPPED from
+    the export, and was then restored from the published corpus by the merge — which
+    unions the two sides. Every static run reported `removed: 623` while the published
+    corpus held zero removed rows and 1,344 rows sat permanently at missed_scrapes=1,
+    with no status change between consecutive runs. The corpus could only grow, and
+    purge_removed_jobs() could never find anything to purge.
+    """
+    import importlib
+    from datetime import datetime, timezone
+
+    from sqlmodel import Session
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/t.db")
+    from backend.app import config
+    importlib.reload(config)
+    from backend.app import database
+    importlib.reload(database)
+    from backend.app import snapshot as snap
+    importlib.reload(snap)
+    from backend.app.models import ActiveStatus, JobPosting
+
+    database.init_db()
+    with Session(database.engine) as s:
+        s.add(JobPosting(
+            company="AMD", job_title="DV Engineer", apply_url="https://x/1",
+            job_id_from_company="1", active_status=ActiveStatus.removed,
+            missed_scrapes=6, removed_at=datetime.now(timezone.utc),
+            last_seen_at=datetime.now(timezone.utc),
+        ))
+        s.commit()
+        payload, _details = snap.build_snapshot(s)
+
+    statuses = {r.get("active_status") for r in payload["jobs"]}
+    assert "removed" in statuses, (
+        "build_snapshot dropped the removed row. The merge then resurrects it from "
+        "the published corpus and retirement never takes effect."
+    )
+    # And it must still be stripped, so exporting them does not re-inflate the file.
+    removed = [r for r in payload["jobs"] if r.get("active_status") == "removed"][0]
+    assert set(removed) <= snap.RETIRED_ROW_FIELDS, (
+        f"removed row carries unexpected fields: {set(removed) - snap.RETIRED_ROW_FIELDS}"
+    )
+    assert removed["missed_scrapes"] == 6
+
+    # Restore the module state for the rest of the suite.
+    monkeypatch.undo()
+    importlib.reload(config)
+    importlib.reload(database)
+    importlib.reload(snap)
+
+
+def test_the_merge_lets_a_miss_count_advance_across_runs(tmp_path):
+    """The behaviour the previous test protects, stated over two cycles.
+
+    Each run rebuilds a scratch database from the published corpus, so a counter that
+    does not survive the merge can never reach any threshold. Verified over real
+    cycles: 1 -> 2 -> 3 ... -> 6 -> removed, where it previously stuck at 1.
+    """
+    seen = "2026-10-01T00:00:00+00:00"
+    published = tmp_path / "published.json"
+    _write(published, [_retired("k1", 1, seen)], [_company("AMD")], [])
+
+    for expected in (2, 3, 4):
+        ours = tmp_path / f"ours{expected}.json"
+        # What the run produces: the same posting, missed once more.
+        _write(ours, [_retired("k1", expected, seen)], [_company("AMD")], [])
+        merge_snapshot_files(published, ours)
+        published.write_bytes(ours.read_bytes())
+        got = _json_load(published)["jobs"][0]["missed_scrapes"]
+        assert got == expected, (
+            f"miss count regressed to {got} instead of {expected}; retirement cannot "
+            "progress if the merge does not carry it forward"
+        )
+
+
+def _json_load(path):
+    import json as _json
+    return _json.loads(path.read_text(encoding="utf-8"))

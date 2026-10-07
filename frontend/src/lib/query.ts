@@ -138,10 +138,34 @@ export function matchesFilters(j: Job, f: Filters, bodies?: Record<string, strin
   return true
 }
 
+/** Recency multiplier applied to the FIT-based sorts.
+ *
+ *  The fit sorts ignored age entirely, so a 90-day-old posting scoring 95 outranked
+ *  a two-day-old posting scoring 93 — on a board whose median visible posting is 52
+ *  days old, that put the least actionable jobs on top. Measured distribution at the
+ *  time: 9% of visible jobs were a week old or newer, 70% were over 30 days.
+ *
+ *  Bounded on purpose. It falls to 0.75 and no further, so freshness decides between
+ *  comparable jobs without letting a fresh but poorly-matched posting leapfrog a
+ *  strong one. Explicit sorts (posted_date, company, job_title) are left pure —
+ *  someone who picked a sort gets that sort.
+ */
+export function recencyWeight(j: Job, now = Date.now()): number {
+  const days = (now - effectiveDate(j)) / 86_400_000
+  if (!Number.isFinite(days) || days <= 7) return 1
+  if (days >= 90) return 0.75
+  // Linear between the two, which is easier to reason about than a curve when a
+  // ranking surprises you.
+  return 1 - 0.25 * ((days - 7) / 83)
+}
+
+const byFit = (pick: (j: Job) => number) => (a: Job, b: Job) =>
+  pick(b) * recencyWeight(b) - pick(a) * recencyWeight(a)
+
 const SORTERS: Record<string, (a: Job, b: Job) => number> = {
-  new_grad_fit: (a, b) => (b.new_grad_fit ?? 0) - (a.new_grad_fit ?? 0),
-  match_score: (a, b) => (b.match_score ?? 0) - (a.match_score ?? 0),
-  experienced_fit: (a, b) => (b.experienced_fit ?? 0) - (a.experienced_fit ?? 0),
+  new_grad_fit: byFit((j) => j.new_grad_fit ?? 0),
+  match_score: byFit((j) => j.match_score ?? 0),
+  experienced_fit: byFit((j) => j.experienced_fit ?? 0),
   posted_date: (a, b) => effectiveDate(b) - effectiveDate(a),
   first_seen_at: (a, b) =>
     Date.parse(String(b.first_seen_at)) - Date.parse(String(a.first_seen_at)),

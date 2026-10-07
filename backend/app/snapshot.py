@@ -185,13 +185,22 @@ def _parse_aware(v):
 
 def build_snapshot(session: Session) -> tuple[dict, dict]:
     """Return ``(jobs_payload, details_payload)`` for the active corpus."""
-    # possibly_removed rows are included so their miss counter persists; the
-    # frontend shows only active ones.
-    jobs = session.exec(
-        select(JobPosting).where(
-            JobPosting.active_status.in_([ActiveStatus.active, ActiveStatus.possibly_removed])
-        )
-    ).all()
+    # EVERY status is exported, including `removed`. The frontend shows only active
+    # rows (corpus.ts filters at load), so this is about the scraper's own state.
+    #
+    # Excluding `removed` made retirement structurally impossible. The flow was:
+    # a job missed twice (removed_job_threshold) became `removed` in the scratch
+    # database, this query dropped it from the export, and then
+    # merge_snapshot_files — which UNIONS the export with the published corpus —
+    # restored it from the published side, as `possibly_removed` with its old miss
+    # count. Every run reported `removed: 623` while the published corpus contained
+    # zero removed rows and 1,344 rows sat permanently at missed_scrapes=1 with no
+    # status change between consecutive runs. The corpus could only grow, and
+    # purge_removed_jobs() could never find anything to purge.
+    #
+    # Exporting them makes the snapshot authoritative: the merge keeps the
+    # further-along row, retirement sticks, and the 60-day purge reclaims the space.
+    jobs = session.exec(select(JobPosting)).all()
 
     out: list[dict] = []
     details: dict[str, str] = {}
