@@ -478,8 +478,29 @@ def merge_snapshot_files(base_jobs: str | Path, ours_jobs: str | Path,
     # usa_active_jobs=20, and the directory showed "no openings" for a source that
     # had just returned twenty US jobs. Same shape as the bug where every company
     # read "no openings" at once.
+    # Per-company HEALTH counters come from whichever side actually scraped that
+    # company more recently, not from `ours` wholesale.
+    #
+    # A pass only touches its own companies but exports a row for all of them, filled
+    # in from whatever snapshot it seeded from. The browser pass checks out before the
+    # httpx pass publishes, so for the ~134 companies it does not scrape it carries
+    # stale counters — and publishing second, it overwrote the fresh ones. Measured:
+    # the httpx run reset four sources to 0 at 18:00 and the browser run put them
+    # back to 23 at 18:05, silently undoing the fix that run had just applied.
+    # last_scraped_at is stamped per scrape, so it says which side is authoritative.
+    base_co = {c.get("name", ""): c for c in base.get("companies", [])}
+    HEALTH = ("scrape_error_count", "consecutive_empty_scrapes", "last_scraped_at")
+
+    def _scraped_at(row: dict) -> str:
+        return str(row.get("last_scraped_at") or "")
+
     stats = company_tallies(merged)
     for c in ours.get("companies", []):
+        prev = base_co.get(c.get("name", ""))
+        if prev and _scraped_at(prev) > _scraped_at(c):
+            for f in HEALTH:
+                if f in prev:
+                    c[f] = prev[f]
         st = stats.get(c.get("name", ""), {})
         quality = st.get("quality") or []
         total = st.get("total", 0)

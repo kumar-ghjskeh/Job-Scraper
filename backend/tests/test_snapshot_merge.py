@@ -282,3 +282,47 @@ def test_the_merge_lets_a_miss_count_advance_across_runs(tmp_path):
 def _json_load(path):
     import json as _json
     return _json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_merge_keeps_the_fresher_company_health_counters(tmp_path):
+    """A pass that did not scrape a company must not overwrite its health counters.
+
+    Every pass exports a row for all companies, filling in the ones it does not
+    scrape from whatever snapshot it seeded from. The browser pass checks out before
+    the httpx pass publishes, so its rows for those ~134 companies are stale — and
+    because it publishes second, `ours` winning wholesale let it undo real updates.
+
+    Measured in production: the httpx run reset four sources to 0 at 18:00 and the
+    browser run put them back to 23 at 18:05, silently reverting the fix that run had
+    just applied. last_scraped_at is stamped per scrape, so it decides which side is
+    authoritative for that company.
+    """
+    def snap(path, empties, scraped_at):
+        _write(
+            path,
+            [_job("Western Digital", "k1")],
+            [_company("Western Digital", scrape_error_count=0,
+                      consecutive_empty_scrapes=empties,
+                      last_scraped_at=scraped_at)],
+            [],
+        )
+
+    base, ours = tmp_path / "base.json", tmp_path / "ours.json"
+
+    # The publishing side is STALE for this company: its value must lose.
+    snap(base, 0, "2026-10-07T18:00:00+00:00")
+    snap(ours, 23, "2026-10-07T09:37:00+00:00")
+    merge_snapshot_files(base, ours)
+    got = json.loads(ours.read_text(encoding="utf-8"))["companies"][0]
+    assert got["consecutive_empty_scrapes"] == 0, (
+        "a pass that did not scrape this company reverted its counter, which undoes "
+        "every health update the other pass makes"
+    )
+
+    # And the inverse: a genuine stall found by the publishing side must survive.
+    snap(base, 0, "2026-10-07T09:00:00+00:00")
+    snap(ours, 23, "2026-10-07T18:00:00+00:00")
+    merge_snapshot_files(base, ours)
+    got = json.loads(ours.read_text(encoding="utf-8"))["companies"][0]
+    assert got["consecutive_empty_scrapes"] == 23
+    assert got["scrape_status"] == "stalled"
