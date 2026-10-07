@@ -85,6 +85,10 @@ class RoleCategory(str, Enum):
     pre_silicon = "Pre-Silicon Validation"
     post_silicon = "Post-Silicon Validation"
     eda_tools = "EDA / Verification Tools"
+    # Was returned from detect_role_category as a bare "DFT" string and never
+    # declared here, so every consumer that enumerates RoleCategory — validators,
+    # the system audit, any future UI mapping — silently did not know it existed.
+    dft = "DFT"
     # Backend implementation: floorplan, place-and-route, STA, timing closure,
     # signoff. A separate career track from RTL design and verification, so it is
     # its own category and hidden from the default view rather than filed under

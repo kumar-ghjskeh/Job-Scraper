@@ -671,6 +671,15 @@ def detect_role_category(title: str, description: str = "") -> str:
     if "fpga" in t:
         return RoleCategory.fpga_rtl
 
+    # In scope but nothing more specific matched — call it RTL Design rather than
+    # Unknown. Unknown is hidden by default, so falling through to it DELETED
+    # in-scope jobs from the board: "VLSI Engineer II Graduate" passes the scope
+    # gate on the generic-IC tier, found no category in the cascade above, and was
+    # hidden as Unknown. That is a new-grad VLSI role — precisely what this board
+    # exists to show.
+    if classify_scope(title)[0]:
+        return RoleCategory.rtl_design
+
     return RoleCategory.unknown
 
 

@@ -98,6 +98,18 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: python -m backend.app.run_static
 
+      # Audit the corpus this run just produced, BEFORE publishing it.
+      #
+      # The guard tests above run against code; this runs against the data, and
+      # covers the classes that have actually broken here: a field exported but not
+      # restored, the hidden-category set drifting between the four places that
+      # decide what shows, a company with no H1B classification silently vanishing
+      # from that view, duplicate fingerprints, naive timestamps, and retired rows
+      # re-inflating the payload. Exits non-zero only on a real failure, so a
+      # warning (a stalled source, say) still publishes.
+      - name: Audit the corpus
+        run: python scripts/audit_system.py
+
       - name: Publish the snapshot
         run: |
           set -e
