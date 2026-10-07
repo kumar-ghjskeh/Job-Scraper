@@ -910,6 +910,13 @@ companies:
     ats_platform: "generic"
     notes: "Direct search — custom careers portal."
     enabled: false
+  # Diagnosed 2026-10-07: the 403 was OUR fault — ayarlabs.com rejects a UA that
+  # claims Chrome and accepts a plain bot UA, which generic.py now retries with. The
+  # page then returns 200 with job text inline, but the heuristic parser extracts
+  # nothing from its structure, so the source genuinely reports 0. Left enabled
+  # because it is cheap and runs in the browser pass; the stall counter flagging it
+  # is correct rather than a false alarm. Needs a real ATS endpoint or a per-site
+  # selector to produce anything.
   - name: "Ayar Labs"
     category: "Photonics"
     priority: "B"

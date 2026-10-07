@@ -161,3 +161,57 @@ def test_scrape_path_tracks_empty_results():
         "an empty-but-successful fetch must increment the stall counter — this is "
         "the silent failure mode of DOM scraping"
     )
+
+
+def test_stall_is_judged_on_the_source_not_on_our_filter():
+    """A healthy board with no matching openings is not a stalled source.
+
+    The counter used to read what fetch_jobs() returned, which is already past the
+    adapter's relevance filter — so these two cases were indistinguishable:
+
+        selector broke        source returns nothing            -> a real stall
+        no RTL/DV openings    source returns jobs, none match   -> perfectly healthy
+
+    Four of six flagged sources were the second kind. Western Digital answers with
+    340 live postings and none are RTL/DV, because that work went to Sandisk in the
+    split; Kioxia, Axelera AI and Lemurian Labs are the same shape at 19, 8 and 6.
+    A 67% false-positive rate makes the flag worth ignoring, which defeats the point
+    of having it.
+    """
+    import inspect
+
+    from backend.app import run_browser_scrape, scrape_engine
+    from backend.app.scrapers.base import BaseScraper
+
+    assert "last_raw_count" in inspect.getsource(BaseScraper._filter_relevant), (
+        "_filter_relevant no longer records the pre-filter count, so the stall "
+        "counter has nothing to distinguish a dead source from an unmatched one"
+    )
+    for mod in (scrape_engine.run_scrape, run_browser_scrape.run_browser_scrape):
+        src = inspect.getsource(mod)
+        assert "last_raw_count" in src, (
+            f"{mod.__qualname__} judges stalls on the filtered result again; a "
+            "company with a live board and no matching roles will be reported as "
+            "broken"
+        )
+
+
+def test_filter_relevant_records_the_pre_filter_count():
+    """Behavioural half of the guard above."""
+    from backend.app.scrapers.base import BaseScraper, JobData
+
+    class _Concrete(BaseScraper):           # BaseScraper is abstract
+        async def fetch_jobs(self):           # pragma: no cover - never called
+            return []
+
+    sc = _Concrete.__new__(_Concrete)
+    sc.company_name = "Test"
+    sc.last_raw_count = None
+    jobs = [
+        JobData(job_title="Design Verification Engineer", apply_url="https://x/1"),
+        JobData(job_title="Office Manager", apply_url="https://x/2"),
+        JobData(job_title="Account Executive", apply_url="https://x/3"),
+    ]
+    kept = BaseScraper._filter_relevant(sc, jobs)
+    assert sc.last_raw_count == 3, "must record what the SOURCE returned"
+    assert len(kept) < 3, "the non-engineering rows should have been filtered out"

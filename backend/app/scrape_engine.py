@@ -530,22 +530,32 @@ async def run_scrape(triggered_by: str = "scheduler", priorities: set[str] | Non
 
             # A successful fetch that returned nothing is the silent failure: no
             # exception, so scrape_error_count stays 0 and quarantine never looks
-            # at it, while the directory just reads "no openings". Track it so the
-            # case is distinguishable from an employer that genuinely has none.
+            # at it, while the directory just reads "no openings".
+            #
+            # Judged on what the SOURCE returned, not on what survived our relevance
+            # filter. Those are different failures and this used to conflate them:
+            # four of six flagged sources were healthy boards with no RTL/DV
+            # openings — Western Digital answers with 340 live postings, none of them
+            # RTL/DV because that work went to Sandisk in the split, and Kioxia,
+            # Axelera AI and Lemurian Labs are the same at 19, 8 and 6. Counting
+            # those as stalls gave a 67% false-positive rate, which makes the signal
+            # worth nothing. A source that returns postings is working, whether or
+            # not any of them are for us.
+            source_returned = getattr(scraper, "last_raw_count", None)
             with Session(engine) as session:
                 co = session.exec(
                     select(Company).where(Company.name == company_name)
                 ).first()
                 if co:
-                    if raw_jobs:
+                    if source_returned is None or source_returned > 0:
                         co.consecutive_empty_scrapes = 0
                     else:
                         co.consecutive_empty_scrapes += 1
                         if co.consecutive_empty_scrapes >= EMPTY_STALL_THRESHOLD:
                             logger.warning(
-                                "%s has returned 0 postings for %d consecutive runs "
-                                "— likely a broken selector or a dead board, not an "
-                                "employer with nothing open",
+                                "%s: the SOURCE returned 0 postings for %d "
+                                "consecutive runs — a broken selector or dead board, "
+                                "not an employer with nothing matching",
                                 company_name, co.consecutive_empty_scrapes,
                             )
                     session.add(co)

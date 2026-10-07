@@ -92,6 +92,19 @@ class GenericScraper(BaseScraper):
             params["q"] = keyword
 
         resp = await self.client.get(url, params=params)
+        if resp.status_code == 403:
+            # Counter-intuitive but measured: some WAFs reject a UA that CLAIMS to be
+            # Chrome without the matching TLS and header fingerprint, while letting an
+            # honest bot UA straight through. ayarlabs.com answers 403 to our Chrome
+            # UA and 200 to "AshborneSilicon/1.0" — so the UA we send to look normal
+            # is what was blocking us, and that 403 is the whole of Ayar Labs'
+            # 18 empty runs.
+            logger.info("%s: 403 with the browser UA, retrying as a plain client",
+                        self.company_name)
+            resp = await self.client.get(
+                url, params=params,
+                headers={"User-Agent": "AshborneSilicon/1.0 (+job-aggregator)"},
+            )
         resp.raise_for_status()
         return _parse_html_jobs(resp.text, url, seen)
 
@@ -101,10 +114,28 @@ class GenericScraper(BaseScraper):
         jobs: list[JobData] = []
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(headless=settings.playwright_headless)
-            page = await browser.new_page()
-            await page.goto(url, wait_until="networkidle", timeout=30000)
-            html = await page.content()
-            await browser.close()
+            page = await browser.new_page(
+                # Several of these sites answer 403 to a default headless UA.
+                # ayarlabs.com does exactly that, on httpx and on Playwright.
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                ),
+            )
+            try:
+                # domcontentloaded, NOT networkidle.
+                #
+                # careers.arm.com is a heavy SPA with continuous background polling,
+                # so it never reaches networkidle and goto timed out at 30s on every
+                # run — which, because httpx gets only a JS shell from it, left
+                # jobs empty and raised. That is the whole of Arm's 5 errors.
+                # A fixed settle wait afterwards gets the list rendered without
+                # depending on the page ever going quiet.
+                await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                await page.wait_for_timeout(3500)
+                html = await page.content()
+            finally:
+                await browser.close()
 
         jobs.extend(_parse_html_jobs(html, url, seen))
         return jobs

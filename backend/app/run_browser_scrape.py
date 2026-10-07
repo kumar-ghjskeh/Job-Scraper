@@ -98,19 +98,23 @@ async def run_browser_scrape(headless: bool = True, only: str | None = None) -> 
                 # an empty list, not by raising, so scrape_error_count stays 0 and
                 # nothing flags it. These are the fragile sources; without this a
                 # broken selector reads as "no openings" indefinitely.
+                # Judged on what the SOURCE returned, not on what survived the
+                # relevance filter — a healthy board with no RTL/DV openings is not
+                # a stall. See the same reasoning in scrape_engine.run_scrape.
+                source_returned = getattr(scraper, "last_raw_count", None)
                 with Session(engine) as session:
                     co = session.exec(
                         select(Company).where(Company.name == name)
                     ).first()
                     if co:
-                        if raw_jobs:
+                        if source_returned is None or source_returned > 0:
                             co.consecutive_empty_scrapes = 0
                         else:
                             co.consecutive_empty_scrapes += 1
                             if co.consecutive_empty_scrapes >= EMPTY_STALL_THRESHOLD:
                                 logger.warning(
-                                    "  %-22s has returned 0 postings for %d runs — "
-                                    "likely a broken selector, not an empty board",
+                                    "  %-22s: the SOURCE returned 0 postings for %d "
+                                    "runs — a broken selector, not an empty board",
                                     name, co.consecutive_empty_scrapes,
                                 )
                         session.add(co)

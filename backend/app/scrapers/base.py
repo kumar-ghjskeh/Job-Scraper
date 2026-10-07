@@ -55,6 +55,10 @@ class BaseScraper(ABC):
     def __init__(self, company_config: dict):
         self.config = company_config
         self.company_name: str = company_config["name"]
+        # How many postings the source returned before _filter_relevant ran. None
+        # means the adapter never got as far as filtering, which is itself a
+        # failure; 0 means the source genuinely answered with nothing.
+        self.last_raw_count: int | None = None
         self.client = httpx.AsyncClient(
             headers=DEFAULT_HEADERS,
             timeout=settings.request_timeout_seconds,
@@ -91,6 +95,17 @@ class BaseScraper(ABC):
         silicon) roles. Uses a precise title-first relevance gate so the stored
         job pool is unambiguous — no software/sales/HR noise."""
         from ..scoring import is_rtl_dv_relevant
+
+        # Remember what the SOURCE returned, before our rules threw any of it away.
+        #
+        # The stall counter used to read the filtered result, so a healthy board with
+        # no matching openings was indistinguishable from a scraper whose selector
+        # broke. Four of six flagged sources were that false positive: Western
+        # Digital returns 340 live postings of which none are RTL/DV (its RTL work
+        # went to Sandisk in the split), and Kioxia, Axelera and Lemurian Labs are
+        # the same shape at 19, 8 and 6. A 67% false-positive rate makes the signal
+        # worth nothing, so the two cases have to be told apart.
+        self.last_raw_count = len(jobs)
 
         relevant: list[JobData] = []
         for j in jobs:
