@@ -942,7 +942,7 @@ export function JobDetailsPanel({ job, onClose, onUpdate, onSelectJob, mobile = 
         )}
 
         {detailTab === 'source' && (() => {
-          const fr = freshness(job.posted_date, job.posted_date_known, job.first_seen_at)
+          const fr = freshness(job.posted_date, job.posted_date_known, job.first_seen_at, job.first_seen_is_bulk)
           const daysOpen = job.first_seen_at
             ? Math.max(0, Math.floor((Date.now() - new Date(job.first_seen_at).getTime()) / 86_400_000))
             : null

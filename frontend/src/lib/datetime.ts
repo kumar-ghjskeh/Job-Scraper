@@ -45,8 +45,15 @@ export function freshness(
   postedDate: string | null | undefined,
   postedKnown: boolean | undefined,
   firstSeen: string | null | undefined,
+  firstSeenIsBulk = false,
 ): Freshness {
   const exact = !!(postedKnown && postedDate)
+  // No source date AND the only first_seen we have is the corpus import baseline:
+  // we genuinely do not know when this was posted or discovered. "Added 6w ago"
+  // would be stating the migration date as a fact about the job.
+  if (!exact && firstSeenIsBulk) {
+    return { label: '', isNew: false, exact: false, days: Infinity }
+  }
   const src = parseApiDate(exact ? postedDate : firstSeen)
   if (!src) return { label: '', isNew: false, exact, days: Infinity }
   const days = Math.max(0, Math.floor((Date.now() - src.getTime()) / 86_400_000))

@@ -80,6 +80,7 @@ export function loadCorpus(): Promise<Corpus> {
         d.jobs = (d.jobs || []).filter(
           (j) => String((j as unknown as Record<string, unknown>).active_status ?? 'active') === 'active',
         )
+        markBulkImportedFirstSeen(d.jobs)
         d.count = d.jobs.length
         return d
       })
@@ -141,6 +142,38 @@ export async function facetsFromCorpus(usaOnly = true, includeSoftware = false) 
     senior_count: rows.filter((j) => j.is_senior).length,
     remote_count: rows.filter((j) => /remote/i.test(j.remote_status || '')).length,
     new_24h_count: rows.filter((j) => eff(j) >= dayAgo).length,
+  }
+}
+
+/** Flag rows whose `first_seen_at` is the corpus's bulk-import baseline, not a real
+ *  discovery date.
+ *
+ *  When the static corpus was first built, every job it contained got that day's
+ *  timestamp: 936 of 1,793 active rows (52%) share 2026-08-24. For a posting with no
+ *  source-provided posted_date, the UI then read that back as "Added 6w ago" — a
+ *  discovery date that never happened — and the recency weight demoted it on the
+ *  strength of it.
+ *
+ *  Detected rather than hardcoded, so it keeps working after the next rebuild: the
+ *  EARLIEST first_seen date in the corpus, when it accounts for an implausible share
+ *  of rows, is the import baseline. Jobs genuinely discovered on day one cannot be
+ *  told apart from imported ones — on that day they ARE the import. Later spikes are
+ *  left alone, which matters: 325 rows share 2026-10-01, the day five new companies
+ *  came online, and that is real.
+ */
+export function markBulkImportedFirstSeen(jobs: Job[], shareThreshold = 0.25): void {
+  const byDay = new Map<string, number>()
+  for (const j of jobs) {
+    const day = String(j.first_seen_at ?? '').slice(0, 10)
+    if (day) byDay.set(day, (byDay.get(day) ?? 0) + 1)
+  }
+  if (!byDay.size) return
+  const earliest = [...byDay.keys()].sort()[0]
+  if ((byDay.get(earliest) ?? 0) / jobs.length < shareThreshold) return
+  for (const j of jobs) {
+    if (String(j.first_seen_at ?? '').slice(0, 10) === earliest) {
+      j.first_seen_is_bulk = true
+    }
   }
 }
 

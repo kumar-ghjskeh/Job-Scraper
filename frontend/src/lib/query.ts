@@ -227,6 +227,11 @@ export function matchesFilters(j: Job, f: Filters, bodies?: Record<string, strin
  *  someone who picked a sort gets that sort.
  */
 export function recencyWeight(j: Job, now = Date.now()): number {
+  // An unknown date must not be treated as an old one. For a posting with no
+  // source-provided posted_date whose only first_seen is the corpus import
+  // baseline, demoting it to 0.75 would be ranking on a timestamp we created
+  // during a migration, not on anything about the job.
+  if (j.posted_date_known !== true && j.first_seen_is_bulk) return 1
   const days = (now - effectiveDate(j)) / 86_400_000
   if (!Number.isFinite(days) || days <= 7) return 1
   if (days >= 90) return 0.75

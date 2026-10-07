@@ -46,7 +46,7 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
   const fresh = isNew(job.first_seen_at)
   // Honest freshness: real posted date when known ("Posted 3d ago"), else when we
   // first saw it ("Added 5d ago"). Drives the relative line at the card footer.
-  const fr = freshness(job.posted_date, job.posted_date_known, job.first_seen_at)
+  const fr = freshness(job.posted_date, job.posted_date_known, job.first_seen_at, job.first_seen_is_bulk)
   const saved = job.active_status === 'saved'
   const rm = resumeMatch ?? job.resume_match
   const ng = job.new_grad_fit ?? 0

@@ -92,6 +92,9 @@ export interface Job {
   source_reliability?: string      // 'High' | 'Medium' | 'Low'
   location_label?: string          // Onsite | Hybrid | Remote - USA | Multi-location USA | …
   posted_date_known?: boolean
+  /** first_seen_at is the corpus import baseline, not a real discovery date.
+   *  Set at load by markBulkImportedFirstSeen(); never present in the file. */
+  first_seen_is_bulk?: boolean
   /** How many open requisitions this card stands for (1 = just itself). Set by
    *  the server when role grouping is on, so "+N locations" is accurate across
    *  the whole result set rather than only the current page. */
