@@ -17,6 +17,7 @@ from .description_cleaner import clean_html_description, truncate_description_cl
 from .eligibility import detect_eligibility_risk
 from .location_utils import location_from_apply_url, parse_location
 from .models import ActiveStatus, Company, JobPosting, ScrapeError, ScrapeRun
+from .taxonomy import EMPTY_STALL_THRESHOLD, ERROR_QUARANTINE_THRESHOLD
 from .scrapers import get_scraper
 from .quality import (
     canonical_location_label,
@@ -47,15 +48,7 @@ from .services.notion_sync import sync_job_to_notion
 
 logger = logging.getLogger(__name__)
 
-# After this many consecutive failed runs a source is auto-quarantined (skipped)
-# so broken endpoints never keep throwing errors into the dashboard.
-ERROR_QUARANTINE_THRESHOLD = 8
 
-# After this many consecutive runs that SUCCEED but return zero postings, a source
-# is reported as stalled. Not quarantined: a board really can be empty, and
-# skipping it would mean never noticing when it refills. At 8 runs/day this is
-# about a day and a half of silence, which no active employer sustains.
-EMPTY_STALL_THRESHOLD = 12
 
 
 def _sane_posted_date(d, now):

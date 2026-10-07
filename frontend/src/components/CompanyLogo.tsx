@@ -37,6 +37,33 @@ const DOMAINS: Record<string, string> = {
   'mythic': 'mythic.ai', 'blaize': 'blaize.com', 'flex logix': 'flex-logix.com',
   'quadric': 'quadric.io', 'expedera': 'expedera.com', 'tesla': 'tesla.com',
   'boeing': 'boeing.com', 'honeywell': 'honeywell.com', 'collins aerospace': 'collinsaerospace.com',
+  // Added 2026-10-07 for the expanded directory. The ones with a company-owned
+  // careers_url are DERIVED from it, so they match a URL that was verified to
+  // answer; the rest were checked by hand. A wrong domain shows another firm's
+  // logo, which is worse than the letter tile, so none of these are guesses.
+  'advantest': 'advantest.com', 'aeva': 'aeva.com', 'akeana': 'akeana.com',
+  'allegro microsystems': 'allegromicro.com', 'ambiq': 'ambiq.com',
+  'andes technology': 'andestech.com', 'applied materials': 'appliedmaterials.com',
+  'arteris': 'arteris.com', 'atom computing': 'atom-computing.com', 'auradine': 'auradine.com',
+  'axiado': 'axiado.com', 'breker verification systems': 'brekersystems.com',
+  'ciena': 'ciena.com', 'codasip': 'codasip.com', 'dreambig semiconductor': 'dreambigsemi.com',
+  'empower semiconductor': 'empowersemi.com', 'encharge ai': 'enchargeai.com',
+  'ethernovia': 'ethernovia.com', 'etopus': 'etopus.com', 'formfactor': 'formfactor.com',
+  'furiosaai': 'furiosa.ai', 'graphcore': 'graphcore.ai', 'hailo': 'hailo.ai',
+  'hewlett packard enterprise': 'hpe.com', 'ibm': 'ibm.com',
+  'imagination technologies': 'imaginationtech.com', 'indie semiconductor': 'indiesemi.com',
+  'infleqtion': 'infleqtion.com', 'ionq': 'ionq.com', 'kla': 'kla.com', 'mips': 'mips.com',
+  'mobileye': 'mobileye.com', 'monolithic power systems': 'monolithicpower.com',
+  'movellus': 'movellus.com', 'navitas semiconductor': 'navitassemi.com', 'nokia': 'nokia.com',
+  'normal computing': 'normalcomputing.ai', 'nubis communications': 'nubis-inc.com',
+  'nutanix': 'nutanix.com', 'oracle': 'oracle.com', 'phison': 'phison.com',
+  'power integrations': 'power.com', 'psiquantum': 'psiquantum.com',
+  'pure storage': 'purestorage.com', 'quantinuum': 'quantinuum.com',
+  'real intent': 'realintent.com', 'rebellions': 'rebellions.ai',
+  'recogni (tensordyne)': 'tensordyne.ai', 'rigetti computing': 'rigetti.com',
+  'sandisk': 'sandisk.com', 'semidynamics': 'semidynamics.com', 'semtech': 'semtech.com',
+  'silicon motion': 'siliconmotion.com', 'sitime': 'sitime.com', 'syntiant': 'syntiant.com',
+  'taalas': 'taalas.com', 'tetramem': 'tetramem.com'
 }
 
 // Resilient logo sources, tried in order. icon.horse returns the real brand logo

@@ -7,7 +7,6 @@ import { JobCard } from './components/JobCard'
 import { JobDetailsPanel } from './components/JobDetailsPanel'
 import { Pagination } from './components/Pagination'
 import { ScrapeHealth } from './components/ScrapeHealth'
-import { QuickFilters, quickFilterCounts } from './components/QuickFilters'
 import { SummaryCards } from './components/SummaryCards'
 import { TopNav, type Tab } from './components/TopNav'
 import { Icon } from './components/Icon'
@@ -181,7 +180,6 @@ export default function App() {
   const [page, setPage] = useState(1)
   const [paginatedJobs, setPaginatedJobs] = useState<PaginatedResponse<Job> | null>(null)
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null)
-  const [quickCounts, setQuickCounts] = useState<Record<string, number>>({})
   // Default shows every live role (incl. senior) — the New Grad tab + seniority
   // chips narrow it. include_senior stays true; the toggle was removed.
   const [filters, setFilters] = useState<Filters>({ usa_only: true, include_senior: true })
@@ -242,10 +240,6 @@ export default function App() {
     // load lazily, so only pull them when there is actually something to search.
     const bodies = filters.keyword?.trim() ? await loadDetails() : undefined
     const withMarks = corpus.jobs.map((j) => userState.applyMark(j))
-    // Quick-filter counts need the WHOLE corpus with the other filters applied, and
-    // this is the only place it is in scope. Counting the current page instead would
-    // make every chip read 50.
-    setQuickCounts(quickFilterCounts(withMarks, filters))
 
     if (tab === 'resume') {
       // Scores come from the stateless matcher (cached per corpus version), then
@@ -523,13 +517,6 @@ export default function App() {
                   Job data updated {freshness(null, false, corpusStamp).label.replace('Added ', '')}
                   {' · refreshes automatically every 3 hours'}
                 </div>
-              )}
-
-              {/* The two questions a candidate asks first — is it junior, and can I
-                  work remotely — plus sponsorship and freshness. All of these lived
-                  only in the sidebar, as sections three and five of nine. */}
-              {showSidebar && (
-                <QuickFilters counts={quickCounts} filters={filters} onChange={changeFilters} />
               )}
 
               {/* Active-filter chips — visible on every filter tab so the user always

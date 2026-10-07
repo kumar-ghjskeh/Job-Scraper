@@ -19,7 +19,10 @@ from .config import settings
 from .database import get_session, init_db
 from .models import ActiveStatus, Company, JobPosting, PushSubscription, ResumeProfile, ScrapeError, ScrapeRun, Setting, Watchlist
 from .scheduler import create_scheduler
-from .snapshot import HIDDEN_CATEGORIES
+# From taxonomy, NOT snapshot: importing snapshot here dragged in the scrape
+# engine and every scraper adapter just to read a frozenset, on an API that
+# does no scraping.
+from .taxonomy import HIDDEN_CATEGORIES
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

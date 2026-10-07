@@ -34,7 +34,11 @@ from sqlmodel import Session, select
 
 from .database import engine
 from .models import ActiveStatus, Company, JobPosting, ScrapeRun
-from .scrape_engine import EMPTY_STALL_THRESHOLD, ERROR_QUARANTINE_THRESHOLD
+from .taxonomy import (
+    EMPTY_STALL_THRESHOLD,
+    ERROR_QUARANTINE_THRESHOLD,
+    HIDDEN_CATEGORIES,
+)
 from .services.dedupe import make_fingerprint
 
 logger = logging.getLogger(__name__)
@@ -98,23 +102,8 @@ def _iso(v: Any) -> Any:
     return (v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v).isoformat()
 
 
-# Categories the default view hides. MUST match HIDDEN_CATEGORIES in
-# frontend/src/lib/query.ts and the set in corpus.ts — "Physical Design" was added
-# to those two when backend implementation roles were moved out of RTL/DV scope, and
-# omitting it here made viewable_jobs count roles the UI does not show.
-HIDDEN_CATEGORIES = {
-    # RTL design and design verification are the whole scope of this board. These
-    # are real engineering disciplines and the postings are kept — they are simply
-    # not what this board is for, so the default view hides them and the
-    # include_adjacent toggle still reaches them.
-    "Software / Compiler",      # firmware and software developer roles
-    "Unknown",                  # nothing identifiable in the title
-    "Adjacent / Backup",        # architecture/modelling, analog, RF, packaging, non-engineering
-    "Physical Design",          # floorplan, place-and-route, STA, timing closure, signoff
-    "Post-Silicon Validation",  # lab bring-up and characterisation, after the chip exists
-    "DFT",                      # design-for-test: scan, ATPG, MBIST
-    "EDA / Verification Tools", # CAD, methodology, flow and tooling work
-}
+# HIDDEN_CATEGORIES now lives in taxonomy.py, which imports nothing, so the API can
+# read it without pulling in the scrape engine and every scraper adapter.
 
 
 def company_tallies(rows: list[dict]) -> dict[str, dict]:

@@ -34,12 +34,6 @@ function expPill(level: string): string {
     default: return 'pill-neutral'
   }
 }
-function locationPill(label: string): string {
-  if (label === 'Remote - USA') return 'pill-success'
-  if (label === 'Hybrid') return 'pill-warning'
-  if (label === 'Multi-location USA') return 'pill-primary'
-  return 'pill-neutral'
-}
 const isNew = (d: string) => Date.now() - new Date(d).getTime() < 24 * 60 * 60 * 1000
 
 export function JobCard({ job, selected, onClick, onQuickAction, extraLocations = [], resumeMatch, ringMetric }: Props) {
@@ -137,21 +131,24 @@ export function JobCard({ job, selected, onClick, onQuickAction, extraLocations 
             })()}
           </span>
         )}
-        {job.location_label && job.location_label !== 'Location Unknown' ? (
-          <span className={`pill ${locationPill(job.location_label)}`}>{job.location_label}</span>
-        ) : job.remote_status && job.remote_status !== 'Unknown' ? (
-          <span className={`pill ${locationPill(job.remote_status)}`}>{job.remote_status}</span>
-        ) : null}
+        {/* Deliberately NOT shown here: the Remote/Hybrid/Onsite pill and the
+            role-category pill. Both are filter concerns, both duplicate something
+            already on the card — the location text sits directly above, and the whole
+            board is RTL design and verification by definition — and together they
+            put five pills on every row. Filter by them in the sidebar instead.
+
+            What stays earns its place by being a WARNING or an opportunity rather
+            than a filter: seniority, which the title often does not state, and the
+            eligibility and sponsorship flags, which change whether you can apply at
+            all. The "No H1B sponsorship" variant is gone too — with the strict H1B
+            filter it only ever fired for the three defence employers, which produce
+            no RTL/DV postings. */}
         {job.experience_level && job.experience_level !== 'Unknown' && (
           <span className={`pill ${expPill(job.experience_level)}`}>{job.experience_level}</span>
-        )}
-        {job.role_category && job.role_category !== 'Unknown' && (
-          <span className="pill pill-neutral">{job.role_category}</span>
         )}
         {risk === 'high' && <span className="pill pill-danger"><Icon name="shield" size={11} /> Citizenship/Clearance</span>}
         {risk === 'medium' && <span className="pill pill-warning"><Icon name="shield" size={11} /> Eligibility — review</span>}
         {h1b === true && <span className="pill pill-teal"><Icon name="passport" size={11} /> Sponsors H1B</span>}
-        {h1b === false && <span className="pill pill-warning"><Icon name="passport" size={11} /> No H1B sponsorship</span>}
       </div>
 
       {keywords.length > 0 && (
