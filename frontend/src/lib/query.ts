@@ -81,6 +81,86 @@ function haystack(j: Job, bodies?: Record<string, string>): string {
     .join(' ')
 }
 
+/** Seniority levels that count as genuinely junior, for the `entry` shorthand. */
+const JUNIOR_LEVELS = new Set(['new grad', 'entry level', 'junior', 'associate'])
+
+/** The experience_level values the sidebar offers. Must mirror SENIORITY_LEVELS in
+ *  FilterSidebar.tsx — a chip whose value is not here falls through to the
+ *  shorthand branches and silently filters nothing, which is the bug this
+ *  function was written to fix. */
+const SENIORITY_LEVEL_NAMES = new Set([
+  'new grad', 'entry level', 'junior', 'associate', 'mid-level',
+  'senior', 'staff', 'principal', 'lead', 'manager',
+])
+
+/** Does this posting match a seniority selection?
+ *
+ *  The sidebar sets `level_filter` to a comma list of experience_level values
+ *  ("New Grad,Entry Level"), but this only ever compared the WHOLE string against
+ *  the literals 'entry' and 'senior'. Neither matched, so both branches were
+ *  skipped and the Seniority filter did nothing at all — picking "New Grad" returned
+ *  the unfiltered board.
+ *
+ *  Both shapes are now handled: the explicit level names the sidebar sends, and the
+ *  'entry' / 'senior' shorthands other callers use.
+ */
+export function matchesLevel(j: Job, levelFilter: string): boolean {
+  const wanted = levelFilter.split(',').map((s) => lc(s).trim()).filter(Boolean)
+  if (!wanted.length) return true
+  const level = lc(j.experience_level)
+  return wanted.some((want) => {
+    // An explicit level name always wins, so the sidebar's chips behave
+    // consistently: picking "Senior" means experience_level === Senior (134 jobs),
+    // not the broader is_senior flag (309). Otherwise "Senior" and "Principal" —
+    // adjacent chips in the same row — would have been counted different ways.
+    if (SENIORITY_LEVEL_NAMES.has(want)) return level === want
+    if (want === 'entry') {
+      // Strict: a genuinely junior posting. is_candidate_friendly is deliberately
+      // NOT enough on its own — it means "no seniority word, RTL-ish title, under
+      // four years, A-tier company", which described 132 of 498 visible jobs while
+      // only 32 had a junior experience_level. Treating that as "entry level"
+      // sends a new grad at a pile of mid-level reqs.
+      return (j.is_entry_level ?? false) || JUNIOR_LEVELS.has(level)
+    }
+    if (want === 'senior') return j.is_senior ?? false
+    return level === want
+  })
+}
+
+/** Does this posting match a remote selection?
+ *
+ *  Three fields describe remoteness and they disagree: remote_status said 31 of 498
+ *  visible jobs were Remote, location_label said 37, and is_remote_usa said 15, with
+ *  28 rows contradicting each other outright. They are each right about their own
+ *  input — remote_status reads the description, is_remote_usa reads the location
+ *  string — so a posting listed "Mountain View, CA or Remote" came back Hybrid and a
+ *  Remote filter missed it.
+ *
+ *  Union rather than pick a winner: for a job seeker, failing to show a
+ *  remote-eligible posting is the worse error.
+ */
+export function matchesRemote(j: Job, want: string): boolean {
+  const w = lc(want)
+  const status = lc(j.remote_status)
+  const label = lc(j.location_label)
+  if (w === 'remote') {
+    return status.includes('remote') || label.includes('remote') || (j.is_remote_usa ?? false)
+  }
+  if (w === 'hybrid') {
+    // Remote wins, so the three buckets partition the board and facet counts sum
+    // to the total. A 'Mountain View, CA or Remote' posting is remote-eligible,
+    // which is the more useful answer for someone filtering on it.
+    if (matchesRemote(j, 'remote')) return false
+    return status.includes('hybrid') || label.includes('hybrid')
+  }
+  if (w === 'onsite') {
+    // Onsite means neither of the others, so a posting flagged remote by ANY signal
+    // is not onsite — otherwise it shows under both.
+    return !matchesRemote(j, 'remote') && !matchesRemote(j, 'hybrid')
+  }
+  return status.includes(w) || label.includes(w)
+}
+
 export function matchesFilters(j: Job, f: Filters, bodies?: Record<string, string>): boolean {
   // USA-only, strict. "Location unknown" is not "in the US".
   if (f.usa_only !== false && !j.is_usa) return false
@@ -92,7 +172,7 @@ export function matchesFilters(j: Job, f: Filters, bodies?: Record<string, strin
   if (f.priority && String(j.company_priority) !== String(f.priority)) return false
   if (f.role_category && String(j.role_category) !== String(f.role_category)) return false
   if (f.state && lc(j.state) !== lc(f.state)) return false
-  if (f.remote && !lc(j.remote_status).includes(lc(f.remote))) return false
+  if (f.remote && !matchesRemote(j, f.remote)) return false
   if (f.min_score != null && (j.new_grad_fit ?? 0) < Number(f.min_score)) return false
   // H1B: STRICT — only employers known to sponsor, and only postings whose own
   // text does not demand citizenship, a green card or ITAR access. The old line
@@ -104,11 +184,7 @@ export function matchesFilters(j: Job, f: Filters, bodies?: Record<string, strin
     if (risk === 'high' || risk === 'medium') return false
   }
 
-  if (f.level_filter) {
-    const want = lc(f.level_filter)
-    if (want === 'entry' && !(j.is_entry_level || j.is_candidate_friendly)) return false
-    if (want === 'senior' && !j.is_senior) return false
-  }
+  if (f.level_filter && !matchesLevel(j, f.level_filter)) return false
   if (f.posted_within_hours) {
     if (effectiveDate(j) < Date.now() - Number(f.posted_within_hours) * 3600_000) return false
   }
