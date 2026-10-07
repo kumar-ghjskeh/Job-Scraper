@@ -151,6 +151,18 @@ _SPONSOR_NAMES = (
     "Graphcore", "Normal Computing", "Flex Logix", "Nubis Communications",
     "Lumotive", "EnCharge AI", "Kinara", "Hailo", "FuriosaAI", "Ethernovia",
     "Auradine",
+    # Directory entries added 2026-10-07. All are semiconductor, EDA/IP or
+    # systems-silicon employers with US design teams, i.e. the population that
+    # files H1B LCAs for hardware engineering.
+    "FuriosaAI", "Hailo", "EnCharge AI", "Rebellions", "Taalas", "Syntiant",
+    "Akeana", "MIPS", "Codasip", "Semidynamics", "Andes Technology", "Nokia",
+    "Ciena", "DreamBig Semiconductor", "Nubis Communications", "eTopus", "Sandisk",
+    "Phison", "Silicon Motion", "Mobileye", "Aeva", "SiTime",
+    "Monolithic Power Systems", "Navitas Semiconductor", "Power Integrations",
+    "Empower Semiconductor", "Movellus", "Arteris", "Imagination Technologies",
+    "Siemens EDA", "Breker Verification Systems", "Real Intent", "Advantest",
+    "FormFactor", "IBM", "Oracle", "Pure Storage", "Nutanix", "Rigetti Computing",
+    "Infleqtion", "Quantinuum",
     # Quantum and photonics — US-based, academic-pipeline hiring.
     "PsiQuantum", "Atom Computing", "IonQ", "Rigetti Computing", "QuEra Computing",
     "Infleqtion", "Quantinuum", "Xanadu",
