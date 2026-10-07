@@ -120,3 +120,72 @@ def test_snapshot_restores_aware_datetimes():
     )
     assert snapshot._parse_aware(None) is None
     assert snapshot._parse_aware("not a date") is None
+
+
+def test_every_exported_datetime_field_is_coerced_on_restore():
+    """A datetime column added to LIST_FIELDS must also be coerced back from its
+    ISO string, or every scrape dies on the seed.
+
+    removed_at was added to the export when retirement was fixed and NOT added to
+    the coercion list. The bug was invisible for days because the column was null on
+    every row — nothing had ever actually reached `removed`. The moment retirement
+    started working, 567 rows gained a real timestamp and the next three scheduled
+    runs all failed with:
+
+        SQLite DateTime type only accepts Python datetime and date objects as input
+
+    The coercion list is now DERIVED from the model, so adding a column cannot miss
+    it. This asserts the derivation still finds them: it returned an empty tuple
+    twice while I was writing it, because these columns use the UtcDateTime
+    TypeDecorator, whose python_type raises NotImplementedError and which is not an
+    instance of sqlalchemy.DateTime. An empty list fails exactly as the hand-written
+    tuple did, only more quietly.
+    """
+    from sqlalchemy import Date, DateTime
+
+    from backend.app.models import JobPosting, UtcDateTime
+
+    expected = {
+        col.name
+        for col in JobPosting.__table__.columns  # type: ignore[attr-defined]
+        if col.name in snapshot.LIST_FIELDS
+        and isinstance(col.type, (UtcDateTime, DateTime, Date))
+    }
+    assert expected, (
+        "the derivation found no datetime columns at all — it is silently matching "
+        "nothing, which reintroduces the original bug"
+    )
+    assert "removed_at" in expected, "the field that caused the outage must be covered"
+    missing = expected - set(snapshot._EXPORTED_DATETIME_FIELDS)
+    assert not missing, (
+        f"exported datetime columns that are NOT coerced on restore: {sorted(missing)}. "
+        "Every scrape will fail on the seed as soon as any row has a value."
+    )
+
+
+def test_restoring_a_row_with_every_datetime_populated_works():
+    """Behavioural half: the exact insert that was failing in CI."""
+    import json
+    import tempfile
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    now = datetime.now(timezone.utc).isoformat()
+    row = {
+        "key": "k1", "company": "AMD", "job_title": "DV Engineer",
+        "apply_url": "https://x/1", "job_id_from_company": "1",
+        "active_status": "removed", "missed_scrapes": 6,
+        # All four, as strings — which is how the corpus stores them.
+        "posted_date": now, "first_seen_at": now, "last_seen_at": now,
+        "removed_at": now,
+    }
+    tmp = Path(tempfile.mkdtemp()) / "jobs.json"
+    tmp.write_text(json.dumps({"generated_at": now, "count": 1, "jobs": [row],
+                               "companies": [], "runs": []}), encoding="utf-8")
+    # Only the coercion matters here, so assert on it directly rather than standing
+    # up a database: a string reaching the column is what SQLite rejects.
+    for field in snapshot._EXPORTED_DATETIME_FIELDS:
+        if field in row:
+            parsed = snapshot._parse_aware(row[field])
+            assert isinstance(parsed, datetime), f"{field} was not coerced"
+            assert parsed.tzinfo is not None, f"{field} came back naive"

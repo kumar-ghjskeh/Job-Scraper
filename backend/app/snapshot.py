@@ -163,6 +163,31 @@ def company_tallies(rows: list[dict]) -> dict[str, dict]:
     return stats
 
 
+# Datetime columns that LIST_FIELDS exports, derived from the MODEL rather than
+# hand-listed — a hand-listed tuple is what let removed_at slip through.
+# load_snapshot_into_db coerces each of these back from its ISO string.
+def _exported_datetime_fields() -> tuple[str, ...]:
+    from sqlalchemy import Date, DateTime
+
+    from .models import UtcDateTime
+
+    # Checked against UtcDateTime explicitly. These columns all use that
+    # TypeDecorator, whose python_type raises NotImplementedError and which is not
+    # an instance of sqlalchemy.DateTime — so both of the obvious approaches return
+    # an empty list, which is just as broken as the hand-written tuple this
+    # replaces, only harder to notice.
+    out = [
+        col.name
+        for col in JobPosting.__table__.columns  # type: ignore[attr-defined]
+        if col.name in LIST_FIELDS
+        and isinstance(col.type, (UtcDateTime, DateTime, Date))
+    ]
+    return tuple(out)
+
+
+_EXPORTED_DATETIME_FIELDS = _exported_datetime_fields()
+
+
 def _parse_aware(v):
     """Parse a stored timestamp, always returning an AWARE datetime.
 
@@ -382,7 +407,17 @@ def load_snapshot_into_db(jobs_path: str | Path, details_path: str | Path | None
         cols = {c.name for c in JobPosting.__table__.columns}  # type: ignore[attr-defined]
         for row in payload.get("jobs", []):
             data = {k: v for k, v in row.items() if k in cols and k != "id"}
-            for f in ("posted_date", "first_seen_at", "last_seen_at"):
+            # EVERY datetime column that LIST_FIELDS exports has to be coerced back
+            # from its ISO string here, or SQLAlchemy rejects the insert with
+            # "SQLite DateTime type only accepts Python datetime and date objects".
+            #
+            # removed_at was added to LIST_FIELDS when retirement was fixed but not
+            # added here, and the bug stayed invisible for days because the column
+            # was null on every row — nothing had ever actually reached `removed`.
+            # The moment retirement started working, 567 rows gained a real
+            # timestamp and every scrape died on the seed. test_datetime_awareness
+            # now derives this list from the model instead of trusting this tuple.
+            for f in _EXPORTED_DATETIME_FIELDS:
                 if f in data:
                     data[f] = _dt(data[f])
             data.setdefault("first_seen_at", datetime.now(timezone.utc))
