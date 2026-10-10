@@ -63,7 +63,7 @@ const DOMAINS: Record<string, string> = {
   'recogni (tensordyne)': 'tensordyne.ai', 'rigetti computing': 'rigetti.com',
   'sandisk': 'sandisk.com', 'semidynamics': 'semidynamics.com', 'semtech': 'semtech.com',
   'silicon motion': 'siliconmotion.com', 'sitime': 'sitime.com', 'syntiant': 'syntiant.com',
-  'taalas': 'taalas.com', 'tetramem': 'tetramem.com'
+  'taalas': 'taalas.com', 'tetramem': 'tetramem.com',
   // Directory batch 2. Domains taken from the verified careers URL or the
   // company's own site, never guessed — a wrong domain shows another firm's logo.
   'alchip technologies': 'alchip.com', 'aldec': 'aldec.com',
@@ -73,7 +73,11 @@ const DOMAINS: Record<string, string> = {
   'global unichip': 'guc-asic.com', 'lightelligence': 'lightelligence.ai',
   'luminar': 'luminartech.com', 'silvaco': 'silvaco.com', 'smartdv technologies': 'smart-dv.com',
   'socionext': 'socionext.com', 'sondrel': 'sondrel.com', 'tessolve': 'tessolve.com',
-  'vicor': 'vicorpower.com'
+  // Keep a trailing comma on the LAST entry. Batch 2 appended after an entry
+  // whose comma had been stripped as 'last', which broke the object literal and
+  // failed the Vercel build — so nothing deployed for two hours while the data
+  // commits piled up.
+  'vicor': 'vicorpower.com',
 }
 
 // Resilient logo sources, tried in order. icon.horse returns the real brand logo

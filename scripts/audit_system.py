@@ -392,6 +392,56 @@ def check_freshness(d: dict) -> None:
             warn(f"median visible age is {med} days — retirement may not be draining")
 
 
+def check_frontend_builds() -> None:
+    """The gate that was missing.
+
+    `tsc --noEmit` passed while `tsc -b` — which is what `npm run build` and therefore
+    Vercel runs — failed on a single missing comma in the machine-appended DOMAINS
+    literal. Nothing deployed for two hours while data commits piled up, and the live
+    site served a two-hour-old corpus. Checking types is not checking the build.
+    """
+    section("frontend build")
+    import re as _re
+    import subprocess
+
+    fe = ROOT / "frontend"
+    src = (fe / "src" / "components" / "CompanyLogo.tsx").read_text(encoding="utf-8")
+
+    # Cheap structural check first, aimed at exactly the shape that broke: DOMAINS is
+    # appended to by script, and batch 2 appended after an entry whose trailing comma
+    # had been stripped as "last".
+    m = _re.search(r"const DOMAINS: Record<string, string> = \{(.*?)\n\}", src, _re.S)
+    if not m:
+        fail("could not find the DOMAINS literal in CompanyLogo.tsx")
+    else:
+        bad = [
+            line for line in m.group(1).strip().splitlines()
+            if line.strip()
+            and not line.strip().startswith("//")
+            and not line.rstrip().endswith(",")
+        ]
+        if bad:
+            fail("DOMAINS entries with no trailing comma — a later append will break "
+                 f"the object literal and fail the build: {bad}")
+        else:
+            ok("every DOMAINS entry ends with a comma, so appending stays safe")
+
+    if "--no-build" in sys.argv:
+        warn("skipped the frontend build (--no-build)")
+        return
+    try:
+        r = subprocess.run(["npm", "run", "build"], cwd=fe, capture_output=True,
+                           text=True, timeout=300, shell=True)
+    except Exception as e:
+        warn(f"could not run the frontend build: {type(e).__name__}: {e}")
+        return
+    if r.returncode != 0:
+        tail = (r.stdout + r.stderr).strip().splitlines()[-5:]
+        fail("the frontend BUILD fails, so Vercel will not deploy: " + " | ".join(tail))
+    else:
+        ok("the frontend builds (tsc -b + vite build), so Vercel can deploy")
+
+
 def main() -> int:
     strict = "--strict" in sys.argv
     print("Ashborne Silicon — system audit")
@@ -406,6 +456,7 @@ def main() -> int:
         (check_companies, d),
         (check_health, d),
         (check_freshness, d),
+        (check_frontend_builds, None),
     ):
         try:
             fn(d) if arg is not None else fn()
