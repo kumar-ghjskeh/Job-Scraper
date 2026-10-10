@@ -163,6 +163,13 @@ _SPONSOR_NAMES = (
     "Siemens EDA", "Breker Verification Systems", "Real Intent", "Advantest",
     "FormFactor", "IBM", "Oracle", "Pure Storage", "Nutanix", "Rigetti Computing",
     "Infleqtion", "Quantinuum",
+    # Directory batch 2, added 2026-10-07. ASIC services, EDA/IP and analog
+    # firms with US design teams — the population that files H1B LCAs for
+    # hardware engineering.
+    "Lightelligence", "Luminar", "Alchip Technologies", "Global Unichip",
+    "Socionext", "Faraday Technology", "Sondrel", "ASIC North", "Tessolve", "Aldec",
+    "Silvaco", "Axiomise", "Ansys", "SmartDV Technologies", "Vicor",
+    "Alpha and Omega Semiconductor", "Arasan Chip Systems", "eMemory Technology",
     # Quantum and photonics — US-based, academic-pipeline hiring.
     "PsiQuantum", "Atom Computing", "IonQ", "Rigetti Computing", "QuEra Computing",
     "Infleqtion", "Quantinuum", "Xanadu",

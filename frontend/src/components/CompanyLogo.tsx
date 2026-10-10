@@ -64,6 +64,16 @@ const DOMAINS: Record<string, string> = {
   'sandisk': 'sandisk.com', 'semidynamics': 'semidynamics.com', 'semtech': 'semtech.com',
   'silicon motion': 'siliconmotion.com', 'sitime': 'sitime.com', 'syntiant': 'syntiant.com',
   'taalas': 'taalas.com', 'tetramem': 'tetramem.com'
+  // Directory batch 2. Domains taken from the verified careers URL or the
+  // company's own site, never guessed — a wrong domain shows another firm's logo.
+  'alchip technologies': 'alchip.com', 'aldec': 'aldec.com',
+  'alpha and omega semiconductor': 'aosmd.com', 'ansys': 'ansys.com',
+  'arasan chip systems': 'arasan.com', 'asic north': 'asicnorth.com', 'axiomise': 'axiomise.com',
+  'ememory technology': 'ememory.com.tw', 'faraday technology': 'faraday-tech.com',
+  'global unichip': 'guc-asic.com', 'lightelligence': 'lightelligence.ai',
+  'luminar': 'luminartech.com', 'silvaco': 'silvaco.com', 'smartdv technologies': 'smart-dv.com',
+  'socionext': 'socionext.com', 'sondrel': 'sondrel.com', 'tessolve': 'tessolve.com',
+  'vicor': 'vicorpower.com'
 }
 
 // Resilient logo sources, tried in order. icon.horse returns the real brand logo

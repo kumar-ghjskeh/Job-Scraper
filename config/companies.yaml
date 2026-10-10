@@ -1536,3 +1536,177 @@ companies:
     search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
     notes: "Trapped-ion control electronics. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
     enabled: false
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  DIRECTORY ENTRIES, BATCH 2 (added 2026-10-07)
+  #
+  #  ASIC design-service houses with US teams, verification tool and IP
+  #  vendors, and analog/power/timing firms that employ digital design
+  #  engineers. Same rules as batch 1: enabled: false, careers link verified
+  #  before adding, H1B classified, logo domain mapped.
+  #
+  #  Includes retries of six batch-1 candidates whose URLs failed on what looked
+  #  like transient codes (429, 503, DNS) rather than being dead.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "Lightelligence"
+    category: "Photonics"
+    priority: "C"
+    careers_url: "https://www.lightelligence.ai/"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Photonic compute, Boston. Careers path not verifiable; link is the company site. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Luminar"
+    category: "Automotive"
+    priority: "C"
+    careers_url: "https://www.luminartech.com/"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Lidar ASICs. Careers path not verifiable; link is the company site. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Alchip Technologies"
+    category: "ASIC Services"
+    priority: "B"
+    careers_url: "https://www.alchip.com/en/careers"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Turnkey ASIC design, San Jose. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Global Unichip"
+    category: "ASIC Services"
+    priority: "B"
+    careers_url: "https://www.guc-asic.com/en-us/careers"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "TSMC-affiliated ASIC design house. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Socionext"
+    category: "ASIC Services"
+    priority: "B"
+    careers_url: "https://www.socionext.com/"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Custom SoC design, Santa Clara. Careers path not verifiable; link is the company site. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Faraday Technology"
+    category: "ASIC Services"
+    priority: "C"
+    careers_url: "https://www.faraday-tech.com/en/"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "ASIC design and IP. Careers path not verifiable; link is the company site. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Sondrel"
+    category: "ASIC Services"
+    priority: "C"
+    careers_url: "https://www.sondrel.com/careers"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Turnkey ASIC design. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "ASIC North"
+    category: "ASIC Services"
+    priority: "C"
+    careers_url: "https://www.asicnorth.com/careers/"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "US mixed-signal and digital ASIC design. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Tessolve"
+    category: "ASIC Services"
+    priority: "C"
+    careers_url: "https://www.tessolve.com/careers/"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Design and test services, US sites. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Aldec"
+    category: "EDA / IP"
+    priority: "C"
+    careers_url: "https://www.aldec.com/en/company/careers"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "HDL simulation and FPGA prototyping. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Silvaco"
+    category: "EDA / IP"
+    priority: "C"
+    careers_url: "https://silvaco.com/"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "TCAD, EDA and IP. Careers path not verifiable; link is the company site. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Axiomise"
+    category: "EDA / IP"
+    priority: "C"
+    careers_url: "https://axiomise.com/careers/"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Formal verification training and services. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Ansys"
+    category: "EDA / IP"
+    priority: "C"
+    careers_url: "https://www.ansys.com/careers"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "RedHawk, power and signal integrity. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "SmartDV Technologies"
+    category: "EDA / IP"
+    priority: "C"
+    careers_url: "https://www.smart-dv.com/careers.html"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Verification IP and bus functional models. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Vicor"
+    category: "Analog / Power"
+    priority: "C"
+    careers_url: "https://www.vicorpower.com/careers"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Power modules with digital control. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Alpha and Omega Semiconductor"
+    category: "Analog / Power"
+    priority: "C"
+    careers_url: "https://www.aosmd.com/careers"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Power semiconductors. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "Arasan Chip Systems"
+    category: "EDA / IP"
+    priority: "C"
+    careers_url: "https://www.arasan.com/careers/"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Interface IP (MIPI, SD, UFS). Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
+
+  - name: "eMemory Technology"
+    category: "EDA / IP"
+    priority: "C"
+    careers_url: "https://www.ememory.com.tw/en-us/Career"
+    ats_platform: "generic"
+    search_keywords: ["verification", "rtl", "asic", "design verification", "fpga", "soc", "digital design"]
+    notes: "Embedded non-volatile memory IP. Directory entry — careers link verified (HTTP 200); no ATS endpoint found yet."
+    enabled: false
