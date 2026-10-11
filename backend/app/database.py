@@ -27,10 +27,20 @@ DATABASE_URL = _normalize_db_url(settings.database_url)
 _is_sqlite = DATABASE_URL.startswith("sqlite")
 
 # SQLite needs check_same_thread=False; Postgres uses a pooled connection.
-_connect_args = {"check_same_thread": False} if _is_sqlite else {}
+#
+# connect_timeout is not a nicety. libpq's default is NO connect timeout: if the
+# Postgres host stops answering — a suspended free instance, a hostname that no
+# longer resolves to a listener, a SYN dropped silently instead of refused —
+# psycopg2 blocks on the TCP connect for as long as the OS allows, which is
+# minutes. Every caller inherits that: a boot, a health check, a request. Ten
+# seconds is far longer than a Neon cold resume (~1-3s) and short enough that a
+# dead host raises an error we can log and recover from instead of hanging.
+_connect_args: dict = {"check_same_thread": False} if _is_sqlite else {"connect_timeout": 10}
 _engine_kwargs: dict = {"echo": False, "connect_args": _connect_args}
 if not _is_sqlite:
-    _engine_kwargs.update(pool_pre_ping=True, pool_recycle=300)
+    # pool_timeout caps the wait for a free pooled connection, for the same
+    # reason: without it a saturated pool queues callers indefinitely.
+    _engine_kwargs.update(pool_pre_ping=True, pool_recycle=300, pool_timeout=20)
 
 engine = create_engine(DATABASE_URL, **_engine_kwargs)
 

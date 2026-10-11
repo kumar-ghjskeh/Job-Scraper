@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Optional
@@ -78,20 +79,47 @@ def _seed_and_maintain() -> None:
         maintain_scrape_runs(session)
 
 
-@app.on_event("startup")
-async def startup():
-    # CRITICAL: the startup handler must never raise. If it does, uvicorn aborts
-    # with "Application startup failed" (exit code 3) and the host (Render) just
-    # restarts into the same crash loop forever — taking down even /health. A
-    # database that's briefly unreachable (cold Postgres, expired free instance,
-    # rotated credentials) is exactly the kind of thing that used to kill the
-    # whole service; instead we log it, come up healthy, and let the scheduled
-    # scrapes reconcile the DB once it's back.
+#: How long startup is willing to wait for the boot DB work. A warm database
+#: finishes in well under a second, so this only ever bites when the DB is cold
+#: or gone — exactly when we must come up anyway.
+_SEED_BUDGET_SECONDS = 8.0
+
+
+def _guarded_seed() -> None:
+    """``_seed_and_maintain`` with every failure swallowed and logged."""
     try:
         _seed_and_maintain()
     except Exception:
         logger.exception("Startup DB seeding failed — serving in degraded mode; "
                          "scheduled scrapes will reconcile once the DB is reachable")
+
+
+@app.on_event("startup")
+async def startup():
+    # CRITICAL: the startup handler must never raise AND must never hang.
+    #
+    # Raising was already handled — uvicorn would abort with "Application startup
+    # failed" and Render would restart into the same crash loop, taking down even
+    # /health. But a try/except only catches exceptions, not latency, and uvicorn
+    # does not accept a single connection until this handler returns. So a
+    # database that merely HANGS (suspended Neon instance, a host that no longer
+    # resolves, a dropped packet to a port with no RST) held the port closed for
+    # as long as the TCP connect took, Render's deploy health check got nothing,
+    # and the deploy was marked failed — "Deploy failed" mail for a service whose
+    # code was fine. That is the other half of the same bug, and the guard that
+    # was supposed to prevent it could not see it.
+    #
+    # The seeding now runs on its own thread. We give it a short budget so a warm
+    # boot still finishes seeding before the first request (the old behaviour),
+    # then hand the port over regardless and let the thread finish in the
+    # background. The work is idempotent, so completing late is harmless.
+    seeder = threading.Thread(target=_guarded_seed, name="boot-seed", daemon=True)
+    seeder.start()
+    seeder.join(timeout=_SEED_BUDGET_SECONDS)
+    if seeder.is_alive():
+        logger.warning("Boot DB seeding is taking longer than %.0fs — serving now "
+                       "and finishing it in the background. The API is up; the "
+                       "database is slow or unreachable.", _SEED_BUDGET_SECONDS)
 
     # The in-process APScheduler is OFF by default. All scraping now runs in
     # GitHub Actions (scrape.yml, 6×/day) writing straight to Postgres, so the

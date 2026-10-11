@@ -11,10 +11,38 @@ services:
     plan: free
     region: oregon
     rootDir: backend
-    buildCommand: "pip install -r requirements.txt"
+    # Install from the LOCK, exactly like CI. requirements.txt carries ranges, so
+    # the old command resolved fresh versions on every deploy: a new minor of any
+    # of 58 packages could land in a deploy with no commit from us, and the
+    # failure then looked like "it broke by itself". The lock is a superset of
+    # requirements.txt (psycopg2-binary, pymupdf, python-docx included) and is
+    # resolved on the same Python 3.12 this service pins below.
+    buildCommand: "pip install -r requirements.lock.txt"
     startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
     autoDeploy: true
+    # Only redeploy when the backend actually changes.
+    #
+    # Without this, every commit on main redeploys the API. The scrape workflows
+    # commit a fresh snapshot 6x a day (plus the browser pass), so the real count
+    # over the last seven days was 55 deploys, 44 of them for commits that touched
+    # no backend file at all — data under frontend/public/data. Each one ran a full
+    # pip install on a free instance and restarted the service, and any one of
+    # them that hit a slow PyPI mirror or a cold database sent a "Deploy failed"
+    # mail about code that had not changed since the last success.
+    #
+    # A deploy that never starts cannot fail. The data path needs no deploy: the
+    # snapshot is served by Vercel from the repo, never by this API.
+    buildFilter:
+      paths:
+        - backend/**
+        - render.yaml
+      ignoredPaths:
+        - frontend/**
+        - config/**
+        - scripts/**
+        - .github/**
+        - "**/*.md"
     envVars:
       - key: DATABASE_URL
         sync: false   # ← set to your NEON connection string in the Render dashboard
