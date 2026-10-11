@@ -84,6 +84,10 @@ def _seed_and_maintain() -> None:
 #: or gone — exactly when we must come up anyway.
 _SEED_BUDGET_SECONDS = 8.0
 
+#: Set once the boot seeding has finished, successfully or not. Reported by
+#: /health so "is the DB reachable from the API?" is answerable without a login.
+_seed_done = threading.Event()
+
 
 def _guarded_seed() -> None:
     """``_seed_and_maintain`` with every failure swallowed and logged."""
@@ -92,6 +96,8 @@ def _guarded_seed() -> None:
     except Exception:
         logger.exception("Startup DB seeding failed — serving in degraded mode; "
                          "scheduled scrapes will reconcile once the DB is reachable")
+    finally:
+        _seed_done.set()
 
 
 @app.on_event("startup")
@@ -2467,4 +2473,22 @@ def export_applications(session: SessionDep):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "5.0.0"}
+    """Liveness only — deliberately no database work.
+
+    Render polls this to decide whether a deploy succeeded, so a cold or missing
+    database must never be able to read as a failed deploy.
+
+    `commit` answers the question that cost the most time during the deploy
+    failures: which revision is actually live? Render injects RENDER_GIT_COMMIT
+    at build time, so one curl now settles it instead of a dashboard login.
+    `seeded` tells you whether the background boot seeding finished, which is the
+    one thing the old synchronous startup guaranteed and this one does not.
+    """
+    import os
+
+    return {
+        "status": "ok",
+        "version": "5.0.0",
+        "commit": (os.getenv("RENDER_GIT_COMMIT") or "")[:7],
+        "seeded": _seed_done.is_set(),
+    }
