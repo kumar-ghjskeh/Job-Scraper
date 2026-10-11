@@ -125,6 +125,7 @@ jobs:
             backend/tests/test_snapshot_merge.py             backend/tests/test_deploy_resilience.py
 
       - name: Scrape (browser) and rebuild the snapshot
+        id: scrape
         env:
           DATA_DIR: frontend/public/data
           STATIC_ENGINE: browser
@@ -140,6 +141,7 @@ jobs:
       # re-inflating the payload. Exits non-zero only on a real failure, so a
       # warning (a stalled source, say) still publishes.
       - name: Audit the corpus
+        id: audit
         # --no-build: this runner installs Python only, so the frontend build
         # check cannot run here. Leaving it to try is what failed the audit on
         # every scheduled run and skipped the publish for two days. The build is
@@ -147,6 +149,7 @@ jobs:
         run: python scripts/audit_system.py --no-build
 
       - name: Publish the snapshot
+        id: publish
         run: |
           set -e
           git config user.name  "github-actions[bot]"
@@ -190,3 +193,38 @@ jobs:
           done
           echo "::error::Could not publish the snapshot after 3 attempts."
           exit 1
+
+      # Why this run failed, stated in the run page the failure mail links to.
+      #
+      # The last outage mailed "scrape failed" six times a day while the scrape
+      # was succeeding every time — the audit was blocking the publish. Reading
+      # a green step list and a red run taught nothing, so the phase that
+      # actually failed is now spelled out, along with what it means for the
+      # data the app is serving.
+      - name: Why this run did not publish
+        if: failure()
+        run: |
+          {
+            echo "## This run did not publish"
+            echo ""
+            echo "| phase | outcome |"
+            echo "| --- | --- |"
+            echo "| scrape  | ${{ steps.scrape.outcome }} |"
+            echo "| audit   | ${{ steps.audit.outcome }} |"
+            echo "| publish | ${{ steps.publish.outcome }} |"
+            echo ""
+            if [ "${{ steps.scrape.outcome }}" = "failure" ]; then
+              echo "**The scrape itself failed.** Nothing was rebuilt; the CDN still serves"
+              echo "the previous snapshot. Look at the scrape step."
+            elif [ "${{ steps.audit.outcome }}" = "failure" ]; then
+              echo "**The scrape worked — the audit blocked the publish.** The corpus was"
+              echo "rebuilt but judged unsafe to ship, so the app is serving STALE data"
+              echo "and will keep doing so until this passes. The failing check is named"
+              echo "in the audit step."
+            elif [ "${{ steps.publish.outcome }}" = "failure" ]; then
+              echo "**The commit/push failed.** The corpus is good but never left the"
+              echo "runner. Usually a push race; three attempts already ran."
+            else
+              echo "Failure outside the scrape/audit/publish phases — check the setup steps."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
