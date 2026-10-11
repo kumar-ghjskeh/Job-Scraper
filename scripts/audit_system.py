@@ -429,6 +429,23 @@ def check_frontend_builds() -> None:
     if "--no-build" in sys.argv:
         warn("skipped the frontend build (--no-build)")
         return
+
+    # A check that CANNOT RUN is not a failing check.
+    #
+    # This is the bug that stopped publishing for two days. The scrape workflows
+    # install Python only — they have no node_modules — so `npm run build` exited
+    # non-zero there, the audit reported FAIL, and the publish step was skipped on
+    # every scheduled run. The scrape itself had succeeded every time. I verified
+    # this audit locally, where node_modules exists, and wired it into a workflow
+    # that cannot satisfy it.
+    #
+    # So the precondition is checked explicitly and a missing toolchain downgrades
+    # to a warning. Only a genuine compile error fails the audit.
+    if not (fe / "node_modules").is_dir():
+        warn("frontend dependencies are not installed here, so the build was not "
+             "run — this is expected in the scrape workflows, which install Python "
+             "only. Run the audit where node_modules exists to gate the build.")
+        return
     try:
         r = subprocess.run(["npm", "run", "build"], cwd=fe, capture_output=True,
                            text=True, timeout=300, shell=True)

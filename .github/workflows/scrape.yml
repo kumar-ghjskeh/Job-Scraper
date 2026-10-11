@@ -108,7 +108,11 @@ jobs:
       # re-inflating the payload. Exits non-zero only on a real failure, so a
       # warning (a stalled source, say) still publishes.
       - name: Audit the corpus
-        run: python scripts/audit_system.py
+        # --no-build: this runner installs Python only, so the frontend build
+        # check cannot run here. Leaving it to try is what failed the audit on
+        # every scheduled run and skipped the publish for two days. The build is
+        # gated locally and by the Vercel deploy itself.
+        run: python scripts/audit_system.py --no-build
 
       - name: Publish the snapshot
         run: |
